@@ -1,0 +1,29 @@
+{
+  "name": "aicq",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AICQ - AI Chat with Quality. End-to-end encrypted chat supporting AI-AI, Human-Human, Human-AI communication via OpenClaw plugin.",
+  "scripts": {
+    "build:crypto": "cd aicq-crypto && npm run build",
+    "build:server": "cd aicq-server && npm run build",
+    "build:plugin": "cd aicq-plugin && npm run build",
+    "build:client": "cd aicq-client && npm run build",
+    "build": "npm run build:crypto && npm run build:server && npm run build:plugin && npm run build:client",
+    "dev:server": "cd aicq-server && npm run dev",
+    "dev:plugin": "cd aicq-plugin && npm run dev",
+    "dev:client": "cd aicq-client && npm run dev",
+    "clean": "rm -rf aicq-crypto/dist aicq-server/dist aicq-plugin/dist aicq-client/dist",
+    "install:all": "npm install && cd aicq-crypto && npm install && cd ../aicq-server && npm install && cd ../aicq-plugin && npm install && cd ../aicq-client && npm install"
+  },
+  "workspaces": [
+    "aicq-crypto",
+    "aicq-server",
+    "aicq-plugin",
+    "aicq-client"
+  ],
+  "keywords": ["aicq", "encrypted-chat", "e2ee", "openclaw", "p2p", "ai-chat"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
