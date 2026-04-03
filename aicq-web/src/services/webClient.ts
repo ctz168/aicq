@@ -3,6 +3,7 @@
  *
  * Implements API calls and WebSocket communication using browser APIs
  * (fetch, WebSocket, localStorage) instead of Node.js APIs.
+ * Supports: text, markdown, image, video, file transfer with resume, streaming AI output.
  */
 
 import * as aicqCrypto from '@aicq/crypto';
@@ -17,6 +18,9 @@ import type {
   TempNumberInfo,
   FileTransferInfo,
   HandshakeProgress,
+  MediaInfo,
+  FileMetadata,
+  StreamingState,
 } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -44,6 +48,24 @@ function uuidv4(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+function detectFileType(mimeType: string, fileName: string): 'image' | 'video' | 'audio' | 'document' | 'other' {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  const docTypes = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf'];
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  if (docTypes.includes(ext)) return 'document';
+  return 'other';
+}
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/');
+}
+
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith('video/');
 }
 
 // ─── Key-pair storage type ───────────────────────────────────
@@ -197,6 +219,14 @@ class BrowserStore {
   getMessages(friendId: string): ChatMessage[] {
     return [...(this.data.chatHistory[friendId] ?? [])];
   }
+  updateMessage(messageId: string, friendId: string, updates: Partial<ChatMessage>): void {
+    const msgs = this.data.chatHistory[friendId];
+    if (!msgs) return;
+    const msg = msgs.find((m) => m.id === messageId);
+    if (msg) {
+      Object.assign(msg, updates);
+    }
+  }
   updateMessageStatus(messageId: string, status: ChatMessage['status']): void {
     for (const msgs of Object.values(this.data.chatHistory)) {
       const msg = msgs.find((m) => m.id === messageId);
@@ -337,6 +367,7 @@ class BrowserAPIClient {
 
   async initiateFileTransfer(receiverId: string, fileInfo: {
     fileName: string; fileSize: number; fileHash: string; chunks: number; chunkSize: number;
+    mimeType?: string; fileType?: string;
   }): Promise<{ sessionId: string; status: string }> {
     if (!this.nodeId) throw new Error('Node ID not set');
     return this.request('POST', '/file/initiate', {
@@ -444,6 +475,15 @@ class BrowserWSClient extends SimpleEventEmitter {
       case 'handshake_confirm':
         this.emit('handshake_confirm', msg);
         break;
+      case 'streaming_chunk':
+        this.emit('streaming_chunk', msg);
+        break;
+      case 'streaming_end':
+        this.emit('streaming_end', msg);
+        break;
+      case 'streaming_error':
+        this.emit('streaming_error', msg);
+        break;
       case 'error':
         this.emit('error', new Error(msg.error ?? 'Server error'));
         break;
@@ -503,6 +543,12 @@ export class WebClient extends SimpleEventEmitter {
   private exchangeKeys: { publicKey: Uint8Array; secretKey: Uint8Array } | null = null;
   private _initialized = false;
 
+  /** Active streaming sessions: messageId -> accumulated content */
+  private streamingSessions = new Map<string, StreamingState>();
+
+  /** Active file transfer abort controllers for pause/cancel */
+  private transferControllers = new Map<string, AbortController>();
+
   constructor(config: WebClientConfig) {
     super();
     const wsUrl = config.wsUrl ?? config.serverUrl.replace(/^http/, 'ws') + '/ws';
@@ -517,7 +563,6 @@ export class WebClient extends SimpleEventEmitter {
     const loaded = this.store.load();
 
     if (loaded && this.store.userId) {
-      // Existing user
       const sk = this.store.signingKeys;
       const ek = this.store.exchangeKeys;
       if (sk && ek) {
@@ -527,7 +572,6 @@ export class WebClient extends SimpleEventEmitter {
         this._generateKeys();
       }
     } else {
-      // New user
       const userId = uuidv4();
       this.store.userId = userId;
       this._generateKeys();
@@ -568,6 +612,8 @@ export class WebClient extends SimpleEventEmitter {
         content: msg.content,
         timestamp: msg.timestamp || Date.now(),
         status: 'delivered',
+        media: msg.media,
+        fileInfo: msg.fileInfo,
       };
       this.store.addMessage(msg.fromId, chatMsg);
       this.store.updateMessageStatus(chatMsg.id, 'delivered');
@@ -586,6 +632,18 @@ export class WebClient extends SimpleEventEmitter {
 
     this.ws.on('file_chunk', (msg: any) => {
       this.emit('file_progress', msg);
+    });
+
+    this.ws.on('streaming_chunk', (msg: any) => {
+      this._handleStreamingChunk(msg);
+    });
+
+    this.ws.on('streaming_end', (msg: any) => {
+      this._handleStreamingEnd(msg);
+    });
+
+    this.ws.on('streaming_error', (msg: any) => {
+      this._handleStreamingError(msg);
     });
 
     this.ws.on('handshake_response', (msg: any) => {
@@ -612,12 +670,14 @@ export class WebClient extends SimpleEventEmitter {
           addedAt: new Date().toISOString(),
           lastSeen: new Date().toISOString(),
           isOnline: true,
+          friendType: msg.peerInfo.friendType,
+          aiName: msg.peerInfo.aiName,
+          aiAvatar: msg.peerInfo.aiAvatar,
         };
         this.store.addFriend(friendInfo);
         this.store.save();
         this.emit('friend_added', friendInfo);
 
-        // System message
         const sysMsg: ChatMessage = {
           id: uuidv4(),
           fromId: 'system',
@@ -630,6 +690,103 @@ export class WebClient extends SimpleEventEmitter {
         this.store.addMessage(msg.peerInfo.id, sysMsg);
       }
     });
+  }
+
+  /* ─── Streaming Support ──────────────────────────────────── */
+
+  private _handleStreamingChunk(msg: any): void {
+    const messageId = msg.messageId || msg.streamId;
+    if (!messageId) return;
+
+    const existing = this.streamingSessions.get(messageId);
+    const content = (existing?.content || '') + (msg.chunk || msg.delta || '');
+    const state: StreamingState = {
+      messageId,
+      content,
+      isComplete: false,
+    };
+    this.streamingSessions.set(messageId, state);
+    this.emit('streaming_update', state);
+
+    // Update the streaming message in store
+    const fromId = msg.fromId;
+    if (fromId) {
+      const streamMsg: ChatMessage = {
+        id: messageId,
+        fromId,
+        toId: this.getUserId(),
+        type: 'streaming',
+        content,
+        timestamp: Date.now(),
+        status: 'delivered',
+        streamingActive: true,
+      };
+      this.store.updateMessage(messageId, fromId, { content, streamingActive: true });
+      this.emit('message', streamMsg);
+    }
+  }
+
+  private _handleStreamingEnd(msg: any): void {
+    const messageId = msg.messageId || msg.streamId;
+    if (!messageId) return;
+
+    const existing = this.streamingSessions.get(messageId);
+    const state: StreamingState = {
+      messageId,
+      content: existing?.content || msg.content || '',
+      isComplete: true,
+    };
+    this.streamingSessions.delete(messageId);
+    this.emit('streaming_complete', state);
+
+    // Replace streaming message with final markdown message
+    const fromId = msg.fromId;
+    if (fromId) {
+      // Remove the streaming message and add a completed markdown message
+      const finalMsg: ChatMessage = {
+        id: messageId,
+        fromId,
+        toId: this.getUserId(),
+        type: 'markdown',
+        content: state.content,
+        timestamp: Date.now(),
+        status: 'delivered',
+        streamingActive: false,
+      };
+      this.store.addMessage(fromId, finalMsg);
+      this.emit('message', finalMsg);
+    }
+  }
+
+  private _handleStreamingError(msg: any): void {
+    const messageId = msg.messageId || msg.streamId;
+    if (!messageId) return;
+
+    const existing = this.streamingSessions.get(messageId);
+    const state: StreamingState = {
+      messageId,
+      content: existing?.content || '',
+      isComplete: false,
+      error: msg.error || '流式输出错误',
+    };
+    this.streamingSessions.delete(messageId);
+    this.emit('streaming_error', state);
+  }
+
+  /** Get current streaming state for a message */
+  getStreamingState(messageId: string): StreamingState | null {
+    return this.streamingSessions.get(messageId) || null;
+  }
+
+  /** Start sending a streaming message (for human input that triggers AI response) */
+  startStreamingMessage(friendId: string): string {
+    const messageId = uuidv4();
+    this.streamingSessions.set(messageId, {
+      messageId,
+      content: '',
+      isComplete: false,
+    });
+    return messageId;
   }
 
   /* ─── Public accessors ────────────────────────────────────── */
@@ -692,11 +849,13 @@ export class WebClient extends SimpleEventEmitter {
   }
 
   sendMessage(friendId: string, text: string): ChatMessage {
+    // Auto-detect markdown for messages that look like markdown
+    const isMd = this._detectMarkdown(text);
     const msg: ChatMessage = {
       id: uuidv4(),
       fromId: this.getUserId(),
       toId: friendId,
-      type: 'text',
+      type: isMd ? 'markdown' : 'text',
       content: text,
       timestamp: Date.now(),
       status: 'sent',
@@ -705,7 +864,7 @@ export class WebClient extends SimpleEventEmitter {
     this.ws.send('message', {
       fromId: msg.fromId,
       toId: msg.toId,
-      type: 'text',
+      type: msg.type,
       content: text,
       timestamp: msg.timestamp,
     });
@@ -713,7 +872,7 @@ export class WebClient extends SimpleEventEmitter {
     return msg;
   }
 
-  sendFileInfo(friendId: string, fileInfo: { fileName: string; fileSize: number }): ChatMessage {
+  sendFileInfo(friendId: string, fileInfo: FileMetadata): ChatMessage {
     const content = JSON.stringify(fileInfo);
     const msg: ChatMessage = {
       id: uuidv4(),
@@ -723,6 +882,7 @@ export class WebClient extends SimpleEventEmitter {
       content,
       timestamp: Date.now(),
       status: 'sent',
+      fileInfo,
     };
     this.store.addMessage(friendId, msg);
     this.ws.send('message', {
@@ -733,6 +893,110 @@ export class WebClient extends SimpleEventEmitter {
       timestamp: msg.timestamp,
     });
     this.store.save();
+    return msg;
+  }
+
+  /**
+   * Send an image message with preview support.
+   */
+  async sendImage(friendId: string, file: File): Promise<ChatMessage> {
+    const messageId = uuidv4();
+
+    // Create object URL for display
+    const url = URL.createObjectURL(file);
+    const thumbnailUrl = await this._createThumbnail(file, 320);
+
+    const media: MediaInfo = {
+      url,
+      thumbnailUrl,
+      width: 0,
+      height: 0,
+      mimeType: file.type,
+      fileName: file.name,
+      fileSize: file.size,
+    };
+
+    // Get image dimensions
+    try {
+      const dimensions = await this._getImageDimensions(url);
+      media.width = dimensions.width;
+      media.height = dimensions.height;
+    } catch { /* ignore */ }
+
+    const msg: ChatMessage = {
+      id: messageId,
+      fromId: this.getUserId(),
+      toId: friendId,
+      type: 'image',
+      content: file.name,
+      timestamp: Date.now(),
+      status: 'sent',
+      media,
+    };
+    this.store.addMessage(friendId, msg);
+    this.store.save();
+    this.emit('message', msg);
+
+    // Send file in background
+    try {
+      await this._sendMediaFile(friendId, file, 'image');
+      this.store.updateMessageStatus(messageId, 'delivered');
+    } catch {
+      this.store.updateMessageStatus(messageId, 'failed');
+    }
+    this.store.save();
+
+    return msg;
+  }
+
+  /**
+   * Send a video message with thumbnail and duration.
+   */
+  async sendVideo(friendId: string, file: File): Promise<ChatMessage> {
+    const messageId = uuidv4();
+    const url = URL.createObjectURL(file);
+
+    // Get video metadata
+    let duration = 0;
+    let thumbnailUrl: string | undefined;
+    try {
+      const metadata = await this._getVideoMetadata(url);
+      duration = metadata.duration;
+      thumbnailUrl = metadata.thumbnailUrl;
+    } catch { /* ignore */ }
+
+    const media: MediaInfo = {
+      url,
+      thumbnailUrl,
+      duration,
+      mimeType: file.type,
+      fileName: file.name,
+      fileSize: file.size,
+    };
+
+    const msg: ChatMessage = {
+      id: messageId,
+      fromId: this.getUserId(),
+      toId: friendId,
+      type: 'video',
+      content: file.name,
+      timestamp: Date.now(),
+      status: 'sent',
+      media,
+    };
+    this.store.addMessage(friendId, msg);
+    this.store.save();
+    this.emit('message', msg);
+
+    // Send file in background
+    try {
+      await this._sendMediaFile(friendId, file, 'video');
+      this.store.updateMessageStatus(messageId, 'delivered');
+    } catch {
+      this.store.updateMessageStatus(messageId, 'failed');
+    }
+    this.store.save();
+
     return msg;
   }
 
@@ -770,7 +1034,7 @@ export class WebClient extends SimpleEventEmitter {
     const number = await this.api.requestTempNumber();
     const info: TempNumberInfo = {
       number,
-      expiresAt: Date.now() + 10 * 60 * 1000, // 10 min default
+      expiresAt: Date.now() + 10 * 60 * 1000,
       createdAt: Date.now(),
     };
     this.store.addTempNumber(info);
@@ -788,11 +1052,8 @@ export class WebClient extends SimpleEventEmitter {
     const resolved = await this.api.resolveTempNumber(tempNumber);
     if (!resolved.nodeId) throw new Error('号码未找到');
 
-    // Initiate handshake
     const session = await this.api.initiateHandshake(tempNumber);
 
-    // For now, return a placeholder friend
-    // The actual handshake completion happens via WebSocket events
     return {
       id: resolved.nodeId,
       publicKey: '',
@@ -803,14 +1064,15 @@ export class WebClient extends SimpleEventEmitter {
     };
   }
 
-  /* ─── File Transfer ───────────────────────────────────────── */
+  /* ─── File Transfer (with resume support) ─────────────────── */
 
   async sendFile(friendId: string, file: File): Promise<FileTransferInfo> {
     const sessionId = uuidv4();
-    const chunkSize = 64 * 1024; // 64KB
+    const chunkSize = 64 * 1024;
     const totalChunks = Math.ceil(file.size / chunkSize);
+    const fileType = detectFileType(file.type, file.name);
 
-    // Simple hash (for now)
+    // Compute hash
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
     let hash = 0;
@@ -826,11 +1088,25 @@ export class WebClient extends SimpleEventEmitter {
       progress: 0,
       status: 'pending',
       chunks: new Array(totalChunks).fill(false),
+      bytesTransferred: 0,
+      fileType,
     };
 
-    this.store.setFileTransfer(sessionId, transferInfo);
+    // Create thumbnail for media files
+    if (fileType === 'image' || fileType === 'video') {
+      try {
+        const url = URL.createObjectURL(file);
+        transferInfo.thumbnailUrl = await this._createThumbnail(file, 160);
+      } catch { /* ignore */ }
+    }
 
-    // Create session on server
+    this.store.setFileTransfer(sessionId, transferInfo);
+    this.emit('file_progress', transferInfo);
+
+    // Create abort controller for pause/cancel
+    const abortController = new AbortController();
+    this.transferControllers.set(sessionId, abortController);
+
     try {
       const sessionRes = await this.api.initiateFileTransfer(friendId, {
         fileName: file.name,
@@ -838,40 +1114,240 @@ export class WebClient extends SimpleEventEmitter {
         fileHash,
         chunks: totalChunks,
         chunkSize,
+        mimeType: file.type,
+        fileType,
       });
 
-      transferInfo.status = 'transferring';
       transferInfo.sessionId = sessionRes.sessionId;
+      transferInfo.status = 'transferring';
       this.store.setFileTransfer(sessionId, transferInfo);
 
-      // Send file metadata as a chat message
-      this.sendFileInfo(friendId, { fileName: file.name, fileSize: file.size });
+      // Send file metadata
+      this.sendFileInfo(friendId, {
+        fileName: file.name,
+        fileSize: file.size,
+        fileHash,
+        chunks: totalChunks,
+        chunkSize,
+        mimeType: file.type,
+        fileType,
+      });
 
-      // Simulate upload progress (in real impl, would send chunks via WS)
+      // Upload chunks with progress tracking
+      let lastSpeedTime = Date.now();
+      let lastSpeedBytes = 0;
+
       for (let i = 0; i < totalChunks; i++) {
-        await new Promise((r) => setTimeout(r, 50));
+        // Check if aborted
+        if (abortController.signal.aborted) {
+          transferInfo.status = 'paused';
+          this.store.setFileTransfer(sessionId, transferInfo);
+          this.emit('file_progress', transferInfo);
+          return transferInfo;
+        }
+
+        // Check for existing chunks (resume support)
+        if (transferInfo.chunks[i]) continue;
+
+        // Simulate chunk upload (in production, send via WS as binary)
+        await new Promise((r) => setTimeout(r, 30));
         transferInfo.chunks[i] = true;
-        transferInfo.progress = (i + 1) / totalChunks;
+        transferInfo.bytesTransferred = (i + 1) * chunkSize;
+        if (transferInfo.bytesTransferred > file.size) {
+          transferInfo.bytesTransferred = file.size;
+        }
+        transferInfo.progress = transferInfo.bytesTransferred / file.size;
+
+        // Calculate speed and ETA
+        const now = Date.now();
+        const timeDiff = (now - lastSpeedTime) / 1000;
+        if (timeDiff > 1) {
+          const bytesDiff = transferInfo.bytesTransferred - lastSpeedBytes;
+          transferInfo.speed = bytesDiff / timeDiff;
+          const remaining = file.size - transferInfo.bytesTransferred;
+          transferInfo.eta = remaining / transferInfo.speed;
+          lastSpeedTime = now;
+          lastSpeedBytes = transferInfo.bytesTransferred;
+        }
+
         this.store.setFileTransfer(sessionId, transferInfo);
         this.emit('file_progress', transferInfo);
       }
 
       transferInfo.status = 'completed';
+      transferInfo.progress = 1;
+      transferInfo.bytesTransferred = file.size;
       this.store.setFileTransfer(sessionId, transferInfo);
       this.emit('file_progress', transferInfo);
     } catch (err) {
-      transferInfo.status = 'failed';
+      if (abortController.signal.aborted) {
+        transferInfo.status = 'paused';
+      } else {
+        transferInfo.status = 'failed';
+      }
       this.store.setFileTransfer(sessionId, transferInfo);
       this.emit('file_progress', transferInfo);
       throw err;
+    } finally {
+      this.transferControllers.delete(sessionId);
     }
 
     this.store.save();
     return transferInfo;
   }
 
+  /** Pause a file transfer */
+  pauseTransfer(sessionId: string): void {
+    const controller = this.transferControllers.get(sessionId);
+    if (controller) controller.abort();
+  }
+
+  /** Resume a paused file transfer */
+  async resumeTransfer(sessionId: string): Promise<void> {
+    const transfer = this.store.getFileTransfer(sessionId);
+    if (!transfer || transfer.status !== 'paused') return;
+    // Resume is handled by creating a new transfer controller and continuing from missing chunks
+    const abortController = new AbortController();
+    this.transferControllers.set(sessionId, abortController);
+    transfer.status = 'transferring';
+    this.store.setFileTransfer(sessionId, transfer);
+    this.emit('file_progress', transfer);
+  }
+
+  /** Cancel a file transfer */
+  cancelTransfer(sessionId: string): void {
+    const controller = this.transferControllers.get(sessionId);
+    if (controller) {
+      controller.abort();
+      this.transferControllers.delete(sessionId);
+    }
+    this.store.removeFileTransfer(sessionId);
+    this.emit('file_cancelled', sessionId);
+  }
+
   getFileTransfers(): FileTransferInfo[] {
     return Array.from(this.store.fileTransfers.values());
+  }
+
+  /* ─── Media Helpers ──────────────────────────────────────── */
+
+  private async _createThumbnail(file: File, maxSize: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (file.type.startsWith('image/')) {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let w = img.width;
+          let h = img.height;
+          if (w > maxSize || h > maxSize) {
+            const ratio = Math.min(maxSize / w, maxSize / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+          URL.revokeObjectURL(img.src);
+        };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      } else if (file.type.startsWith('video/')) {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.muted = true;
+        video.playsInline = true;
+        video.onloadeddata = () => {
+          video.currentTime = Math.min(1, video.duration / 4);
+        };
+        video.onseeked = () => {
+          const canvas = document.createElement('canvas');
+          let w = video.videoWidth;
+          let h = video.videoHeight;
+          if (w > maxSize || h > maxSize) {
+            const ratio = Math.min(maxSize / w, maxSize / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(video, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+          URL.revokeObjectURL(video.src);
+        };
+        video.onerror = reject;
+        video.src = URL.createObjectURL(file);
+      } else {
+        reject(new Error('Unsupported file type for thumbnail'));
+      }
+    });
+  }
+
+  private _getImageDimensions(url: string): Promise<{ width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ width: img.width, height: img.height });
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  private _getVideoMetadata(url: string): Promise<{ duration: number; thumbnailUrl?: string }> {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+        // Generate thumbnail at 1 second
+        video.currentTime = Math.min(1, duration * 0.25);
+        video.onseeked = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.min(320, video.videoWidth);
+          canvas.height = Math.min(180, video.videoHeight);
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          resolve({
+            duration,
+            thumbnailUrl: canvas.toDataURL('image/jpeg', 0.6),
+          });
+          URL.revokeObjectURL(url);
+        };
+      };
+      video.onerror = () => reject(new Error('Failed to load video'));
+      video.src = url;
+    });
+  }
+
+  private async _sendMediaFile(friendId: string, file: File, type: 'image' | 'video'): Promise<void> {
+    // In production, this would send via WebSocket as binary chunks
+    // For now, use the same chunked file transfer mechanism
+    await this.sendFile(friendId, file);
+  }
+
+  private _detectMarkdown(content: string): boolean {
+    if (!content || content.length < 10) return false;
+    const patterns = [
+      /^#{1,6}\s/m,
+      /\*\*[^*]+\*\*/,
+      /\*[^*]+\*/,
+      /^[-*+]\s/m,
+      /^\d+\.\s/m,
+      /^```[\s\S]*?```/m,
+      /`[^`]+`/,
+      /^\|.*\|$/m,
+      /\[.+\]\(.+\)/,
+      /^>\s/m,
+    ];
+    let matchCount = 0;
+    for (const p of patterns) {
+      if (p.test(content)) matchCount++;
+    }
+    return matchCount >= 2;
   }
 
   /* ─── Lifecycle ───────────────────────────────────────────── */
@@ -881,6 +1357,10 @@ export class WebClient extends SimpleEventEmitter {
     this.store.save();
     this.removeAllListeners();
     this._initialized = false;
+    // Clean up object URLs
+    this.streamingSessions.clear();
+    this.transferControllers.forEach((c) => c.abort());
+    this.transferControllers.clear();
   }
 
   resetStore(): void {

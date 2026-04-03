@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useCallback, useRef, useEffect, useState } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useRef, useEffect } from 'react';
 import { WebClient } from '../services/webClient';
 import type {
   FriendInfo,
@@ -9,6 +9,7 @@ import type {
   ScreenName,
   UnreadCounts,
   TypingState,
+  StreamingState,
 } from '../types';
 
 // ─── State ───────────────────────────────────────────────────
@@ -27,6 +28,8 @@ interface AICQState {
   typingState: TypingState;
   error: string | null;
   isLoading: boolean;
+  /** Active streaming messages per friend */
+  streamingMessages: Record<string, StreamingState>;
 }
 
 const initialState: AICQState = {
@@ -43,6 +46,7 @@ const initialState: AICQState = {
   typingState: {},
   error: null,
   isLoading: false,
+  streamingMessages: {},
 };
 
 type Action =
@@ -64,7 +68,11 @@ type Action =
   | { type: 'SET_TYPING'; payload: TypingState }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'ADD_MESSAGE'; payload: { friendId: string; message: ChatMessage } };
+  | { type: 'ADD_MESSAGE'; payload: { friendId: string; message: ChatMessage } }
+  | { type: 'UPDATE_MESSAGE'; payload: { friendId: string; messageId: string; updates: Partial<ChatMessage> } }
+  | { type: 'SET_STREAMING'; payload: Record<string, StreamingState> }
+  | { type: 'UPDATE_STREAMING'; payload: { friendId: string; state: StreamingState } }
+  | { type: 'CLEAR_STREAMING'; payload: string };
 
 function reducer(state: AICQState, action: Action): AICQState {
   switch (action.type) {
@@ -112,17 +120,33 @@ function reducer(state: AICQState, action: Action): AICQState {
       return { ...state, error: action.payload };
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
-    case 'ADD_MESSAGE':
-      // Recalculate unread for incoming messages
-      {
-        const { friendId, message } = action.payload;
-        const isOwn = message.fromId === state.userId;
-        const newCounts = { ...state.unreadCounts };
-        if (!isOwn && message.type !== 'system') {
-          newCounts[friendId] = (newCounts[friendId] || 0) + 1;
-        }
-        return { ...state, unreadCounts: newCounts };
+    case 'ADD_MESSAGE': {
+      const { friendId, message } = action.payload;
+      const isOwn = message.fromId === state.userId;
+      const newCounts = { ...state.unreadCounts };
+      if (!isOwn && message.type !== 'system') {
+        newCounts[friendId] = (newCounts[friendId] || 0) + 1;
       }
+      return { ...state, unreadCounts: newCounts };
+    }
+    case 'UPDATE_MESSAGE':
+      // Handled at ref level, no state change needed
+      return state;
+    case 'SET_STREAMING':
+      return { ...state, streamingMessages: action.payload };
+    case 'UPDATE_STREAMING':
+      return {
+        ...state,
+        streamingMessages: {
+          ...state.streamingMessages,
+          [action.payload.friendId]: action.payload.state,
+        },
+      };
+    case 'CLEAR_STREAMING': {
+      const newStream = { ...state.streamingMessages };
+      delete newStream[action.payload];
+      return { ...state, streamingMessages: newStream };
+    }
     default:
       return state;
   }
@@ -136,7 +160,9 @@ interface AICQContextValue {
   connect: (serverUrl: string) => Promise<void>;
   navigate: (screen: ScreenName, friendId?: string | null) => void;
   sendMessage: (friendId: string, text: string) => ChatMessage;
-  sendFileInfo: (friendId: string, fileInfo: { fileName: string; fileSize: number }) => ChatMessage;
+  sendFileInfo: (friendId: string, fileInfo: import('../types').FileMetadata) => ChatMessage;
+  sendImage: (friendId: string, file: File) => Promise<ChatMessage>;
+  sendVideo: (friendId: string, file: File) => Promise<ChatMessage>;
   sendTyping: (friendId: string) => void;
   getMessages: (friendId: string) => ChatMessage[];
   requestTempNumber: () => Promise<string>;
@@ -144,10 +170,14 @@ interface AICQContextValue {
   resolveAndAddFriend: (tempNumber: string) => Promise<void>;
   removeFriend: (friendId: string) => Promise<void>;
   sendFile: (friendId: string, file: File) => Promise<FileTransferInfo>;
+  pauseTransfer: (sessionId: string) => void;
+  resumeTransfer: (sessionId: string) => Promise<void>;
+  cancelTransfer: (sessionId: string) => void;
   refreshFriends: () => Promise<void>;
   markMessagesRead: (friendId: string) => void;
   getLastMessage: (friendId: string) => ChatMessage | null;
   getUnreadCount: (friendId: string) => number;
+  getStreamingState: (friendId: string) => StreamingState | null;
   clearError: () => void;
 }
 
@@ -158,9 +188,9 @@ const AICQContext = createContext<AICQContextValue | null>(null);
 export function AICQProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const clientRef = useRef<WebClient | null>(null);
-
-  // Store messages in a ref for getMessages
   const messagesRef = useRef<Map<string, ChatMessage[]>>(new Map());
+  const unreadCountsRef = useRef<UnreadCounts>({});
+  const streamingRef = useRef<Record<string, StreamingState>>({});
 
   const connect = useCallback(async (serverUrl: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -170,7 +200,6 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
       const client = new WebClient({ serverUrl });
       clientRef.current = client;
 
-      // Wire up events before initializing
       client.on('connected', () => {
         dispatch({ type: 'SET_CONNECTED', payload: true });
       });
@@ -180,10 +209,20 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
       });
 
       client.on('message', (msg: ChatMessage) => {
-        // Store locally
         const friendId = msg.fromId === client.getUserId() ? msg.toId : msg.fromId;
         const msgs = messagesRef.current.get(friendId) || [];
-        msgs.push(msg);
+        // For streaming messages, update in place instead of adding duplicates
+        if (msg.type === 'streaming' && msgs.length > 0) {
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg.id === msg.id) {
+            // Update the existing streaming message
+            msgs[msgs.length - 1] = msg;
+          } else {
+            msgs.push(msg);
+          }
+        } else {
+          msgs.push(msg);
+        }
         messagesRef.current.set(friendId, msgs);
         dispatch({ type: 'ADD_MESSAGE', payload: { friendId, message: msg } });
       });
@@ -207,7 +246,6 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
           type: 'SET_TYPING',
           payload: { ...state.typingState, [event.fromId]: true },
         });
-        // Clear after 3 seconds
         setTimeout(() => {
           dispatch({
             type: 'SET_TYPING',
@@ -218,7 +256,6 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
 
       client.on('friend_added', (friend: FriendInfo) => {
         dispatch({ type: 'ADD_FRIEND', payload: friend });
-        // Load messages for this friend
         const msgs = client.getMessages(friend.id);
         messagesRef.current.set(friend.id, msgs);
       });
@@ -232,12 +269,52 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'UPDATE_FILE_TRANSFER', payload: info });
       });
 
+      client.on('streaming_update', (streaming: StreamingState) => {
+        // Find which friend this streaming message belongs to
+        const friendId = client.getUserId(); // AI messages come to us
+        streamingRef.current[streaming.messageId] = streaming;
+        dispatch({
+          type: 'UPDATE_STREAMING',
+          payload: { friendId: state.activeFriendId || '', state: streaming },
+        });
+      });
+
+      client.on('streaming_complete', (streaming: StreamingState) => {
+        if (state.activeFriendId) {
+          dispatch({ type: 'CLEAR_STREAMING', payload: state.activeFriendId });
+        }
+        // Add the final message
+        const msgs = messagesRef.current.get(state.activeFriendId || '') || [];
+        const finalMsg: ChatMessage = {
+          id: streaming.messageId,
+          fromId: state.activeFriendId || '',
+          toId: client.getUserId(),
+          type: 'markdown',
+          content: streaming.content,
+          timestamp: Date.now(),
+          status: 'delivered',
+        };
+        // Remove the streaming placeholder if it exists
+        const streamIdx = msgs.findIndex(m => m.type === 'streaming');
+        if (streamIdx >= 0) msgs.splice(streamIdx, 1);
+        msgs.push(finalMsg);
+        messagesRef.current.set(state.activeFriendId || '', msgs);
+      });
+
+      client.on('streaming_error', (streaming: StreamingState) => {
+        dispatch({
+          type: 'UPDATE_STREAMING',
+          payload: {
+            friendId: state.activeFriendId || '',
+            state: { ...streaming, isComplete: false, error: streaming.error },
+          },
+        });
+      });
+
       client.on('handshake_progress', (progress: HandshakeProgress) => {
         if (progress.status === 'completed') {
-          // Refresh friends after handshake completes
           client.refreshFriends().then((friends) => {
             dispatch({ type: 'SET_FRIENDS', payload: friends });
-            // Load messages for all friends
             for (const f of friends) {
               messagesRef.current.set(f.id, client.getMessages(f.id));
             }
@@ -245,7 +322,6 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      // Initialize
       const result = await client.initialize();
 
       dispatch({
@@ -254,7 +330,6 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
       });
       dispatch({ type: 'SET_INITIALIZED', payload: true });
 
-      // Load existing friends and messages
       const friends = await client.refreshFriends();
       dispatch({ type: 'SET_FRIENDS', payload: friends });
 
@@ -262,22 +337,18 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         messagesRef.current.set(f.id, client.getMessages(f.id));
         const count = client.getUnreadCount(f.id);
         if (count > 0) {
-          dispatch({
-            type: 'SET_UNREAD',
-            payload: { ...state.unreadCounts, [f.id]: count },
-          });
+          unreadCountsRef.current[f.id] = count;
         }
       }
 
-      // Load temp numbers
+      dispatch({ type: 'SET_UNREAD', payload: { ...unreadCountsRef.current } });
+
       const tempNumbers = client.getTempNumbers();
       dispatch({ type: 'SET_TEMP_NUMBERS', payload: tempNumbers });
 
-      // Load file transfers
       const transfers = client.getFileTransfers();
       dispatch({ type: 'SET_FILE_TRANSFERS', payload: transfers });
 
-      // Navigate to chat list
       dispatch({ type: 'SET_SCREEN', payload: 'chatList' });
     } catch (err: any) {
       console.error('[AICQ] Connection failed:', err);
@@ -285,7 +356,7 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [state.typingState, state.unreadCounts]);
+  }, [state.typingState, state.activeFriendId]);
 
   const navigate = useCallback((screen: ScreenName, friendId: string | null = null) => {
     dispatch({ type: 'SET_SCREEN', payload: screen });
@@ -304,10 +375,30 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     return msg;
   }, []);
 
-  const sendFileInfo = useCallback((friendId: string, fileInfo: { fileName: string; fileSize: number }): ChatMessage => {
+  const sendFileInfo = useCallback((friendId: string, fileInfo: import('../types').FileMetadata): ChatMessage => {
     const client = clientRef.current;
     if (!client) throw new Error('Client not initialized');
     const msg = client.sendFileInfo(friendId, fileInfo);
+    const msgs = messagesRef.current.get(friendId) || [];
+    msgs.push(msg);
+    messagesRef.current.set(friendId, msgs);
+    return msg;
+  }, []);
+
+  const sendImage = useCallback(async (friendId: string, file: File): Promise<ChatMessage> => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    const msg = await client.sendImage(friendId, file);
+    const msgs = messagesRef.current.get(friendId) || [];
+    msgs.push(msg);
+    messagesRef.current.set(friendId, msgs);
+    return msg;
+  }, []);
+
+  const sendVideo = useCallback(async (friendId: string, file: File): Promise<ChatMessage> => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    const msg = await client.sendVideo(friendId, file);
     const msgs = messagesRef.current.get(friendId) || [];
     msgs.push(msg);
     messagesRef.current.set(friendId, msgs);
@@ -360,6 +451,18 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     return client.sendFile(friendId, file);
   }, []);
 
+  const pauseTransfer = useCallback((sessionId: string) => {
+    clientRef.current?.pauseTransfer(sessionId);
+  }, []);
+
+  const resumeTransfer = useCallback(async (sessionId: string) => {
+    await clientRef.current?.resumeTransfer(sessionId);
+  }, []);
+
+  const cancelTransfer = useCallback((sessionId: string) => {
+    clientRef.current?.cancelTransfer(sessionId);
+  }, []);
+
   const refreshFriends = useCallback(async () => {
     const client = clientRef.current;
     if (!client) return;
@@ -371,11 +474,9 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     const client = clientRef.current;
     if (!client) return;
     client.markMessagesRead(friendId);
-    dispatch({
-      type: 'SET_UNREAD',
-      payload: { ...state.unreadCounts, [friendId]: 0 },
-    });
-  }, [state.unreadCounts]);
+    unreadCountsRef.current[friendId] = 0;
+    dispatch({ type: 'SET_UNREAD', payload: { ...unreadCountsRef.current } });
+  }, []);
 
   const getLastMessage = useCallback((friendId: string): ChatMessage | null => {
     const client = clientRef.current;
@@ -384,14 +485,17 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getUnreadCount = useCallback((friendId: string): number => {
-    return state.unreadCounts[friendId] || 0;
-  }, [state.unreadCounts]);
+    return unreadCountsRef.current[friendId] || 0;
+  }, []);
+
+  const getStreamingState = useCallback((friendId: string): StreamingState | null => {
+    return streamingRef.current[friendId] || null;
+  }, []);
 
   const clearError = useCallback(() => {
     dispatch({ type: 'SET_ERROR', payload: null });
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       clientRef.current?.destroy();
@@ -405,6 +509,8 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     navigate,
     sendMessage,
     sendFileInfo,
+    sendImage,
+    sendVideo,
     sendTyping,
     getMessages,
     requestTempNumber,
@@ -412,10 +518,14 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     resolveAndAddFriend,
     removeFriend,
     sendFile,
+    pauseTransfer,
+    resumeTransfer,
+    cancelTransfer,
     refreshFriends,
     markMessagesRead,
     getLastMessage,
     getUnreadCount,
+    getStreamingState,
     clearError,
   };
 
