@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/MindDock/OpenClaw-Dev-Guide/blob/main/05-Plugin%20SDK%E5%BC%80%E5%8F%91%E6%8C%87%E5%AF%BC%E6%89%8B%E5%86%8C.md",
+    "name": "05-Plugin SDK开发指导手册.md",
+    "snippet": "### 9.3 插件 Slots ``` typescript // 声明插件类型// openclaw . plugin . json { \"id ... json { \" plugins \": { \" slots \": { \"memory\": \"my-memory\" // 选择使用my ...",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/@dorangao/dive-in-openclaw-and-build-a-secure-internal-site-control-plugin-design-c2290a16318e",
+    "name": "Dive in OpenClaw and build a Secure Internal-Site Control",
+    "snippet": "Plugins can register JSON -schema tools exposed to the LLM during agent runs, and tools can be “optional” (opt-in) requiring explicit ...",
+    "host_name": "medium.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://x.com/bozhou_ai/status/2031619735243338041",
+    "name": "我在时间线上都没有看到有人说Openclaw的plugin的，写了",
+    "snippet": "先别一上来就做 channel 、 provider auth、memory slot 。 最稳的学习路径是：. 先做一个最小插件→ 再注册一个 tool → 再加 hook → 最后再挑战更重的能力。",
+    "host_name": "x.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.yahboom.net/build/id/18419/cid/309",
+    "name": "08.OpenClaw Features Overview",
+    "snippet": "Mar 26, 2026 — OpenClaw plugins are TypeScript modules loaded at runtime via jiti . Configuration validation does not execute plugin code; it relies on the ...",
+    "host_name": "www.yahboom.net",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.meta-intelligence.tech/insight-openclaw-config",
+    "name": "從openclaw.json 到模型管理的核心配置| 超智諮詢",
+    "snippet": "Oct 30, 2025 — OpenClaw 的設計哲學是「單一設定檔，管理一切」。無論你要調整模型、新增通訊渠道、修改Gateway 行為，還是設定安全權限，所有配置都匯聚在同一個檔案中 ...",
+    "host_name": "www.meta-intelligence.tech",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://sourceforge.net/projects/openclaw.mirror/files/v2026.3.22",
+    "name": "OpenClaw - Browse /v2026.3.22 at",
+    "snippet": "Mar 22, 2026 — Plugins /bundles: add compatible Codex, Claude, and Cursor bundle discovery/install support, map bundle skills into OpenClaw skills, and apply ...",
+    "host_name": "sourceforge.net",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/martian-engineering/lossless-claw",
+    "name": "Martian-Engineering/lossless-claw",
+    "snippet": "2 days ago — Lossless Context Management plugin for OpenClaw , based on the LCM paper from Voltropy. Replaces OpenClaw's built-in sliding-window ...",
+    "host_name": "github.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.tencentcloud.com/techpedia/140775",
+    "name": "Custom Skills and Plugin Development Guide",
+    "snippet": "Mar 3, 2026 — No channel -specific code needed — OpenClaw abstracts the channel layer. ... Use the OpenClaw admin panel to verify skill registration status.",
+    "host_name": "www.tencentcloud.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.cnblogs.com/BlogNetSpace/p/19721569",
+    "name": "OpenClaw 插件（Plugins）系统开发与配置指南",
+    "snippet": "Mar 15, 2026 — 适用版本： OpenClaw v2026.3.8+核心理念：插件是扩展 OpenClaw 能力的安全、模块化方式，用于添加命令、工具、渠道、模型认证、HTTP 接口等。",
+    "host_name": "www.cnblogs.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://lumadock.com/tutorials/openclaw-custom-api-integration-guide?language=polish",
+    "name": "OpenClaw custom API integration guide for skills and plugins",
+    "snippet": "Plugins – deep Gateway extensions written in TypeScript or JavaScript; Webhooks – HTTP endpoints that external systems POST to. Each serves a different purpose.",
+    "host_name": "lumadock.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://cloud.tencent.com/developer/article/2638941",
+    "name": "OpenClaw 插件（Plugins）系统开发与配置指南 - 腾讯云",
+    "snippet": "插件是一个小型代码模块，用于在不修改OpenClaw 核心代码的前提下，动态扩展其功能。典型用途包括：. 添加新的聊天渠道（如Microsoft Teams）; 集成自定义AI ...",
+    "host_name": "cloud.tencent.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://juejin.cn/post/7619004638658658339",
+    "name": "OpenClaw插件开发完全指南：从零构建自定义AI工具",
+    "snippet": "深入解析OpenClaw插件系统，从插件架构、开发流程到实战案例，教你如何为AI工作流平台开发自定义插件，扩展OpenClaw的能力边界。",
+    "host_name": "juejin.cn",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.openclaw.ai/zh-CN/tools/plugin",
+    "name": "插件",
+    "snippet": "快速开始（刚接触插件？） 插件可以是以下两种之一：. 原生OpenClaw 插件（ openclaw.plugin.json + 运行时模块），或; 兼容的bundle（ .codex-plugin/plugin.json 或 ... Missing: 开源 项目",
+    "host_name": "docs.openclaw.ai",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=aI77F7vVodE",
+    "name": "OpenClaw高级玩法之跨机器跨Gateway交互：自研A2A协议插件打通",
+    "snippet": "视频简介： ✓开源神器！OpenClaw A2A Gateway让不同机器上的bot点对点通信，支持结构化输出、认证安全与任务生命周期管理⚡️ 本期视频详细演示了我开发 ...",
+    "host_name": "www.youtube.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://yeasy.gitbook.io/openclaw_guide/di-san-bu-fen-shi-xian-yuan-li-yu-gong-cheng-luo-di/12_extension_engineering/12.1_plugin_architecture",
+    "name": "12.1 插件开发体系：自定义扩展的工程机制",
+    "snippet": "其中最核心的安全与工程设计在于引入了 openclaw.plugin.json 清单文件。它声明插件 id 、 configSchema 、可选 uiHints 等元数据，使系统在渲染Control UI ... Missing: 开源 项目",
+    "host_name": "yeasy.gitbook.io",
+    "rank": 4,
+    "date": "Mar 31, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.aliyun.com/article/1717317",
+    "name": "OpenClaw插件开发教程：阿里云/本地部署+Plugin、Hook、Skill三层",
+    "snippet": "OpenClaw插件开发教程：阿里云/本地部署+Plugin、Hook、Skill三层分工+免费大模型API配置实战 · 1. Skill：能力说明书+调用策略（最上层） · 2. Hook：运行时拦截 ... Missing: 项目 claw",
+    "host_name": "developer.aliyun.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=svzXatG4L2E",
+    "name": "0门槛！OpenClaw开发插件首发教程！graph-memory知识图谱",
+    "snippet": "... 插件的思路和架构。 #OpenClaw #插件开发#AI Agent #上下文工程#知识图谱#graph-memory #lossless-claw #开源#TypeScript #LLM记忆. Missing: 项目 plugin",
+    "host_name": "www.youtube.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.openclawinstallhelp.com/guide",
+    "name": "使用文档 - OpenClaw AI助手搭建平台",
+    "snippet": "Free · Developer Feb 28, 2026 · 通过插件扩展功能：. bash # 安装插件 openclaw plugin install <plugin-name> # 列出已安装插件 openclaw plugin list # 更新插件 openclaw plugin update.",
+    "host_name": "www.openclawinstallhelp.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/soimy/openclaw-channel-dingtalk",
+    "name": "soimy/openclaw-channel-dingtalk - GitHub",
+    "snippet": "针对OpenClaw 的钉钉企业内部机器人Channel 渠道插件，使用Stream 模式，无需公网IP。 功能特性. Stream 模式，无需Webhook 和公网入口; 支持私聊、群聊和@ ... Missing: 开源 项目",
+    "host_name": "github.com",
+    "rank": 8,
+    "date": "Apr 2, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://cloud.tencent.com/developer/article/2640909",
+    "name": "OpenClaw 插件系统(Plugins) 终极指南-腾讯云开发者社区",
+    "snippet": "OpenClaw插件系统连接AI与IM软件/API，支持飞书、钉钉等10000+插件。提供通道插件对接通讯工具，技能插件实现Excel处理、代码审查等任务。 Missing: claw | Show results with: claw",
+    "host_name": "cloud.tencent.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

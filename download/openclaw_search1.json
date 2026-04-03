@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://docs.openclaw.ai/plugins/architecture",
+    "name": "Plugin Internals - OpenClaw Docs",
+    "snippet": "Multi-capability company... · Provider example",
+    "host_name": "docs.openclaw.ai",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://ppaolo.substack.com/p/openclaw-system-architecture-overview",
+    "name": "OpenClaw Architecture, Explained: How It Works",
+    "snippet": "OpenClaw supports four primary deployment patterns, each optimized for different use cases and environments. The architecture remains consistent ...",
+    "host_name": "ppaolo.substack.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/@dingzhanjun/deep-dive-into-openclaw-architecture-code-ecosystem-e6180f34bd07",
+    "name": "Deep Dive into OpenClaw: Architecture, Code & Ecosystem - Medium",
+    "snippet": "Its plugin architecture, inspired by the need to escape monolithic complexity, has created a thriving ecosystem where anyone can contribute a ...",
+    "host_name": "medium.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.openclaw.ai/plugins/building-plugins",
+    "name": "Building Plugins - OpenClaw Docs",
+    "snippet": "This walkthrough creates a minimal plugin that registers an agent tool. Channel and provider plugins have dedicated guides linked above. 1.",
+    "host_name": "docs.openclaw.ai",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://vallettasoftware.com/blog/post/openclaw-2026-guide",
+    "name": "OpenClaw Architecture & Setup Guide (2026) - Valletta Software",
+    "snippet": "Practical OpenClaw guide for teams: architecture, install steps, Gateway setup, skill risk controls, and an enterprise security checklist.",
+    "host_name": "vallettasoftware.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.tencentcloud.com/techpedia/140775",
+    "name": "OpenClaw Application Development - Custom Skills and Plugin",
+    "snippet": "That's where custom skills and plugins come in. This guide covers both systems, when to use which, and how to build them properly. Skills vs. Missing: architecture | Show results with: architecture",
+    "host_name": "www.tencentcloud.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://skywork.ai/skypage/en/openclaw-plugins-guide/2036745130595684352",
+    "name": "Comprehensive Guide to OpenClaw Plugins: Features, Comparison",
+    "snippet": "The architecture relies on specific \"slots\" and \"hooks.\" Plugins can register model providers, chat channels, agent tools, and background ...",
+    "host_name": "skywork.ai",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=kMvTeh4KJIU",
+    "name": "OpenClaw Architecture Deep Dive - YouTube",
+    "snippet": "OpenClaw - a self-hosted, always-running personal AI system that connects your apps, your data, and powerful LLMs into a single orchestrated ... Missing: plugin | Show results with: plugin",
+    "host_name": "www.youtube.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/openclaw/openclaw/blob/main/docs/tools/plugin.md",
+    "name": "openclaw/docs/tools/plugin.md at main - GitHub",
+    "snippet": "Plugins extend OpenClaw with new capabilities: channels, model providers, tools, skills, speech, image generation, and more. Missing: architecture | Show results with: architecture",
+    "host_name": "github.com",
+    "rank": 8,
+    "date": "Mar 31, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=sTjx7IpeBas",
+    "name": "OpenClaw COMPLETE Tutorial - All 12 Concepts You  - YouTube",
+    "snippet": "VPS for OpenClaw (use code BYTEGRAD): http://hostinger.com/bytegradopenclaw (sponsored by Hostinger & ByteGrad gets commission) React ... Missing: plugin architecture",
+    "host_name": "www.youtube.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]
