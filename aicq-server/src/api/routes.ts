@@ -94,13 +94,13 @@ router.get('/temp-number/:number', generalLimiter, (req: Request, res: Response)
  */
 router.delete('/temp-number/:number', generalLimiter, (req: Request, res: Response) => {
   try {
-    const nodeId = req.body.nodeId;
+    const nodeId = req.body.nodeId || req.query.nodeId;
     if (!nodeId) {
       res.status(400).json({ error: 'Missing required field: nodeId' });
       return;
     }
 
-    const revoked = tempNumberService.revokeTempNumber(nodeId, req.params.number);
+    const revoked = tempNumberService.revokeTempNumber(nodeId as string, req.params.number);
     if (!revoked) {
       res.status(404).json({ error: 'Temp number not found or not owned by this node' });
       return;

@@ -203,12 +203,13 @@ export class IdentityManager {
       }
 
       const parts = qrPayload.split(':');
-      if (parts.length < 6) return false;
+      if (parts.length < 7) return false;
 
-      const salt = decodeBase64(parts[2]);
-      const iv = decodeBase64(parts[3]);
-      const encrypted = decodeBase64(parts[4]);
-      const expiresAt = parseInt(parts[5], 36);
+      // Format: aicq:privkey:v1:{salt}:{iv}:{encrypted}:{expiry}
+      const salt = decodeBase64(parts[3]);
+      const iv = decodeBase64(parts[4]);
+      const encrypted = decodeBase64(parts[5]);
+      const expiresAt = parseInt(parts[6], 36);
 
       // Check expiry
       if (Date.now() > expiresAt) {

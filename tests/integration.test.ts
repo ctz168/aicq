@@ -155,6 +155,7 @@ async function startServer(): Promise<void> {
   process.env.DOMAIN = "test.aicq.local";
   process.env.MAX_FRIENDS = "200";
   process.env.TEMP_NUMBER_TTL_HOURS = "24";
+  process.env.RATE_LIMIT_DISABLED = "true";
 
   const mod = await import("../aicq-server/dist/index.js");
   serverInstance = mod.server;
@@ -366,7 +367,7 @@ async function testTempNumberRevocation() {
     assert.equal(resolveBefore, 200, "temp number should resolve before revocation");
 
     // Revoke it
-    const { status: revokeStatus } = await del(baseUrl, `/api/v1/temp-number/${number}`, { nodeId });
+    const { status: revokeStatus } = await del(baseUrl, `/api/v1/temp-number/${number}?nodeId=${encodeURIComponent(nodeId)}`);
     assert.equal(revokeStatus, 200, "revocation should succeed");
 
     // Try to use for handshake — should fail
