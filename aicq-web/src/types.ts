@@ -110,19 +110,57 @@ export interface StreamingState {
   error?: string;
 }
 
+/** Group member information. */
+export interface GroupMemberInfo {
+  accountId: string;
+  displayName: string;
+  role: 'owner' | 'admin' | 'member';
+  joinedAt: number;
+  isMuted: boolean;
+  isOnline?: boolean;
+}
+
+/** Group information. */
+export interface GroupInfo {
+  id: string;
+  name: string;
+  ownerId: string;
+  members: GroupMemberInfo[];
+  memberCount: number;
+  createdAt: number;
+  updatedAt: number;
+  description?: string;
+  avatar?: string;
+}
+
+/** Group chat message. */
+export interface GroupMessage {
+  id: string;
+  groupId: string;
+  fromId: string;
+  fromName: string;
+  type: 'text' | 'markdown' | 'image' | 'video' | 'file-info' | 'system';
+  content: string;
+  timestamp: number;
+  media?: MediaInfo;
+  fileInfo?: FileMetadata;
+}
+
 /** Screen names for navigation. */
 export type ScreenName =
   | 'login'
   | 'chatList'
   | 'chat'
+  | 'groupList'
+  | 'groupChat'
   | 'friends'
   | 'tempNumber'
   | 'settings';
 
 /** Tab names for bottom navigation. */
-export type TabName = 'chatList' | 'friends' | 'tempNumber' | 'settings';
+export type TabName = 'chatList' | 'groupList' | 'friends' | 'tempNumber' | 'settings';
 
-/** Unread counts per friend. */
+/** Unread counts per friend / group. */
 export type UnreadCounts = Record<string, number>;
 
 /** Typing state per friend. */

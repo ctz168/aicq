@@ -8,6 +8,7 @@ import {
   isOnline,
   getSignalingChannel,
 } from '../services/p2pDiscoveryService';
+import * as groupService from '../services/groupService';
 import { store } from '../db/memoryStore';
 
 /** Interface for parsed WebSocket messages */
@@ -107,7 +108,7 @@ function handleMessage(
         return;
       }
 
-      // Verify the sender and receiver are friends (or in handshake)
+      // Verify the sender and receiver are friends, in handshake, or in the same group
       const senderNode = store.nodes.get(id);
       const isFriendOrHandshake =
         senderNode?.friends.has(toId) ||
@@ -117,9 +118,18 @@ function handleMessage(
             (s.requesterId === toId && s.targetNodeId === id),
         );
 
-      if (!isFriendOrHandshake) {
+      // 检查是否在同一个群组中
+      let inSameGroup = false;
+      for (const group of store.groups.values()) {
+        if (group.members.has(id) && group.members.has(toId)) {
+          inSameGroup = true;
+          break;
+        }
+      }
+
+      if (!isFriendOrHandshake && !inSameGroup) {
         ws.send(
-          JSON.stringify({ type: 'error', error: 'Cannot signal non-friend/non-handshake node' }),
+          JSON.stringify({ type: 'error', error: 'Cannot signal non-friend/non-group node' }),
         );
         return;
       }
@@ -185,6 +195,59 @@ function handleMessage(
       }
 
       relaySignal(id, toId, { type: 'file_chunk', data: chunkData });
+      break;
+    }
+
+    case 'group_message': {
+      // 群组消息：广播给所有在线群成员
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const groupId: string = message.groupId;
+      const msgType: string = message.msgType || 'text';
+      const content: string = message.content;
+
+      if (!groupId || !content) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Missing groupId or content' }));
+        return;
+      }
+
+      try {
+        const delivered = groupService.sendMessage(groupId, id, {
+          type: msgType as any,
+          content,
+          media: message.media,
+          fileInfo: message.fileInfo,
+        });
+        ws.send(JSON.stringify({ type: 'group_message_ack', groupId, delivered }));
+      } catch (err: any) {
+        ws.send(JSON.stringify({ type: 'error', error: err.message }));
+      }
+      break;
+    }
+
+    case 'group_typing': {
+      // 群组输入指示器
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const groupId: string = message.groupId;
+      if (!groupId) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Missing groupId' }));
+        return;
+      }
+
+      try {
+        groupService.broadcastTyping(groupId, id);
+      } catch (err: any) {
+        // 输入指示器失败不返回错误
+      }
       break;
     }
 

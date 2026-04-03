@@ -21,6 +21,9 @@ import type {
   MediaInfo,
   FileMetadata,
   StreamingState,
+  GroupInfo,
+  GroupMessage,
+  GroupMemberInfo,
 } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -90,6 +93,8 @@ interface StoreData {
   chatHistory: Record<string, ChatMessage[]>;
   tempNumbers: TempNumberInfo[];
   fileTransfers: Record<string, FileTransferInfo>;
+  groups: Record<string, GroupInfo>;
+  groupMessages: Record<string, GroupMessage[]>;
 }
 
 // ─── Browser Store (localStorage) ───────────────────────────
@@ -106,6 +111,8 @@ class BrowserStore {
     chatHistory: {},
     tempNumbers: [],
     fileTransfers: {},
+    groups: {},
+    groupMessages: {},
   };
 
   load(): boolean {
@@ -123,6 +130,8 @@ class BrowserStore {
         chatHistory: parsed.chatHistory ?? {},
         tempNumbers: parsed.tempNumbers ?? [],
         fileTransfers: parsed.fileTransfers ?? {},
+        groups: parsed.groups ?? {},
+        groupMessages: parsed.groupMessages ?? {},
       };
       return true;
     } catch {
@@ -150,6 +159,8 @@ class BrowserStore {
       chatHistory: {},
       tempNumbers: [],
       fileTransfers: {},
+      groups: {},
+      groupMessages: {},
     };
   }
 
@@ -251,6 +262,31 @@ class BrowserStore {
   }
   removeFileTransfer(sessionId: string): void {
     delete this.data.fileTransfers[sessionId];
+  }
+
+  /* ─── Groups Storage ─────────────────────────────────── */
+
+  get groups(): GroupInfo[] {
+    return Object.values(this.data.groups);
+  }
+  addGroup(group: GroupInfo): void {
+    this.data.groups[group.id] = group;
+  }
+  removeGroup(groupId: string): void {
+    delete this.data.groups[groupId];
+  }
+  updateGroup(groupId: string, updates: Partial<GroupInfo>): void {
+    const g = this.data.groups[groupId];
+    if (g) Object.assign(g, updates);
+  }
+
+  getGroupMessages(groupId: string): GroupMessage[] {
+    return [...(this.data.groupMessages?.[groupId] ?? [])];
+  }
+  addGroupMessage(groupId: string, message: GroupMessage): void {
+    if (!this.data.groupMessages) this.data.groupMessages = {};
+    if (!this.data.groupMessages[groupId]) this.data.groupMessages[groupId] = [];
+    this.data.groupMessages[groupId].push(message);
   }
 }
 
@@ -383,6 +419,64 @@ class BrowserAPIClient {
     const res = await this.request<{ missingChunks: number[] }>('GET', `/file/${encodeURIComponent(sessionId)}/missing`);
     return res.missingChunks;
   }
+
+  /* ─── Groups API ─────────────────────────────────────── */
+
+  async createGroup(name: string, description?: string): Promise<GroupInfo> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request('POST', '/group/create', { name, ownerId: this.nodeId, description });
+  }
+
+  async getGroups(): Promise<GroupInfo[]> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    const res = await this.request<{ groups: GroupInfo[] }>('GET', `/group/list?accountId=${encodeURIComponent(this.nodeId)}`);
+    return res.groups;
+  }
+
+  async getGroupInfo(groupId: string): Promise<GroupInfo> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request('GET', `/group/${encodeURIComponent(groupId)}?accountId=${encodeURIComponent(this.nodeId)}`);
+  }
+
+  async inviteToGroup(groupId: string, targetId: string, displayName?: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('POST', `/group/${encodeURIComponent(groupId)}/invite`, { accountId: this.nodeId, targetId, displayName });
+  }
+
+  async kickFromGroup(groupId: string, targetId: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('POST', `/group/${encodeURIComponent(groupId)}/kick`, { accountId: this.nodeId, targetId });
+  }
+
+  async leaveGroup(groupId: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('POST', `/group/${encodeURIComponent(groupId)}/leave`, { accountId: this.nodeId });
+  }
+
+  async disbandGroup(groupId: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('DELETE', `/group/${encodeURIComponent(groupId)}`, { accountId: this.nodeId });
+  }
+
+  async updateGroup(groupId: string, updates: { name?: string; description?: string; avatar?: string }): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('PUT', `/group/${encodeURIComponent(groupId)}`, { accountId: this.nodeId, ...updates });
+  }
+
+  async transferGroupOwnership(groupId: string, targetId: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('POST', `/group/${encodeURIComponent(groupId)}/transfer`, { accountId: this.nodeId, targetId });
+  }
+
+  async setGroupMemberRole(groupId: string, targetId: string, role: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('POST', `/group/${encodeURIComponent(groupId)}/role`, { accountId: this.nodeId, targetId, role });
+  }
+
+  async muteGroupMember(groupId: string, targetId: string, muted: boolean): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('POST', `/group/${encodeURIComponent(groupId)}/mute`, { accountId: this.nodeId, targetId, muted });
+  }
 }
 
 // ─── WebSocket Client (browser native) ───────────────────────
@@ -484,6 +578,8 @@ class BrowserWSClient extends SimpleEventEmitter {
       case 'streaming_error':
         this.emit('streaming_error', msg);
         break;
+      case 'group_message': this.emit('group_message', msg); break;
+      case 'group_typing': this.emit('group_typing', msg); break;
       case 'error':
         this.emit('error', new Error(msg.error ?? 'Server error'));
         break;
@@ -689,6 +785,22 @@ export class WebClient extends SimpleEventEmitter {
         };
         this.store.addMessage(msg.peerInfo.id, sysMsg);
       }
+    });
+
+    this.ws.on('group_message', (msg: any) => {
+      const groupMsg: GroupMessage = {
+        id: msg.id || uuidv4(),
+        groupId: msg.groupId,
+        fromId: msg.fromId,
+        fromName: msg.fromName || msg.fromId?.slice(0, 8) || 'Unknown',
+        type: msg.type || 'text',
+        content: msg.content,
+        timestamp: msg.timestamp || Date.now(),
+        media: msg.media,
+        fileInfo: msg.fileInfo,
+      };
+      this.store.addGroupMessage(groupMsg.groupId, groupMsg);
+      this.emit('group_message', groupMsg);
     });
   }
 
@@ -1227,6 +1339,124 @@ export class WebClient extends SimpleEventEmitter {
 
   getFileTransfers(): FileTransferInfo[] {
     return Array.from(this.store.fileTransfers.values());
+  }
+
+  /* ─── Groups ─────────────────────────────────────────── */
+
+  async createGroup(name: string, description?: string): Promise<GroupInfo> {
+    const group = await this.api.createGroup(name, description);
+    this.store.addGroup(group);
+    this.store.save();
+    this.emit('group_created', group);
+    return group;
+  }
+
+  async getGroups(): Promise<GroupInfo[]> {
+    try {
+      const groups = await this.api.getGroups();
+      for (const g of groups) {
+        this.store.addGroup(g);
+      }
+      this.store.save();
+      return groups;
+    } catch (err) {
+      console.error('[WebClient] Failed to fetch groups:', err);
+      return this.getGroupsLocal();
+    }
+  }
+
+  getGroupsLocal(): GroupInfo[] {
+    return this.store.groups;
+  }
+
+  async inviteToGroup(groupId: string, targetId: string, displayName?: string): Promise<void> {
+    await this.api.inviteToGroup(groupId, targetId, displayName);
+    const group = await this.api.getGroupInfo(groupId);
+    this.store.addGroup(group);
+    this.store.save();
+    this.emit('group_updated', group);
+  }
+
+  async kickFromGroup(groupId: string, targetId: string): Promise<void> {
+    await this.api.kickFromGroup(groupId, targetId);
+    const group = await this.api.getGroupInfo(groupId);
+    this.store.addGroup(group);
+    this.store.save();
+    this.emit('group_updated', group);
+  }
+
+  async leaveGroup(groupId: string): Promise<void> {
+    await this.api.leaveGroup(groupId);
+    this.store.removeGroup(groupId);
+    this.store.save();
+    this.emit('group_left', groupId);
+  }
+
+  async disbandGroup(groupId: string): Promise<void> {
+    await this.api.disbandGroup(groupId);
+    this.store.removeGroup(groupId);
+    this.store.save();
+    this.emit('group_disbanded', groupId);
+  }
+
+  async updateGroup(groupId: string, updates: { name?: string; description?: string; avatar?: string }): Promise<void> {
+    await this.api.updateGroup(groupId, updates);
+    const group = await this.api.getGroupInfo(groupId);
+    this.store.addGroup(group);
+    this.store.save();
+    this.emit('group_updated', group);
+  }
+
+  async transferGroupOwnership(groupId: string, targetId: string): Promise<void> {
+    await this.api.transferGroupOwnership(groupId, targetId);
+    const group = await this.api.getGroupInfo(groupId);
+    this.store.addGroup(group);
+    this.store.save();
+    this.emit('group_updated', group);
+  }
+
+  async setGroupMemberRole(groupId: string, targetId: string, role: string): Promise<void> {
+    await this.api.setGroupMemberRole(groupId, targetId, role);
+    const group = await this.api.getGroupInfo(groupId);
+    this.store.addGroup(group);
+    this.store.save();
+    this.emit('group_updated', group);
+  }
+
+  async muteGroupMember(groupId: string, targetId: string, muted: boolean): Promise<void> {
+    await this.api.muteGroupMember(groupId, targetId, muted);
+    const group = await this.api.getGroupInfo(groupId);
+    this.store.addGroup(group);
+    this.store.save();
+    this.emit('group_updated', group);
+  }
+
+  sendGroupMessage(groupId: string, text: string): GroupMessage {
+    const isMd = this._detectMarkdown(text);
+    const msg: GroupMessage = {
+      id: uuidv4(),
+      groupId,
+      fromId: this.getUserId(),
+      fromName: this.getUserId().slice(0, 8),
+      type: isMd ? 'markdown' : 'text',
+      content: text,
+      timestamp: Date.now(),
+    };
+    this.store.addGroupMessage(groupId, msg);
+    this.ws.send('group_message', {
+      groupId,
+      fromId: msg.fromId,
+      type: msg.type,
+      content: text,
+      timestamp: msg.timestamp,
+      id: msg.id,
+    });
+    this.store.save();
+    return msg;
+  }
+
+  getGroupMessages(groupId: string): GroupMessage[] {
+    return this.store.getGroupMessages(groupId);
   }
 
   /* ─── Media Helpers ──────────────────────────────────────── */

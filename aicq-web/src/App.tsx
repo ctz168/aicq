@@ -5,6 +5,8 @@ import Sidebar from './components/Sidebar';
 import LoginScreen from './screens/LoginScreen';
 import ChatListScreen from './screens/ChatListScreen';
 import ChatScreen from './screens/ChatScreen';
+import GroupListScreen from './screens/GroupListScreen';
+import GroupChatScreen from './screens/GroupChatScreen';
 import FriendsScreen from './screens/FriendsScreen';
 import TempNumberScreen from './screens/TempNumberScreen';
 import SettingsScreen from './screens/SettingsScreen';
@@ -26,6 +28,11 @@ const App: React.FC = () => {
     return <ChatScreen />;
   }
 
+  // Group chat screen (full screen, no sidebar)
+  if (state.screen === 'groupChat') {
+    return <GroupChatScreen />;
+  }
+
   // Determine active tab for sidebar
   const activeTab: TabName =
     state.screen === 'friends'
@@ -34,8 +41,8 @@ const App: React.FC = () => {
         ? 'tempNumber'
         : state.screen === 'settings'
           ? 'settings'
-          : state.screen === 'chatList'
-            ? 'chatList'
+          : state.screen === 'groupList'
+            ? 'groupList'
             : 'chatList';
 
   // Render active screen
@@ -47,6 +54,8 @@ const App: React.FC = () => {
         return <TempNumberScreen />;
       case 'settings':
         return <SettingsScreen />;
+      case 'groupList':
+        return <GroupListScreen />;
       case 'chatList':
       default:
         return <ChatListScreen />;
@@ -58,7 +67,7 @@ const App: React.FC = () => {
       <Sidebar
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        unreadCounts={state.unreadCounts}
+        unreadCounts={{ ...state.unreadCounts, ...state.groupUnreadCounts }}
         hasActiveChat={false}
       />
       <main className="main-content">

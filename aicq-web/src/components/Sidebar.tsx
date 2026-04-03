@@ -11,6 +11,7 @@ interface SidebarProps {
 
 const tabs: { key: TabName; label: string; icon: string }[] = [
   { key: 'chatList', label: '聊天', icon: '💬' },
+  { key: 'groupList', label: '群组', icon: '🗣️' },
   { key: 'friends', label: '好友', icon: '👥' },
   { key: 'tempNumber', label: '临时号码', icon: '🔢' },
   { key: 'settings', label: '设置', icon: '⚙️' },

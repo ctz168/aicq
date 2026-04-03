@@ -7,6 +7,7 @@ import {
   Account,
   VerificationCode,
   Session,
+  Group,
 } from '../models/types';
 import { config } from '../config';
 
@@ -34,6 +35,9 @@ export class MemoryStore {
 
   /** Active sessions */
   sessions = new Map<string, Session>();
+
+  /** Groups keyed by group ID */
+  groups = new Map<string, Group>();
 
   /**
    * Remove expired temp numbers from the store.

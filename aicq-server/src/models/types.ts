@@ -198,3 +198,63 @@ export interface InitiateFileTransferRequest {
 export interface ReportChunkProgressRequest {
   chunkIndex: number;
 }
+
+// ─── Group System ─────────────────────────────────────────────
+export type GroupRole = 'owner' | 'admin' | 'member';
+
+export interface GroupMember {
+  accountId: string;
+  displayName: string;
+  role: GroupRole;
+  joinedAt: number;
+  isMuted: boolean;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  ownerId: string;
+  members: Map<string, GroupMember>;  // accountId -> GroupMember
+  createdAt: number;
+  updatedAt: number;
+  maxMembers: number;
+  description?: string;
+  avatar?: string;
+}
+
+export interface CreateGroupRequest {
+  name: string;
+  ownerId: string;
+  description?: string;
+}
+
+export interface InviteToGroupRequest {
+  accountId: string;  // inviter's accountId
+  targetId: string;   // person to invite (must be a friend or in the system)
+  displayName?: string;
+}
+
+export interface KickFromGroupRequest {
+  accountId: string;  // who is doing the kicking (must be owner/admin)
+  targetId: string;   // who to kick
+}
+
+export interface LeaveGroupRequest {
+  accountId: string;
+}
+
+export interface UpdateGroupRequest {
+  accountId: string;
+  name?: string;
+  description?: string;
+  avatar?: string;
+}
+
+export interface GroupMessagePayload {
+  groupId: string;
+  fromId: string;
+  type: 'text' | 'markdown' | 'image' | 'video' | 'file-info' | 'system';
+  content: string;
+  media?: any;
+  fileInfo?: any;
+}

@@ -7,10 +7,12 @@ import { config } from './config';
 import { startPeriodicCleanup } from './db/memoryStore';
 import apiRoutes from './api/routes';
 import authRoutes from './api/authRoutes';
+import groupRoutes from './api/groupRoutes';
 import { setupWebSocketHandler } from './api/wsHandler';
 import { generalLimiter } from './middleware/rateLimit';
 
 const app = express();
+app.set('trust proxy', true);
 
 // ─── Middleware ─────────────────────────────────────────────────────
 app.use(helmet());
@@ -31,6 +33,7 @@ app.get('/health', (_req, res) => {
 // ─── API Routes ────────────────────────────────────────────────────
 app.use('/api/v1', apiRoutes);
 app.use('/api/v1', authRoutes);
+app.use('/api/v1', groupRoutes);
 
 // ─── 404 Handler ──────────────────────────────────────────────────
 app.use((_req, res) => {

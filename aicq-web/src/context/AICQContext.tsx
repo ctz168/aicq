@@ -10,6 +10,8 @@ import type {
   UnreadCounts,
   TypingState,
   StreamingState,
+  GroupInfo,
+  GroupMessage,
 } from '../types';
 
 // ─── State ───────────────────────────────────────────────────
@@ -30,6 +32,9 @@ interface AICQState {
   isLoading: boolean;
   /** Active streaming messages per friend */
   streamingMessages: Record<string, StreamingState>;
+  groups: GroupInfo[];
+  activeGroupId: string | null;
+  groupUnreadCounts: UnreadCounts;
 }
 
 const initialState: AICQState = {
@@ -47,6 +52,9 @@ const initialState: AICQState = {
   error: null,
   isLoading: false,
   streamingMessages: {},
+  groups: [],
+  activeGroupId: null,
+  groupUnreadCounts: {},
 };
 
 type Action =
@@ -72,7 +80,13 @@ type Action =
   | { type: 'UPDATE_MESSAGE'; payload: { friendId: string; messageId: string; updates: Partial<ChatMessage> } }
   | { type: 'SET_STREAMING'; payload: Record<string, StreamingState> }
   | { type: 'UPDATE_STREAMING'; payload: { friendId: string; state: StreamingState } }
-  | { type: 'CLEAR_STREAMING'; payload: string };
+  | { type: 'CLEAR_STREAMING'; payload: string }
+  | { type: 'SET_GROUPS'; payload: GroupInfo[] }
+  | { type: 'ADD_GROUP'; payload: GroupInfo }
+  | { type: 'UPDATE_GROUP'; payload: GroupInfo }
+  | { type: 'REMOVE_GROUP'; payload: string }
+  | { type: 'SET_ACTIVE_GROUP'; payload: string | null }
+  | { type: 'ADD_GROUP_MESSAGE'; payload: { groupId: string; message: GroupMessage } };
 
 function reducer(state: AICQState, action: Action): AICQState {
   switch (action.type) {
@@ -147,6 +161,28 @@ function reducer(state: AICQState, action: Action): AICQState {
       delete newStream[action.payload];
       return { ...state, streamingMessages: newStream };
     }
+    case 'SET_GROUPS':
+      return { ...state, groups: action.payload };
+    case 'ADD_GROUP':
+      return { ...state, groups: [...state.groups, action.payload] };
+    case 'UPDATE_GROUP':
+      return {
+        ...state,
+        groups: state.groups.map((g) => (g.id === action.payload.id ? action.payload : g)),
+      };
+    case 'REMOVE_GROUP':
+      return { ...state, groups: state.groups.filter((g) => g.id !== action.payload) };
+    case 'SET_ACTIVE_GROUP':
+      return { ...state, activeGroupId: action.payload };
+    case 'ADD_GROUP_MESSAGE': {
+      const { groupId, message } = action.payload;
+      const isOwn = message.fromId === state.userId;
+      const newGroupCounts = { ...state.groupUnreadCounts };
+      if (!isOwn && message.type !== 'system') {
+        newGroupCounts[groupId] = (newGroupCounts[groupId] || 0) + 1;
+      }
+      return { ...state, groupUnreadCounts: newGroupCounts };
+    }
     default:
       return state;
   }
@@ -179,6 +215,15 @@ interface AICQContextValue {
   getUnreadCount: (friendId: string) => number;
   getStreamingState: (friendId: string) => StreamingState | null;
   clearError: () => void;
+  createGroup: (name: string, description?: string) => Promise<GroupInfo>;
+  refreshGroups: () => Promise<void>;
+  inviteToGroup: (groupId: string, targetId: string, displayName?: string) => Promise<void>;
+  kickFromGroup: (groupId: string, targetId: string) => Promise<void>;
+  leaveGroup: (groupId: string) => Promise<void>;
+  disbandGroup: (groupId: string) => Promise<void>;
+  updateGroup: (groupId: string, updates: { name?: string; description?: string }) => Promise<void>;
+  sendGroupMessage: (groupId: string, text: string) => GroupMessage;
+  getGroupMessages: (groupId: string) => GroupMessage[];
 }
 
 const AICQContext = createContext<AICQContextValue | null>(null);
@@ -322,6 +367,27 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
+      // ─── Group events ─────────────────────────────────────────
+      client.on('group_message', (msg: GroupMessage) => {
+        dispatch({ type: 'ADD_GROUP_MESSAGE', payload: { groupId: msg.groupId, message: msg } });
+      });
+
+      client.on('group_created', (group: GroupInfo) => {
+        dispatch({ type: 'ADD_GROUP', payload: group });
+      });
+
+      client.on('group_updated', (group: GroupInfo) => {
+        dispatch({ type: 'UPDATE_GROUP', payload: group });
+      });
+
+      client.on('group_left', (groupId: string) => {
+        dispatch({ type: 'REMOVE_GROUP', payload: groupId });
+      });
+
+      client.on('group_disbanded', (groupId: string) => {
+        dispatch({ type: 'REMOVE_GROUP', payload: groupId });
+      });
+
       const result = await client.initialize();
 
       dispatch({
@@ -346,6 +412,14 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
       const tempNumbers = client.getTempNumbers();
       dispatch({ type: 'SET_TEMP_NUMBERS', payload: tempNumbers });
 
+      // Load groups
+      try {
+        const groups = await client.getGroups();
+        dispatch({ type: 'SET_GROUPS', payload: groups });
+      } catch (err) {
+        console.warn('[AICQ] Failed to load groups:', err);
+      }
+
       const transfers = client.getFileTransfers();
       dispatch({ type: 'SET_FILE_TRANSFERS', payload: transfers });
 
@@ -358,10 +432,16 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.typingState, state.activeFriendId]);
 
-  const navigate = useCallback((screen: ScreenName, friendId: string | null = null) => {
+  const navigate = useCallback((screen: ScreenName, targetId: string | null = null) => {
     dispatch({ type: 'SET_SCREEN', payload: screen });
-    if (friendId !== undefined) {
-      dispatch({ type: 'SET_ACTIVE_FRIEND', payload: friendId });
+    if (targetId !== undefined && targetId !== null) {
+      if (screen === 'groupChat') {
+        dispatch({ type: 'SET_ACTIVE_GROUP', payload: targetId });
+      } else {
+        dispatch({ type: 'SET_ACTIVE_FRIEND', payload: targetId });
+      }
+    } else {
+      dispatch({ type: 'SET_ACTIVE_GROUP', payload: null });
     }
   }, []);
 
@@ -496,6 +576,77 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_ERROR', payload: null });
   }, []);
 
+  const createGroup = useCallback(async (name: string, description?: string): Promise<GroupInfo> => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    const group = await client.createGroup(name, description);
+    dispatch({ type: 'ADD_GROUP', payload: group });
+    return group;
+  }, []);
+
+  const refreshGroups = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    try {
+      const groups = await client.getGroups();
+      dispatch({ type: 'SET_GROUPS', payload: groups });
+    } catch (err) {
+      console.error('[AICQ] Failed to refresh groups:', err);
+    }
+  }, []);
+
+  const inviteToGroup = useCallback(async (groupId: string, targetId: string, displayName?: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.inviteToGroup(groupId, targetId, displayName);
+    const groups = await client.getGroups();
+    dispatch({ type: 'SET_GROUPS', payload: groups });
+  }, []);
+
+  const kickFromGroup = useCallback(async (groupId: string, targetId: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.kickFromGroup(groupId, targetId);
+    const groups = await client.getGroups();
+    dispatch({ type: 'SET_GROUPS', payload: groups });
+  }, []);
+
+  const leaveGroup = useCallback(async (groupId: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.leaveGroup(groupId);
+    dispatch({ type: 'REMOVE_GROUP', payload: groupId });
+  }, []);
+
+  const disbandGroup = useCallback(async (groupId: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.disbandGroup(groupId);
+    dispatch({ type: 'REMOVE_GROUP', payload: groupId });
+  }, []);
+
+  const updateGroupFn = useCallback(async (groupId: string, updates: { name?: string; description?: string }) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.updateGroup(groupId, updates);
+    const groups = await client.getGroups();
+    dispatch({ type: 'SET_GROUPS', payload: groups });
+  }, []);
+
+  const sendGroupMessage = useCallback((groupId: string, text: string): GroupMessage => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    const msg = client.sendGroupMessage(groupId, text);
+    dispatch({ type: 'ADD_GROUP_MESSAGE', payload: { groupId, message: msg } });
+    return msg;
+  }, []);
+
+  const getGroupMessages = useCallback((groupId: string): GroupMessage[] => {
+    const client = clientRef.current;
+    if (!client) return [];
+    return client.getGroupMessages(groupId);
+  }, []);
+
   useEffect(() => {
     return () => {
       clientRef.current?.destroy();
@@ -527,6 +678,15 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     getUnreadCount,
     getStreamingState,
     clearError,
+    createGroup,
+    refreshGroups,
+    inviteToGroup,
+    kickFromGroup,
+    leaveGroup,
+    disbandGroup,
+    updateGroup: updateGroupFn,
+    sendGroupMessage,
+    getGroupMessages,
   };
 
   return <AICQContext.Provider value={value}>{children}</AICQContext.Provider>;

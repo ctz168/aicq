@@ -26,6 +26,8 @@ export const generalLimiter = disabled
       },
       standardHeaders: true,
       legacyHeaders: false,
+      validate: { trustProxy: false },
+      skipFailedRequests: true,
     });
 
 /**
@@ -43,6 +45,8 @@ export const tempNumberLimiter = disabled
       },
       standardHeaders: true,
       legacyHeaders: false,
+      validate: { trustProxy: false },
+      skipFailedRequests: true,
     });
 
 /**
@@ -59,4 +63,6 @@ export const handshakeLimiter = disabled
       },
       standardHeaders: true,
       legacyHeaders: false,
+      validate: { trustProxy: false },
+      skipFailedRequests: true,
     });
