@@ -1,0 +1,38 @@
+{
+  "models": {
+    "providers": {
+      "modelscope": {
+        "baseUrl": "https://api-inference.modelscope.cn/v1",
+        "apiKey": "ms-3eca52df-ea14-481b-9e72-73b988b612f7",
+        "models": [
+          {
+            "id": "ZhipuAI/GLM-5",
+            "name": "GLM-5",
+            "provider": "modelscope"
+          },
+          {
+            "id": "moonshotai/Kimi-K2.5",
+            "name": "Kimi-K2.5",
+            "provider": "modelscope"
+          },
+          {
+            "id": "MiniMax-MiniMax-M2.5",
+            "name": "MiniMax-M2.5",
+            "provider": "modelscope"
+          },
+          {
+            "id": "stepfun-ai/Step-3.5-Flash",
+            "name": "Step-3.5-Flash",
+            "provider": "modelscope"
+          }
+        ]
+      }
+    },
+    "defaultModel": "moonshotai/Kimi-K2.5"
+  },
+  "plugins": {
+    "paths": [
+      "./aicq-plugin"
+    ]
+  }
+}

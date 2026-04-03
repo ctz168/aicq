@@ -133,8 +133,8 @@ export class ServerClient {
    * Register this node on the server.
    */
   async registerNode(agentId: string, publicKey: Uint8Array): Promise<boolean> {
-    return this.post("/api/nodes/register", {
-      agentId,
+    return this.post("/api/v1/node/register", {
+      id: agentId,
       publicKey: Buffer.from(publicKey).toString("base64"),
     });
   }
@@ -143,27 +143,26 @@ export class ServerClient {
    * Request a temporary 6-digit number for friend discovery.
    */
   async requestTempNumber(): Promise<string | null> {
-    const res = await this.fetchPost<{ tempNumber: string }>("/api/temp-numbers/request", {
-      agentId: this.store.agentId,
+    const res = await this.fetchPost<{ number: string }>("/api/v1/temp-number/request", {
+      nodeId: this.store.agentId,
     });
-    return res?.tempNumber ?? null;
+    return res?.number ?? null;
   }
 
   /**
    * Resolve a temp number to a node ID and public key.
    */
   async resolveTempNumber(number: string): Promise<{ nodeId: string; publicKey: string } | null> {
-    return this.fetchPost("/api/temp-numbers/resolve", { number });
+    const res = await this.fetchGet<{ nodeId: string }>("/api/v1/temp-number/" + number);
+    if (!res) return null;
+    return { nodeId: res.nodeId, publicKey: "" };
   }
 
   /**
    * Revoke a temp number.
    */
   async revokeTempNumber(number: string): Promise<boolean> {
-    return this.post("/api/temp-numbers/revoke", {
-      agentId: this.store.agentId,
-      number,
-    });
+    return this.del("/api/v1/temp-number/" + number + "?nodeId=" + this.store.agentId);
   }
 
   /**
@@ -173,8 +172,8 @@ export class ServerClient {
   async initiateHandshake(
     targetTempNumber: string,
   ): Promise<{ sessionId: string; targetPublicKey: string } | null> {
-    return this.fetchPost("/api/handshake/initiate", {
-      initiatorId: this.store.agentId,
+    return this.fetchPost("/api/v1/handshake/initiate", {
+      requesterId: this.store.agentId,
       targetTempNumber,
     });
   }
@@ -186,9 +185,8 @@ export class ServerClient {
     sessionId: string,
     responseData: unknown,
   ): Promise<boolean> {
-    return this.post("/api/handshake/respond", {
+    return this.post("/api/v1/handshake/respond", {
       sessionId,
-      responderId: this.store.agentId,
       responseData,
     });
   }
@@ -200,7 +198,7 @@ export class ServerClient {
     sessionId: string,
     confirmData: unknown,
   ): Promise<boolean> {
-    return this.post("/api/handshake/confirm", {
+    return this.post("/api/v1/handshake/confirm", {
       sessionId,
       confirmData,
     });
@@ -210,19 +208,16 @@ export class ServerClient {
    * List all friends from the server.
    */
   async listFriends(): Promise<FriendInfo[]> {
-    const res = await this.fetchPost<FriendInfo[]>("/api/friends/list", {
-      agentId: this.store.agentId,
-    });
-    return res ?? [];
+    const res = await this.fetchGet<{ friends: FriendInfo[] }>("/api/v1/friends?nodeId=" + this.store.agentId);
+    return res?.friends ?? [];
   }
 
   /**
    * Remove a friend.
    */
   async removeFriend(friendId: string): Promise<boolean> {
-    return this.post("/api/friends/remove", {
-      agentId: this.store.agentId,
-      friendId,
+    return this.del("/api/v1/friends/" + friendId, {
+      nodeId: this.store.agentId,
     });
   }
 
@@ -230,9 +225,7 @@ export class ServerClient {
    * Get the friend count from the server.
    */
   async getFriendCount(): Promise<number> {
-    const res = await this.fetchPost<{ count: number }>("/api/friends/count", {
-      agentId: this.store.agentId,
-    });
+    const res = await this.fetchGet<{ count: number }>("/api/v1/friends?nodeId=" + this.store.agentId);
     return res?.count ?? 0;
   }
 
@@ -243,7 +236,7 @@ export class ServerClient {
     receiverId: string,
     fileInfo: { fileName: string; fileSize: number; fileHash: string; totalChunks: number; chunkSize: number },
   ): Promise<FileTransferSession | null> {
-    return this.fetchPost("/api/file-transfer/initiate", {
+    return this.fetchPost("/api/v1/file/initiate", {
       senderId: this.store.agentId,
       receiverId,
       ...fileInfo,
@@ -254,9 +247,7 @@ export class ServerClient {
    * Query which chunks are missing for a file transfer (for resume).
    */
   async getFileMissingChunks(sessionId: string): Promise<number[]> {
-    const res = await this.fetchPost<{ missingChunks: number[] }>("/api/file-transfer/missing-chunks", {
-      sessionId,
-    });
+    const res = await this.fetchGet<{ missingChunks: number[] }>("/api/v1/file/" + sessionId + "/missing");
     return res?.missingChunks ?? [];
   }
 
@@ -291,15 +282,41 @@ export class ServerClient {
         return null;
       }
 
-      const json = (await resp.json()) as ApiResponse<T>;
-      if (!json.ok) {
-        this.logger.error("[Server] API returned error:", json.error);
-        return null;
-      }
-      return json.data ?? null;
+      return await resp.json() as T;
     } catch (err) {
       this.logger.error(`[Server] API request failed for ${path}:`, err);
       return null;
+    }
+  }
+
+  private async fetchGet<T>(path: string): Promise<T | null> {
+    const url = this.serverUrl + path;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        const text = await resp.text();
+        this.logger.error(`[Server] API error ${resp.status} on ${path}: ${text}`);
+        return null;
+      }
+      return await resp.json() as T;
+    } catch (err) {
+      this.logger.error(`[Server] GET request failed for ${path}:`, err);
+      return null;
+    }
+  }
+
+  private async del(path: string, body?: unknown): Promise<boolean> {
+    const url = this.serverUrl + path;
+    try {
+      const resp = await fetch(url, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return resp.ok;
+    } catch (err) {
+      this.logger.error(`[Server] DELETE request failed for ${path}:`, err);
+      return false;
     }
   }
 

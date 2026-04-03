@@ -1,0 +1,11 @@
+{
+  "agentId": "65d12b6876e14b1f9de0ceb9f4750b93",
+  "identityPublicKey": "MqCEN3V0Tc4RPKK5dqLuMMXspQqkJW4fG3lsbqgYOY4=",
+  "identitySecretKey": "gUlAKCxYP5elnDpjpntKr0obSr2NCyPNy99a/1CicC4yoIQ3dXRNzhE8orl2ou4wxeylCqQlbh8beWxuqBg5jg==",
+  "exchangePublicKey": "aWU4tYcgBLAow0laHoys9tDvmVN8AmQQbGe6vV2YdGc=",
+  "exchangeSecretKey": "x4RCnpokGB6qqH21LC9kcHiPFu5uRZmS8/LzOtEzc6A=",
+  "friends": [],
+  "sessions": [],
+  "tempNumbers": [],
+  "pendingRequests": []
+}
