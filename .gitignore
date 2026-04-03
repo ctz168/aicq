@@ -11,3 +11,14 @@ tmp/
 aicq-server/data/
 aicq-plugin/data/
 aicq-client/data/
+
+# Build artifacts (published via GitHub Releases, not in repo)
+dist-electron/
+download/AICQ-*
+download/SHA256SUMS*
+squashfs-root/
+*.AppImage
+*.exe
+*.dmg
+*.apk
+android-build.log

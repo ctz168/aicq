@@ -13,10 +13,7 @@
     "dev:plugin": "cd aicq-plugin && npm run dev",
     "dev:client": "cd aicq-client && npm run dev",
     "clean": "rm -rf aicq-crypto/dist aicq-server/dist aicq-plugin/dist aicq-client/dist",
-    "install:all": "npm install && cd aicq-crypto && npm install && cd ../aicq-server && npm install && cd ../aicq-plugin && npm install && cd ../aicq-client && npm install",
-    "release": "bash scripts/release.sh",
-    "release:dry": "bash scripts/release.sh --dry-run",
-    "release:publish": "bash scripts/release.sh --skip-build"
+    "install:all": "npm install && cd aicq-crypto && npm install && cd ../aicq-server && npm install && cd ../aicq-plugin && npm install && cd ../aicq-client && npm install"
   },
   "workspaces": [
     "aicq-crypto",

@@ -272,3 +272,167 @@ rm -rf android
 npx cap add android
 npx cap sync android
 ```
+
+---
+
+## 7. One-Click Release (一键发布)
+
+### Method A: Local Release Script (`scripts/release.sh`)
+
+A fully automated release script that builds all platforms, creates a git tag, and publishes to GitHub Releases.
+
+#### Prerequisites
+
+```bash
+# Required tools
+- Node.js >= 18, npm >= 9
+- Android SDK (API 34) + JDK 17+ (for Android builds)
+- jq (for JSON parsing in release API calls)
+- zip (for packaging)
+```
+
+#### Usage
+
+```bash
+# Full build + publish to GitHub Release
+./scripts/release.sh
+
+# Skip building, only publish existing artifacts in download/
+./scripts/release.sh --skip-build
+
+# Dry-run mode — preview everything without actually uploading
+./scripts/release.sh --dry-run
+
+# Combine flags
+./scripts/release.sh --skip-build --dry-run
+```
+
+#### What It Does
+
+1. **Build Phase** (unless `--skip-build`):
+   - Builds web client (`aicq-web/dist/`)
+   - Builds Electron desktop for Linux (AppImage) and Windows (NSIS + ZIP)
+   - Builds Android APK (debug + release)
+   - Syncs Capacitor Android assets
+
+2. **Collect Phase**:
+   - Gathers all artifacts into `download/` with versioned names
+   - Generates SHA256 checksums
+
+3. **Tag Phase**:
+   - Creates annotated git tag (`v1.0.0`) based on `package.json` version
+   - Pushes tag to origin
+
+4. **Release Phase**:
+   - Creates GitHub Release with auto-generated release notes
+   - Uploads all artifacts via GitHub API
+   - Attaches checksums file
+
+#### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GITHUB_TOKEN` | Configured in script | GitHub PAT for release uploads |
+| `ANDROID_HOME` | `/home/z/android-sdk` | Android SDK location |
+| `JAVA_HOME` | `/usr/lib/jvm/java-21-openjdk-amd64` | JDK location |
+| `AICQ_VERSION` | From `package.json` | Override version number |
+
+#### Example Workflow
+
+```bash
+# 1. Update version in package.json
+npm version patch  # 1.0.0 -> 1.0.1
+
+# 2. Preview what would happen
+./scripts/release.sh --dry-run
+
+# 3. Do the actual release
+./scripts/release.sh
+
+# 4. Verify at GitHub
+# https://github.com/ctz168/aicq/releases/tag/v1.0.1
+```
+
+---
+
+### Method B: GitHub Actions CI/CD (`.github/workflows/build-release.yml`)
+
+Automated CI/CD pipeline that triggers on **tag push** (`v*`).
+
+#### How to Trigger
+
+```bash
+# Tag and push to trigger the workflow
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+#### Pipeline Architecture
+
+```
+push tag v*
+    │
+    ├── build-web (ubuntu)        → web-dist artifact
+    │
+    ├── build-android (ubuntu)    → debug + release APKs
+    │   └── needs: build-web
+    │
+    ├── build-linux (ubuntu)      → AppImage
+    │   └── needs: build-web
+    │
+    ├── build-windows (ubuntu)    → NSIS exe + ZIP
+    │   └── needs: build-web
+    │
+    ├── build-macos (macos-latest) → DMG
+    │   └── needs: build-web
+    │
+    └── release (ubuntu)          → GitHub Release + upload all
+        └── needs: all above
+```
+
+#### Secrets Configuration (Optional)
+
+For **signed Android APK**, configure these repository secrets:
+
+| Secret | Description |
+|--------|-------------|
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded `.keystore` file |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Key alias |
+| `ANDROID_KEY_PASSWORD` | Key password |
+
+```bash
+# Encode your keystore
+base64 -w 0 aicq-release.keystore
+# Copy output to GitHub repo Settings > Secrets > ANDROID_KEYSTORE_BASE64
+```
+
+#### Notes
+
+- **macOS DMG** builds run on `macos-latest` runner (Apple Silicon)
+- **Windows builds** run on `ubuntu-latest` with cross-compilation via electron-builder
+- The release job runs with `if: always()` so partial builds still get released
+- Artifacts are kept for 7 days in GitHub Actions cache
+- SHA256 checksums are automatically generated and attached to the release
+
+#### Example: Full Release via CI/CD
+
+```bash
+# 1. Bump version
+npm version minor  # 1.0.0 -> 1.1.0
+
+# 2. Commit and push
+git add -A
+git commit -m "chore: bump version to 1.1.0"
+git push origin main
+
+# 3. Create and push tag to trigger CI/CD
+git tag v1.1.0
+git push origin v1.1.0
+
+# 4. Watch the build at:
+#    https://github.com/ctz168/aicq/actions
+
+# 5. Download release at:
+#    https://github.com/ctz168/aicq/releases/tag/v1.1.0
+```
