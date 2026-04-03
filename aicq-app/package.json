@@ -1,0 +1,47 @@
+{
+  "name": "aicq-desktop",
+  "version": "1.0.0",
+  "description": "AICQ Desktop Client - End-to-end encrypted chat",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --win --mac --linux"
+  },
+  "build": {
+    "appId": "com.aicq.desktop",
+    "productName": "AICQ",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "../aicq-web/dist/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "../aicq-web/public/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "../aicq-web/public/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "../aicq-web/public/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

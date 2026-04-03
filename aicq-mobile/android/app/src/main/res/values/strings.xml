@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AICQ</string>
+    <string name="title_activity_main">AICQ</string>
+    <string name="package_name">com.aicq.app</string>
+    <string name="custom_url_scheme">com.aicq.app</string>
+</resources>

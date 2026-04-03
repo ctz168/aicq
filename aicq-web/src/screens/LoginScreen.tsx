@@ -59,7 +59,7 @@ const LoginScreen: React.FC = () => {
     }
   }, [loginCountdown]);
 
-  const startCountdown = useCallback((setter: (v: number) => void) => {
+  const startCountdown = useCallback((setter: (v: number | ((prev: number) => number)) => void) => {
     setter(60);
     const timer = setInterval(() => {
       setter((prev: number) => {
@@ -95,7 +95,7 @@ const LoginScreen: React.FC = () => {
     type: LoginType,
     purpose: 'register' | 'login',
     setSent: (v: boolean) => void,
-    setCountdown: (v: number) => void,
+    setCountdown: (v: number | ((prev: number) => number)) => void,
   ) => {
     if (!target.trim()) {
       setError(type === 'email' ? '请输入邮箱地址' : '请输入手机号');
@@ -430,16 +430,16 @@ const LoginScreen: React.FC = () => {
                   <button
                     className="btn btn-secondary btn-code"
                     onClick={() => {
-                      const target = tab === 'login' ? loginPhone : regPhone;
+                      const t = tab === 'login' ? loginPhone : regPhone;
                       const setter = tab === 'login' ? setLoginCodeSent : setRegCodeSent;
-                      const cd = tab === 'login' ? loginCountdown : regCountdown;
-                      handleSendCode(target, 'phone', tab, setter, cd);
+                      const cdSetter = tab === 'login' ? setLoginCountdown : setRegCountdown;
+                      handleSendCode(t, 'phone', tab, setter, cdSetter);
                     }}
-                    disabled={loading || (tab === 'login' ? loginCountdown : regCountdown) > 0 || !target}
+                    disabled={loading || (tab === 'login' ? loginCountdown : regCountdown) > 0 || !(tab === 'login' ? loginPhone : regPhone)}
                   >
                     {((tab === 'login' ? loginCountdown : regCountdown) > 0
                       ? `${(tab === 'login' ? loginCountdown : regCountdown)}s`
-                      : '发送验证码'}
+                      : '发送验证码')}
                   </button>
                 </div>
               </div>

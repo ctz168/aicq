@@ -1,0 +1,27 @@
+{
+  "name": "aicq-mobile",
+  "version": "1.0.0",
+  "description": "AICQ Mobile - Android/iOS client",
+  "scripts": {
+    "cap": "npx cap",
+    "cap:init": "npx cap init AICQ com.aicq.app --web-dir ../aicq-web/dist",
+    "cap:add:android": "npx cap add android",
+    "cap:add:ios": "npx cap add ios",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios",
+    "build": "cd ../aicq-web && npm run build && cd ../aicq-mobile && npx cap sync"
+  },
+  "devDependencies": {
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/haptics": "^6.0.0",
+    "@capacitor/network": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/ios": "^8.3.0"
+  }
+}
