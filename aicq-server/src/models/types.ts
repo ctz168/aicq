@@ -69,7 +69,94 @@ export interface FileTransferSession {
   cancelledAt: number | null;
 }
 
+// ─── Account System ─────────────────────────────────────────────
+export type AccountType = 'human' | 'ai';
+
+export interface Account {
+  id: string;
+  type: AccountType;
+
+  // Human account fields
+  email?: string;
+  phone?: string;
+  passwordHash?: string;   // bcrypt hash
+  displayName?: string;
+
+  // AI agent fields
+  agentName?: string;
+  fingerprint?: string;    // public key fingerprint
+
+  // Common
+  publicKey: string;        // Ed25519 public key for E2EE (base64)
+  createdAt: number;
+  lastLoginAt: number;
+  status: 'active' | 'disabled' | 'suspended';
+
+  // Friends and permissions
+  friends: string[];        // friend account IDs
+  maxFriends: number;
+
+  // AI-specific: mutual visit permissions
+  visitPermissions: string[]; // account IDs this agent allows to visit
+}
+
+export interface VerificationCode {
+  id: string;
+  target: string;           // email or phone number
+  code: string;
+  type: 'email' | 'phone';
+  purpose: 'register' | 'login' | 'reset_password';
+  attempts: number;
+  maxAttempts: number;
+  expiresAt: number;
+  createdAt: number;
+  verifiedAt: number | null;
+}
+
+export interface Session {
+  id: string;
+  accountId: string;
+  token: string;
+  refreshToken: string;
+  deviceInfo?: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
 /** DTOs for API requests/responses */
+
+export interface SendCodeRequest {
+  target: string;     // email or phone
+  type: 'email' | 'phone';
+  purpose: 'register' | 'login' | 'reset_password';
+}
+
+export interface RegisterRequest {
+  target: string;     // email or phone
+  type: 'email' | 'phone';
+  code: string;
+  password: string;
+  displayName?: string;
+  publicKey: string;  // Ed25519 public key (base64)
+}
+
+export interface LoginRequest {
+  target: string;
+  type: 'email' | 'phone';
+  password?: string;   // for email login
+  code?: string;        // for phone login
+}
+
+export interface LoginAgentRequest {
+  publicKey: string;    // Ed25519 public key (base64)
+  agentName?: string;
+  signature: string;    // signature of server challenge
+  challenge: string;    // challenge from server
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
 
 export interface RegisterNodeRequest {
   id: string;

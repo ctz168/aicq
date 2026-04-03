@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { config } from './config';
 import { startPeriodicCleanup } from './db/memoryStore';
 import apiRoutes from './api/routes';
+import authRoutes from './api/authRoutes';
 import { setupWebSocketHandler } from './api/wsHandler';
 import { generalLimiter } from './middleware/rateLimit';
 
@@ -29,6 +30,7 @@ app.get('/health', (_req, res) => {
 
 // ─── API Routes ────────────────────────────────────────────────────
 app.use('/api/v1', apiRoutes);
+app.use('/api/v1', authRoutes);
 
 // ─── 404 Handler ──────────────────────────────────────────────────
 app.use((_req, res) => {

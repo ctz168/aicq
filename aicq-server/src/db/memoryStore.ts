@@ -4,6 +4,9 @@ import {
   HandshakeSession,
   FileTransferRecord,
   PendingRequest,
+  Account,
+  VerificationCode,
+  Session,
 } from '../models/types';
 import { config } from '../config';
 
@@ -22,6 +25,15 @@ export class MemoryStore {
 
   /** Pending friend requests keyed by target node ID */
   pendingRequests = new Map<string, PendingRequest[]>();
+
+  /** Registered user accounts */
+  accounts = new Map<string, Account>();
+
+  /** Verification codes */
+  verificationCodes = new Map<string, VerificationCode>();
+
+  /** Active sessions */
+  sessions = new Map<string, Session>();
 
   /**
    * Remove expired temp numbers from the store.
@@ -73,6 +85,36 @@ export class MemoryStore {
     }
     return removed;
   }
+
+  /**
+   * Remove expired verification codes.
+   */
+  cleanupExpiredCodes(): number {
+    const now = Date.now();
+    let removed = 0;
+    for (const [key, record] of this.verificationCodes) {
+      if (record.expiresAt <= now) {
+        this.verificationCodes.delete(key);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * Remove expired sessions.
+   */
+  cleanupExpiredSessions(): number {
+    const now = Date.now();
+    let removed = 0;
+    for (const [sessionId, session] of this.sessions) {
+      if (session.expiresAt <= now) {
+        this.sessions.delete(sessionId);
+        removed++;
+      }
+    }
+    return removed;
+  }
 }
 
 /** Singleton store instance */
@@ -101,6 +143,8 @@ export function startPeriodicCleanup(): NodeJS.Timeout {
     store.cleanupExpiredTempNumbers();
     store.cleanupExpiredHandshakeSessions();
     store.cleanupOldFileTransfers();
+    store.cleanupExpiredCodes();
+    store.cleanupExpiredSessions();
   }, 60_000);
 
   // Don't prevent process exit
