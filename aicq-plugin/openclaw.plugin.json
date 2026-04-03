@@ -1,65 +1,30 @@
 {
-  "name": "aicq-chat",
-  "version": "1.0.0",
-  "displayName": "AICQ Encrypted Chat",
-  "description": "End-to-end encrypted chat plugin supporting AI-AI, Human-AI communication with P2P messaging",
-  "author": "aicq",
-  "license": "MIT",
-  "channels": [
-    {
-      "name": "encrypted-chat",
-      "description": "Encrypted P2P chat channel",
-      "messageFormat": "binary"
-    }
-  ],
-  "tools": [
-    {
-      "name": "chat-friend",
-      "description": "Manage friends - add, list, remove friends",
-      "parameters": {
-        "action": { "type": "string", "enum": ["add", "list", "remove", "request-temp-number", "revoke-temp-number"], "required": true },
-        "target": { "type": "string", "description": "6-digit temp number or friend ID (for add/remove)" },
-        "limit": { "type": "number", "description": "Max friends to return in list (default 50)" }
-      }
-    },
-    {
-      "name": "chat-send",
-      "description": "Send encrypted message to a friend",
-      "parameters": {
-        "target": { "type": "string", "required": true, "description": "Friend ID" },
-        "message": { "type": "string", "required": true, "description": "Message content" },
-        "type": { "type": "string", "enum": ["text", "file-info"], "default": "text", "description": "Message type" },
-        "fileInfo": { "type": "object", "description": "File metadata (for type=file-info): {fileName, fileSize, fileHash, chunks}" }
-      }
-    },
-    {
-      "name": "chat-export-key",
-      "description": "Export private key as QR code (60s validity) for human takeover",
-      "parameters": {
-        "password": { "type": "string", "required": true, "description": "Password to protect the exported key" }
-      }
-    }
-  ],
-  "hooks": [
-    {
-      "event": "message_sending",
-      "description": "Intercept outgoing messages for encryption"
-    },
-    {
-      "event": "before_tool_call",
-      "description": "Permission check before tool execution"
-    }
-  ],
-  "services": [
-    {
-      "name": "identity-service",
-      "description": "Manages agent identity keys and certificates"
-    }
-  ],
+  "id": "aicq-chat",
+  "name": "AICQ Encrypted Chat",
+  "description": "End-to-end encrypted chat plugin supporting AI-AI, Human-AI communication with P2P messaging via Noise-XK handshake, Ed25519/X25519/AES-256-GCM encryption",
   "configSchema": {
-    "serverUrl": { "type": "string", "default": "https://aicq.online", "description": "AICQ server URL" },
-    "agentId": { "type": "string", "description": "Unique agent identifier (auto-generated if empty)" },
-    "maxFriends": { "type": "number", "default": 200 },
-    "autoAcceptFriends": { "type": "boolean", "default": false, "description": "Auto-accept friend requests" }
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "serverUrl": {
+        "type": "string",
+        "default": "ws://localhost:3000",
+        "description": "AICQ relay server WebSocket URL"
+      },
+      "agentId": {
+        "type": "string",
+        "description": "Unique agent identifier (auto-generated if empty)"
+      },
+      "maxFriends": {
+        "type": "number",
+        "default": 200,
+        "description": "Maximum number of friends allowed"
+      },
+      "autoAcceptFriends": {
+        "type": "boolean",
+        "default": false,
+        "description": "Auto-accept incoming friend requests"
+      }
+    }
   }
 }

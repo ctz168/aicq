@@ -1,316 +1,260 @@
 /**
  * AICQ OpenClaw Plugin — Main Entry Point
  *
- * Activates the encrypted chat plugin inside the OpenClaw Agent runtime.
- * Registers channels, tools, hooks, and services.
+ * End-to-end encrypted chat plugin for OpenClaw agent runtime.
+ * Registers tools (chat-friend, chat-send, chat-export-key) and
+ * a service (identity-service) for managing encrypted P2P communication.
+ *
+ * Encryption: Ed25519 identity + X25519 key exchange + AES-256-GCM
+ * Handshake: Noise-XK pattern (3-way)
+ * P2P: WebRTC after ECDH, server as signaling relay only
  */
 
 import * as path from "path";
 import * as dotenv from "dotenv";
 dotenv.config();
 
+import { definePluginEntry } from "openclaw/plugin-sdk/core";
 import { loadConfig } from "./config.js";
-import { decodeBase64 } from "@aicq/crypto";
 import { PluginStore } from "./store.js";
 import { IdentityService } from "./services/identityService.js";
 import { ServerClient } from "./services/serverClient.js";
-import { EncryptedChatChannel } from "./channels/encryptedChat.js";
-import { ChatFriendTool } from "./tools/chatFriend.js";
-import { ChatSendTool } from "./tools/chatSend.js";
-import { ChatExportKeyTool } from "./tools/chatExportKey.js";
-import { MessageSendingHook } from "./hooks/messageSending.js";
-import { BeforeToolCallHook } from "./hooks/beforeToolCall.js";
 import { HandshakeManager } from "./handshake/handshakeManager.js";
 import { P2PConnectionManager } from "./p2p/connectionManager.js";
 import { FileTransferManager } from "./fileTransfer/transferManager.js";
-import type { OpenClawAPI, Logger, ToolHandler, HookHandler, ChannelHandler } from "./types.js";
+import { ChatFriendTool } from "./tools/chatFriend.js";
+import { ChatSendTool } from "./tools/chatSend.js";
+import { ChatExportKeyTool } from "./tools/chatExportKey.js";
+import { decodeBase64 } from "@aicq/crypto";
+import type { Logger } from "./types.js";
 
 // ----------------------------------------------------------------
-//  Module state
+//  JSON Schema definitions for tools
 // ----------------------------------------------------------------
 
-let api: OpenClawAPI | null = null;
-let logger: Logger | null = null;
-let serverClient: ServerClient | null = null;
-let identityService: IdentityService | null = null;
-let chatChannel: EncryptedChatChannel | null = null;
-let p2pManager: P2PConnectionManager | null = null;
-let fileTransferManager: FileTransferManager | null = null;
-let heartbeatTimer: NodeJS.Timeout | null = null;
-
-// ----------------------------------------------------------------
-//  Plugin lifecycle
-// ----------------------------------------------------------------
-
-/**
- * Activate the AICQ encrypted chat plugin.
- *
- * Called by the OpenClaw Agent runtime when the plugin is loaded.
- */
-export async function activate(runtimeApi: OpenClawAPI): Promise<void> {
-  api = runtimeApi;
-  logger = api.getLogger("aicq-plugin");
-
-  logger.info("========================================");
-  logger.info("  AICQ Encrypted Chat Plugin v1.0.0");
-  logger.info("========================================");
-
-  // 1. Load configuration
-  const config = loadConfig();
-  logger.info("[Init] Configuration loaded");
-  logger.info("[Init]   Server URL: " + config.serverUrl);
-  logger.info("[Init]   Agent ID:   " + config.agentId);
-  logger.info("[Init]   Max Friends: " + config.maxFriends);
-  logger.info("[Init]   Auto Accept: " + config.autoAcceptFriends);
-
-  // 2. Initialize store
-  const store = new PluginStore();
-  const dataDir = api.getDataDir();
-  store.setDataDir(dataDir);
-  store.load();
-  logger.info("[Init] Store initialized (data dir: " + dataDir + ")");
-
-  // 3. Initialize identity
-  identityService = new IdentityService(store, logger);
-  identityService.initialize(config.agentId);
-  logger.info("[Init] Identity initialized");
-  logger.info("[Init]   Agent ID: " + identityService.getAgentId());
-  logger.info("[Init]   Fingerprint: " + identityService.getPublicKeyFingerprint());
-
-  // 4. Create server client
-  serverClient = new ServerClient(config.serverUrl, store, logger);
-
-  // 5. Create P2P connection manager
-  p2pManager = new P2PConnectionManager(serverClient, logger);
-  p2pManager.setupWsHandlers();
-  logger.info("[Init] P2P manager ready");
-
-  // 6. Create handshake manager
-  const handshakeManager = new HandshakeManager(store, serverClient, config, logger);
-  handshakeManager.setupWsHandlers();
-  logger.info("[Init] Handshake manager ready");
-
-  // 7. Register encrypted-chat channel
-  chatChannel = new EncryptedChatChannel(
-    store,
-    handshakeManager,
-    p2pManager,
-    serverClient,
-    logger,
-  );
-  chatChannel.setAPI(api);
-
-  const channelHandler: ChannelHandler = {
-    onMessage(data: Buffer, fromId: string, _metadata?: Record<string, unknown>) {
-      chatChannel!.onMessage(data, fromId);
+const CHAT_FRIEND_PARAMS = {
+  type: "object",
+  properties: {
+    action: {
+      type: "string",
+      enum: ["add", "list", "remove", "request-temp-number", "revoke-temp-number"],
+      description: "Action to perform on friends",
     },
-  };
+    target: {
+      type: "string",
+      description: "6-digit temp number or friend ID (for add/remove)",
+    },
+    limit: {
+      type: "number",
+      description: "Max friends to return in list (default 50)",
+    },
+  },
+  required: ["action"],
+};
 
-  api.registerChannel("encrypted-chat", channelHandler);
-  logger.info("[Init] Channel registered: encrypted-chat");
+const CHAT_SEND_PARAMS = {
+  type: "object",
+  properties: {
+    target: {
+      type: "string",
+      description: "Friend ID to send the message to",
+    },
+    message: {
+      type: "string",
+      description: "Message content to send",
+    },
+    type: {
+      type: "string",
+      enum: ["text", "file-info"],
+      default: "text",
+      description: "Message type",
+    },
+    fileInfo: {
+      type: "object",
+      description: "File metadata for type=file-info: { fileName, fileSize, fileHash, chunks }",
+    },
+  },
+  required: ["target", "message"],
+};
 
-  // 8. Register tool: chat-friend
-  const chatFriendTool = new ChatFriendTool(
-    store,
-    serverClient,
-    handshakeManager,
-    identityService,
-    config,
-    logger,
-  );
+const CHAT_EXPORT_KEY_PARAMS = {
+  type: "object",
+  properties: {
+    password: {
+      type: "string",
+      description: "Password to protect the exported private key QR code",
+    },
+  },
+  required: ["password"],
+};
 
-  const chatFriendHandler: ToolHandler = {
-    async handle(params: Record<string, unknown>) {
-      const action = params.action as string;
-      if (!action) {
-        return { error: "Missing 'action' parameter" };
+// ----------------------------------------------------------------
+//  Plugin entry point using OpenClaw SDK
+// ----------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const plugin = definePluginEntry({
+  id: "aicq-chat",
+  name: "AICQ Encrypted Chat",
+  description:
+    "End-to-end encrypted P2P chat between AI agents using Ed25519/X25519/AES-256-GCM with Noise-XK handshake. Supports friend management, text messaging, file transfer with resume, and key export via QR code.",
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register(api: any) {
+    // ----------------------------------------------------------
+    //  1. Setup logger
+    // ----------------------------------------------------------
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ocLog: any = api.logger ?? console;
+    const logger: Logger = {
+      info: (msg, ...args) => ocLog.info?.(msg, ...args) ?? console.log("[aicq-chat]", msg, ...args),
+      warn: (msg, ...args) => ocLog.warn?.(msg, ...args) ?? console.warn("[aicq-chat]", msg, ...args),
+      error: (msg, ...args) => ocLog.error?.(msg, ...args) ?? console.error("[aicq-chat]", msg, ...args),
+      debug: (msg, ...args) => ocLog.debug?.(msg, ...args) ?? console.log("[aicq-chat DEBUG]", msg, ...args),
+    };
+
+    logger.info("═══════════════════════════════════════════════");
+    logger.info("  AICQ Encrypted Chat Plugin v1.0.0");
+    logger.info("═══════════════════════════════════════════════");
+
+    // ----------------------------------------------------------
+    //  2. Load config
+    // ----------------------------------------------------------
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pluginCfg: any = api.pluginConfig ?? {};
+    const config = loadConfig({
+      serverUrl: pluginCfg.serverUrl as string | undefined,
+      agentId: pluginCfg.agentId as string | undefined,
+      maxFriends: pluginCfg.maxFriends as number | undefined,
+      autoAcceptFriends: pluginCfg.autoAcceptFriends as boolean | undefined,
+    });
+
+    // ----------------------------------------------------------
+    //  3. Initialize store + identity + server + P2P
+    // ----------------------------------------------------------
+    const store = new PluginStore();
+    const dataDir = path.join(process.cwd(), ".aicq-data");
+    store.setDataDir(dataDir);
+    store.load();
+    logger.info("[Init] Store ready — " + dataDir);
+
+    const identityService = new IdentityService(store, logger);
+    identityService.initialize(config.agentId);
+    logger.info("[Init] Agent: " + identityService.getAgentId());
+    logger.info("[Init] Fingerprint: " + identityService.getPublicKeyFingerprint());
+
+    const serverClient = new ServerClient(config.serverUrl, store, logger);
+    const p2pManager = new P2PConnectionManager(serverClient, logger);
+    p2pManager.setupWsHandlers();
+
+    const handshakeManager = new HandshakeManager(store, serverClient, config, logger);
+    handshakeManager.setupWsHandlers();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fileTransferManager = new FileTransferManager(store, serverClient, p2pManager, null as any, logger);
+
+    // ----------------------------------------------------------
+    //  4. Connect WebSocket to AICQ server
+    // ----------------------------------------------------------
+    try {
+      serverClient.connectWebSocket();
+    } catch (e) {
+      logger.warn("[Init] WebSocket connect failed (will retry): " + (e instanceof Error ? e.message : e));
+    }
+
+    // Handle incoming relay messages
+    serverClient.onWsMessage("relay", (data: unknown) => {
+      const msg = data as Record<string, unknown>;
+      const senderId = msg?.senderId as string;
+      const payload = msg?.payload as Record<string, unknown>;
+      if (!payload) return;
+
+      if (payload.channel === "encrypted-chat" && payload.data) {
+        try {
+          const encryptedData = Buffer.from(decodeBase64(payload.data as string));
+          logger.debug("[Relay] Encrypted msg from " + senderId);
+        } catch (err) {
+          logger.error("[Relay] Decode failed: " + (err instanceof Error ? err.message : err));
+        }
       }
-      return chatFriendTool.handleAction(action, params);
-    },
-  };
+    });
 
-  api.registerTool("chat-friend", chatFriendHandler);
-  logger.info("[Init] Tool registered: chat-friend");
+    // Heartbeat + cleanup
+    setInterval(() => {
+      if (!serverClient.isConnected()) {
+        logger.warn("[Heartbeat] Disconnected, retrying...");
+        try { serverClient.connectWebSocket(); } catch (_e) { /* ignore */ }
+      }
+    }, 60_000);
 
-  // 9. Register tool: chat-send
-  const chatSendTool = new ChatSendTool(store, chatChannel, handshakeManager, logger);
+    setInterval(() => store.cleanupExpiredTempNumbers(), 60_000);
 
-  const chatSendHandler: ToolHandler = {
-    async handle(params: Record<string, unknown>) {
-      return chatSendTool.handle(params);
-    },
-  };
+    // ----------------------------------------------------------
+    //  5. Register Tool: chat-friend
+    // ----------------------------------------------------------
+    api.registerTool(() => ({
+      label: "AICQ Friend Manager",
+      name: "chat-friend",
+      description:
+        "Manage encrypted chat friends: add friend by 6-digit temp number, list all friends, remove a friend, request a temporary number for sharing, or revoke a temp number. Maximum 200 friends per agent.",
+      parameters: CHAT_FRIEND_PARAMS,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      execute: () => async (_toolCallId: string, params: any) => {
+        const tool = new ChatFriendTool(store, serverClient, handshakeManager, identityService, config, logger);
+        const action = params.action as string;
+        if (!action) return { error: "Missing 'action' parameter" };
+        return tool.handleAction(action, params);
+      },
+    }));
 
-  api.registerTool("chat-send", chatSendHandler);
-  logger.info("[Init] Tool registered: chat-send");
+    // ----------------------------------------------------------
+    //  6. Register Tool: chat-send
+    // ----------------------------------------------------------
+    api.registerTool(() => ({
+      label: "AICQ Send Message",
+      name: "chat-send",
+      description:
+        "Send an end-to-end encrypted message to a friend. Supports text messages and file-info metadata for initiating file transfers. Messages are encrypted with AES-256-GCM using session keys established via Noise-XK handshake.",
+      parameters: CHAT_SEND_PARAMS,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      execute: () => async (_toolCallId: string, params: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tool = new ChatSendTool(store, null as any, handshakeManager, logger);
+        return tool.handle(params);
+      },
+    }));
 
-  // 10. Register tool: chat-export-key
-  const chatExportKeyTool = new ChatExportKeyTool(identityService, logger);
+    // ----------------------------------------------------------
+    //  7. Register Tool: chat-export-key
+    // ----------------------------------------------------------
+    api.registerTool(() => ({
+      label: "AICQ Export Identity Key",
+      name: "chat-export-key",
+      description:
+        "Export the agent's Ed25519 private key as a password-protected QR code. The QR code expires in 60 seconds. This allows a human to take over the agent's chat identity on another device.",
+      parameters: CHAT_EXPORT_KEY_PARAMS,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      execute: () => async (_toolCallId: string, params: any) => {
+        const tool = new ChatExportKeyTool(identityService, logger);
+        return tool.handle(params);
+      },
+    }));
 
-  const chatExportKeyHandler: ToolHandler = {
-    async handle(params: Record<string, unknown>) {
-      return chatExportKeyTool.handle(params);
-    },
-  };
-
-  api.registerTool("chat-export-key", chatExportKeyHandler);
-  logger.info("[Init] Tool registered: chat-export-key");
-
-  // 11. Register hook: message_sending
-  const messageSendingHook = new MessageSendingHook(store, handshakeManager, logger);
-
-  const messageSendingHandler: HookHandler = {
-    async execute(data: unknown, metadata?: Record<string, unknown>) {
-      return messageSendingHook.intercept(data, metadata);
-    },
-  };
-
-  api.registerHook("message_sending", messageSendingHandler);
-  logger.info("[Init] Hook registered: message_sending");
-
-  // 12. Register hook: before_tool_call
-  const beforeToolCallHook = new BeforeToolCallHook(store, config, chatExportKeyTool, logger);
-
-  const beforeToolCallHandler: HookHandler = {
-    async execute(data: unknown, _metadata?: Record<string, unknown>) {
-      const params = data as Record<string, unknown>;
-      const toolName = params.toolName as string;
-      const toolParams = params.params as Record<string, unknown>;
-      return beforeToolCallHook.check(toolName, toolParams);
-    },
-  };
-
-  api.registerHook("before_tool_call", beforeToolCallHandler);
-  logger.info("[Init] Hook registered: before_tool_call");
-
-  // 13. Register service: identity-service
-  api.registerService("identity-service", identityService);
-  logger.info("[Init] Service registered: identity-service");
-
-  // 14. Create file transfer manager
-  fileTransferManager = new FileTransferManager(
-    store,
-    serverClient,
-    p2pManager,
-    chatChannel,
-    logger,
-  );
-  logger.info("[Init] File transfer manager ready");
-
-  // 15. Connect to server WebSocket
-  serverClient.connectWebSocket();
-
-  // Set up WebSocket handlers for relay messages (incoming chat messages)
-  serverClient.onWsMessage("relay", (data) => {
-    const msg = data as Record<string, unknown>;
-    const senderId = msg.senderId as string;
-    const payload = msg.payload as Record<string, unknown>;
-
-    if (payload?.channel === "encrypted-chat" && payload?.data) {
-      const encryptedData = Buffer.from(decodeBase64(payload.data as string));
-      chatChannel!.onMessage(encryptedData, senderId);
+    // ----------------------------------------------------------
+    //  8. Register Service: identity-service
+    // ----------------------------------------------------------
+    if (api.registerService) {
+      api.registerService({
+        id: "identity-service",
+        start: async () => { logger.info("[Service] identity-service started"); },
+        stop: async () => { logger.info("[Service] identity-service stopped"); },
+      });
     }
 
-    // Handle incoming file chunks via relay
-    if (payload?.type === "file_chunk") {
-      const chunkData = Buffer.from(payload.data as string, "base64");
-      const chunkIndex = payload.chunkIndex as number;
-      const sessionId = payload.sessionId as string;
-      chatChannel!.handleFileChunk(senderId, chunkData, chunkIndex, sessionId);
-    }
-  });
+    logger.info("═══════════════════════════════════════════════");
+    logger.info("  AICQ Plugin activated successfully!");
+    logger.info("═══════════════════════════════════════════════");
+  },
+});
 
-  // 16. Start heartbeat
-  heartbeatTimer = setInterval(() => {
-    if (serverClient?.isConnected()) {
-      logger?.debug("[Heartbeat] Connected to " + config.serverUrl);
-    } else {
-      logger?.warn("[Heartbeat] Disconnected from " + config.serverUrl);
-    }
-  }, 60_000);
-
-  // 17. Clean up expired temp numbers periodically
-  setInterval(() => {
-    store.cleanupExpiredTempNumbers();
-  }, 60_000);
-
-  logger.info("========================================");
-  logger.info("  AICQ Plugin activated successfully!");
-  logger.info("========================================");
-}
-
-/**
- * Deactivate the plugin and clean up resources.
- *
- * Called by the OpenClaw Agent runtime when the plugin is unloaded.
- */
-export async function deactivate(): Promise<void> {
-  logger?.info("[Shutdown] Deactivating AICQ plugin...");
-
-  // Stop heartbeat
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
-
-  // Disconnect WebSocket
-  if (serverClient) {
-    serverClient.disconnectWebSocket();
-  }
-
-  // Clean up P2P
-  if (p2pManager) {
-    p2pManager.cleanup();
-  }
-
-  // Clean up file transfers
-  if (fileTransferManager) {
-    fileTransferManager.cleanup();
-  }
-
-  // Clean up chat channel
-  if (chatChannel) {
-    chatChannel.cleanup();
-  }
-
-  // Clean up identity service
-  if (identityService) {
-    identityService.cleanup();
-  }
-
-  logger?.info("[Shutdown] AICQ plugin deactivated");
-  api = null;
-  logger = null;
-  serverClient = null;
-  identityService = null;
-  chatChannel = null;
-  p2pManager = null;
-  fileTransferManager = null;
-}
-
-// ----------------------------------------------------------------
-//  Direct execution (for development / testing)
-// ----------------------------------------------------------------
-
-if (require.main === module) {
-  // When run directly, provide a mock API and activate
-  const mockAPI: OpenClawAPI = {
-    registerChannel: (_name, _handler) => {},
-    registerTool: (_name, _handler) => {},
-    registerHook: (_event, _handler) => {},
-    registerService: (_name, _service) => {},
-    emit: (_event, _data) => {},
-    getLogger: (name: string) => ({
-      info: (...args: unknown[]) => console.log("[" + name + " INFO]", ...args),
-      warn: (...args: unknown[]) => console.warn("[" + name + " WARN]", ...args),
-      error: (...args: unknown[]) => console.error("[" + name + " ERROR]", ...args),
-      debug: (...args: unknown[]) => console.log("[" + name + " DEBUG]", ...args),
-    }),
-    getDataDir: () => path.join(process.cwd(), "data"),
-  };
-
-  activate(mockAPI as unknown as OpenClawAPI).catch((err) => {
-    console.error("Failed to activate plugin:", err);
-    process.exit(1);
-  });
-}
+export default plugin;

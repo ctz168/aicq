@@ -3,17 +3,24 @@
   "version": "1.0.0",
   "description": "AICQ OpenClaw plugin - encrypted chat for AI agents",
   "main": "dist/index.js",
+  "type": "module",
   "scripts": {
     "dev": "ts-node-dev --respawn src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
   },
   "dependencies": {
     "@aicq/crypto": "file:../aicq-crypto",
     "ws": "^8.16.0",
     "uuid": "^9.0.0",
     "qrcode": "^1.5.3",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "openclaw": "^2026.4.2"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
