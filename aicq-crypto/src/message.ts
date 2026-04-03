@@ -49,8 +49,8 @@ export function createMessage(
   // Version
   buf[off++] = VERSION;
 
-  // Sender fingerprint (SHA-256 of public key, first 32 bytes = full hash)
-  const fp = nacl.hash(senderPubKey);
+  // Sender fingerprint (first 32 bytes of SHA-512 hash of public key)
+  const fp = nacl.hash(senderPubKey).slice(0, FP_LEN);
   buf.set(fp, off);
   off += FP_LEN;
 
@@ -141,7 +141,7 @@ export function encryptMessage(
   const unsignedPayload = new Uint8Array(unsignedLen);
   let off = 0;
   unsignedPayload[off++] = VERSION;
-  unsignedPayload.set(nacl.hash(senderPubKey), off);
+  unsignedPayload.set(nacl.hash(senderPubKey).slice(0, FP_LEN), off);
   off += FP_LEN;
   unsignedPayload.set(nonce, off);
   off += NONCE_LEN;
@@ -165,8 +165,8 @@ export function decryptMessage(
 ): string | null {
   const msg = parseMessage(data);
 
-  // Verify sender fingerprint matches
-  const expectedFP = nacl.hash(senderPubKey);
+  // Verify sender fingerprint matches (first 32 bytes of SHA-512 hash)
+  const expectedFP = nacl.hash(senderPubKey).slice(0, FP_LEN);
   if (!buffersEqual(msg.senderFingerprint, expectedFP)) {
     return null;
   }

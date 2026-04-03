@@ -1,0 +1,891 @@
+/**
+ * Browser-compatible client adapter for AICQ.
+ *
+ * Implements API calls and WebSocket communication using browser APIs
+ * (fetch, WebSocket, localStorage) instead of Node.js APIs.
+ */
+
+import * as aicqCrypto from '@aicq/crypto';
+const {
+  generateSigningKeyPair,
+  generateKeyExchangeKeyPair,
+  getPublicKeyFingerprint,
+} = aicqCrypto as any;
+import type {
+  FriendInfo,
+  ChatMessage,
+  TempNumberInfo,
+  FileTransferInfo,
+  HandshakeProgress,
+} from '../types';
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+function uint8ArrayToBase64(data: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8Array(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function uuidv4(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// ─── Key-pair storage type ───────────────────────────────────
+
+interface SerializableKeyPair {
+  publicKey: string;
+  secretKey: string;
+}
+
+interface SerializableSession {
+  sessionKey: string;
+  createdAt: string;
+}
+
+interface StoreData {
+  version: number;
+  userId: string;
+  signingKeys: SerializableKeyPair | null;
+  exchangeKeys: SerializableKeyPair | null;
+  friends: Record<string, FriendInfo>;
+  sessions: Record<string, SerializableSession>;
+  chatHistory: Record<string, ChatMessage[]>;
+  tempNumbers: TempNumberInfo[];
+  fileTransfers: Record<string, FileTransferInfo>;
+}
+
+// ─── Browser Store (localStorage) ───────────────────────────
+
+class BrowserStore {
+  private static KEY = 'aicq_store';
+  private data: StoreData = {
+    version: 1,
+    userId: '',
+    signingKeys: null,
+    exchangeKeys: null,
+    friends: {},
+    sessions: {},
+    chatHistory: {},
+    tempNumbers: [],
+    fileTransfers: {},
+  };
+
+  load(): boolean {
+    try {
+      const raw = localStorage.getItem(BrowserStore.KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as Partial<StoreData>;
+      this.data = {
+        version: parsed.version ?? 1,
+        userId: parsed.userId ?? '',
+        signingKeys: parsed.signingKeys ?? null,
+        exchangeKeys: parsed.exchangeKeys ?? null,
+        friends: parsed.friends ?? {},
+        sessions: parsed.sessions ?? {},
+        chatHistory: parsed.chatHistory ?? {},
+        tempNumbers: parsed.tempNumbers ?? [],
+        fileTransfers: parsed.fileTransfers ?? {},
+      };
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  save(): void {
+    try {
+      localStorage.setItem(BrowserStore.KEY, JSON.stringify(this.data));
+    } catch (err) {
+      console.error('[BrowserStore] Failed to save:', err);
+    }
+  }
+
+  clear(): void {
+    localStorage.removeItem(BrowserStore.KEY);
+    this.data = {
+      version: 1,
+      userId: '',
+      signingKeys: null,
+      exchangeKeys: null,
+      friends: {},
+      sessions: {},
+      chatHistory: {},
+      tempNumbers: [],
+      fileTransfers: {},
+    };
+  }
+
+  get userId(): string { return this.data.userId; }
+  set userId(v: string) { this.data.userId = v; }
+
+  get signingKeys(): { publicKey: Uint8Array; secretKey: Uint8Array } | null {
+    const k = this.data.signingKeys;
+    if (!k) return null;
+    return {
+      publicKey: base64ToUint8Array(k.publicKey),
+      secretKey: base64ToUint8Array(k.secretKey),
+    };
+  }
+  set signingKeys(kp: { publicKey: Uint8Array; secretKey: Uint8Array } | null) {
+    this.data.signingKeys = kp
+      ? { publicKey: uint8ArrayToBase64(kp.publicKey), secretKey: uint8ArrayToBase64(kp.secretKey) }
+      : null;
+  }
+
+  get exchangeKeys(): { publicKey: Uint8Array; secretKey: Uint8Array } | null {
+    const k = this.data.exchangeKeys;
+    if (!k) return null;
+    return {
+      publicKey: base64ToUint8Array(k.publicKey),
+      secretKey: base64ToUint8Array(k.secretKey),
+    };
+  }
+  set exchangeKeys(kp: { publicKey: Uint8Array; secretKey: Uint8Array } | null) {
+    this.data.exchangeKeys = kp
+      ? { publicKey: uint8ArrayToBase64(kp.publicKey), secretKey: uint8ArrayToBase64(kp.secretKey) }
+      : null;
+  }
+
+  get friends(): Map<string, FriendInfo> {
+    return new Map(Object.entries(this.data.friends));
+  }
+  addFriend(info: FriendInfo): void { this.data.friends[info.id] = info; }
+  removeFriend(id: string): void { delete this.data.friends[id]; }
+  updateFriendOnline(id: string, online: boolean): void {
+    const f = this.data.friends[id];
+    if (f) {
+      f.isOnline = online;
+      f.lastSeen = new Date().toISOString();
+    }
+  }
+
+  getSessionKey(peerId: string): Uint8Array | null {
+    const s = this.data.sessions[peerId];
+    if (!s) return null;
+    return base64ToUint8Array(s.sessionKey);
+  }
+  setSessionKey(peerId: string, key: Uint8Array): void {
+    this.data.sessions[peerId] = {
+      sessionKey: uint8ArrayToBase64(key),
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  get chatHistory(): Map<string, ChatMessage[]> {
+    return new Map(Object.entries(this.data.chatHistory));
+  }
+  addMessage(friendId: string, message: ChatMessage): void {
+    if (!this.data.chatHistory[friendId]) this.data.chatHistory[friendId] = [];
+    this.data.chatHistory[friendId].push(message);
+  }
+  getMessages(friendId: string): ChatMessage[] {
+    return [...(this.data.chatHistory[friendId] ?? [])];
+  }
+  updateMessageStatus(messageId: string, status: ChatMessage['status']): void {
+    for (const msgs of Object.values(this.data.chatHistory)) {
+      const msg = msgs.find((m) => m.id === messageId);
+      if (msg) { msg.status = status; break; }
+    }
+  }
+
+  get tempNumbers(): TempNumberInfo[] { return [...this.data.tempNumbers]; }
+  addTempNumber(info: TempNumberInfo): void { this.data.tempNumbers.push(info); }
+  removeTempNumber(number: string): void {
+    this.data.tempNumbers = this.data.tempNumbers.filter((t) => t.number !== number);
+  }
+
+  get fileTransfers(): Map<string, FileTransferInfo> {
+    return new Map(Object.entries(this.data.fileTransfers));
+  }
+  setFileTransfer(sessionId: string, info: FileTransferInfo): void {
+    this.data.fileTransfers[sessionId] = info;
+  }
+  getFileTransfer(sessionId: string): FileTransferInfo | null {
+    return this.data.fileTransfers[sessionId] ?? null;
+  }
+  removeFileTransfer(sessionId: string): void {
+    delete this.data.fileTransfers[sessionId];
+  }
+}
+
+// ─── Event Emitter (simple browser impl) ─────────────────────
+
+type Listener = (...args: any[]) => void;
+
+class SimpleEventEmitter {
+  private listeners = new Map<string, Listener[]>();
+
+  on(event: string, fn: Listener): void {
+    if (!this.listeners.has(event)) this.listeners.set(event, []);
+    this.listeners.get(event)!.push(fn);
+  }
+
+  off(event: string, fn: Listener): void {
+    const arr = this.listeners.get(event);
+    if (arr) {
+      const idx = arr.indexOf(fn);
+      if (idx !== -1) arr.splice(idx, 1);
+    }
+  }
+
+  emit(event: string, ...args: any[]): void {
+    const arr = this.listeners.get(event);
+    if (arr) arr.forEach((fn) => fn(...args));
+  }
+
+  removeAllListeners(): void {
+    this.listeners.clear();
+  }
+}
+
+// ─── REST API Client (browser fetch) ─────────────────────────
+
+class BrowserAPIClient {
+  private baseUrl: string;
+  private nodeId: string | null = null;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl.replace(/\/+$/, '');
+  }
+
+  setNodeId(id: string): void { this.nodeId = id; }
+
+  private url(path: string): string {
+    return `${this.baseUrl}/api/v1${path}`;
+  }
+
+  private async request<T>(method: string, path: string, body?: Record<string, unknown>): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const init: RequestInit = { method, headers };
+    if (body !== undefined) init.body = JSON.stringify(body);
+
+    const response = await fetch(this.url(path), init);
+    const data = (await response.json()) as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error((data?.error as string) ?? `HTTP ${response.status}`);
+    }
+    return data as T;
+  }
+
+  async register(userId: string, publicKey: Uint8Array): Promise<void> {
+    const pubBase64 = uint8ArrayToBase64(publicKey);
+    await this.request('POST', '/node/register', { id: userId, publicKey: pubBase64 });
+  }
+
+  async requestTempNumber(): Promise<string> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    const res = await this.request<{ number: string }>('POST', '/temp-number/request', { nodeId: this.nodeId });
+    return res.number;
+  }
+
+  async resolveTempNumber(number: string): Promise<{ nodeId: string; expiresAt: number }> {
+    return this.request('GET', `/temp-number/${encodeURIComponent(number)}`);
+  }
+
+  async revokeTempNumber(number: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('DELETE', `/temp-number/${encodeURIComponent(number)}`, { nodeId: this.nodeId });
+  }
+
+  async initiateHandshake(targetTempNumber: string): Promise<{
+    sessionId: string;
+    targetNodeId: string;
+    status: string;
+    expiresAt: number;
+  }> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request('POST', '/handshake/initiate', {
+      requesterId: this.nodeId,
+      targetTempNumber,
+    });
+  }
+
+  async submitHandshakeResponse(sessionId: string, dataBase64: string): Promise<void> {
+    await this.request('POST', '/handshake/respond', { sessionId, responseData: dataBase64 });
+  }
+
+  async submitHandshakeConfirm(sessionId: string, dataBase64: string): Promise<void> {
+    await this.request('POST', '/handshake/confirm', { sessionId, confirmData: dataBase64 });
+  }
+
+  async getFriends(): Promise<FriendInfo[]> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    const res = await this.request<{ friends: FriendInfo[] }>('GET', `/friends?nodeId=${encodeURIComponent(this.nodeId)}`);
+    return res.friends;
+  }
+
+  async removeFriend(friendId: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('DELETE', `/friends/${encodeURIComponent(friendId)}`, { nodeId: this.nodeId });
+  }
+
+  async initiateFileTransfer(receiverId: string, fileInfo: {
+    fileName: string; fileSize: number; fileHash: string; chunks: number; chunkSize: number;
+  }): Promise<{ sessionId: string; status: string }> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request('POST', '/file/initiate', {
+      senderId: this.nodeId, receiverId, fileInfo,
+    });
+  }
+
+  async reportChunk(sessionId: string, chunkIndex: number): Promise<void> {
+    await this.request('POST', `/file/${encodeURIComponent(sessionId)}/chunk`, { chunkIndex });
+  }
+
+  async getFileMissingChunks(sessionId: string): Promise<number[]> {
+    const res = await this.request<{ missingChunks: number[] }>('GET', `/file/${encodeURIComponent(sessionId)}/missing`);
+    return res.missingChunks;
+  }
+}
+
+// ─── WebSocket Client (browser native) ───────────────────────
+
+class BrowserWSClient extends SimpleEventEmitter {
+  private wsUrl: string;
+  private nodeId: string | null = null;
+  private socket: WebSocket | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectDelay = 30_000;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private _closed = false;
+
+  constructor(wsUrl: string) {
+    super();
+    this.wsUrl = wsUrl;
+  }
+
+  get connected(): boolean {
+    return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
+  }
+
+  connect(nodeId: string): void {
+    this.nodeId = nodeId;
+    this._closed = false;
+    this._doConnect();
+  }
+
+  disconnect(): void {
+    this._closed = true;
+    this._clearTimers();
+    if (this.socket) {
+      try { this.socket.close(1000, 'Client disconnect'); } catch { /* ignore */ }
+      this.socket = null;
+    }
+  }
+
+  private _doConnect(): void {
+    if (this._closed) return;
+    try {
+      this.socket = new WebSocket(this.wsUrl);
+    } catch (err) {
+      this.emit('error', err);
+      this._scheduleReconnect();
+      return;
+    }
+
+    this.socket.onopen = () => {
+      this.reconnectAttempts = 0;
+      this._send({ type: 'online', nodeId: this.nodeId });
+      this._startHeartbeat();
+      this.emit('connected');
+    };
+
+    this.socket.onmessage = (event) => {
+      this._handleMessage(event.data);
+    };
+
+    this.socket.onclose = () => {
+      this._stopHeartbeat();
+      this.socket = null;
+      this.emit('disconnected');
+      if (!this._closed) this._scheduleReconnect();
+    };
+
+    this.socket.onerror = () => {
+      this.emit('error', new Error('WebSocket error'));
+    };
+  }
+
+  private _handleMessage(raw: string): void {
+    let msg: Record<string, any>;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    switch (msg.type) {
+      case 'online_ack': break;
+      case 'signal': this.emit('signal', msg); break;
+      case 'presence':
+        this.emit('presence', { nodeId: msg.nodeId, online: msg.online, timestamp: msg.timestamp });
+        break;
+      case 'message': this.emit('message', msg); break;
+      case 'file_chunk': this.emit('file_chunk', msg); break;
+      case 'typing':
+        this.emit('typing', { fromId: msg.fromId, toId: msg.toId });
+        break;
+      case 'handshake_response':
+        this.emit('handshake_response', msg);
+        break;
+      case 'handshake_confirm':
+        this.emit('handshake_confirm', msg);
+        break;
+      case 'error':
+        this.emit('error', new Error(msg.error ?? 'Server error'));
+        break;
+    }
+  }
+
+  send(type: string, data: Record<string, any>): void {
+    this._send({ type, ...data });
+  }
+
+  private _send(payload: Record<string, any>): void {
+    if (!this.connected) return;
+    this.socket!.send(JSON.stringify(payload));
+  }
+
+  private _startHeartbeat(): void {
+    this._stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.connected) this._send({ type: 'ping' });
+    }, 30_000);
+  }
+
+  private _stopHeartbeat(): void {
+    if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+  }
+
+  private _scheduleReconnect(): void {
+    if (this._closed) return;
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), this.maxReconnectDelay);
+    this.reconnectAttempts++;
+    this.reconnectTimer = setTimeout(() => this._doConnect(), delay);
+  }
+
+  private _clearTimers(): void {
+    this._stopHeartbeat();
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+  }
+
+  destroy(): void {
+    this.disconnect();
+    this.removeAllListeners();
+  }
+}
+
+// ─── Main WebClient ──────────────────────────────────────────
+
+export interface WebClientConfig {
+  serverUrl: string;
+  wsUrl?: string;
+}
+
+export class WebClient extends SimpleEventEmitter {
+  private store: BrowserStore;
+  private api: BrowserAPIClient;
+  private ws: BrowserWSClient;
+  private signingKeys: { publicKey: Uint8Array; secretKey: Uint8Array } | null = null;
+  private exchangeKeys: { publicKey: Uint8Array; secretKey: Uint8Array } | null = null;
+  private _initialized = false;
+
+  constructor(config: WebClientConfig) {
+    super();
+    const wsUrl = config.wsUrl ?? config.serverUrl.replace(/^http/, 'ws') + '/ws';
+    this.store = new BrowserStore();
+    this.api = new BrowserAPIClient(config.serverUrl);
+    this.ws = new BrowserWSClient(wsUrl);
+  }
+
+  /* ─── Initialize ──────────────────────────────────────────── */
+
+  async initialize(): Promise<{ userId: string; fingerprint: string; isNewUser: boolean }> {
+    const loaded = this.store.load();
+
+    if (loaded && this.store.userId) {
+      // Existing user
+      const sk = this.store.signingKeys;
+      const ek = this.store.exchangeKeys;
+      if (sk && ek) {
+        this.signingKeys = sk;
+        this.exchangeKeys = ek;
+      } else {
+        this._generateKeys();
+      }
+    } else {
+      // New user
+      const userId = uuidv4();
+      this.store.userId = userId;
+      this._generateKeys();
+    }
+
+    const userId = this.getUserId();
+    const fingerprint = this.getFingerprint();
+
+    try {
+      await this.api.register(userId, this.signingKeys!.publicKey);
+    } catch (err) {
+      console.warn('[WebClient] Server registration failed:', err);
+    }
+
+    this.api.setNodeId(userId);
+    this.ws.connect(userId);
+    this._wireEvents();
+    this._initialized = true;
+
+    return { userId, fingerprint, isNewUser: !loaded };
+  }
+
+  private _generateKeys(): void {
+    this.signingKeys = generateSigningKeyPair();
+    this.exchangeKeys = generateKeyExchangeKeyPair();
+    this.store.signingKeys = this.signingKeys;
+    this.store.exchangeKeys = this.exchangeKeys;
+    this.store.save();
+  }
+
+  private _wireEvents(): void {
+    this.ws.on('message', (msg: any) => {
+      const chatMsg: ChatMessage = {
+        id: msg.id || uuidv4(),
+        fromId: msg.fromId,
+        toId: msg.toId,
+        type: msg.type || 'text',
+        content: msg.content,
+        timestamp: msg.timestamp || Date.now(),
+        status: 'delivered',
+      };
+      this.store.addMessage(msg.fromId, chatMsg);
+      this.store.updateMessageStatus(chatMsg.id, 'delivered');
+      this.emit('message', chatMsg);
+    });
+
+    this.ws.on('presence', (event: { nodeId: string; online: boolean }) => {
+      this.store.updateFriendOnline(event.nodeId, event.online);
+      this.store.save();
+      this.emit(event.online ? 'friend_online' : 'friend_offline', event);
+    });
+
+    this.ws.on('typing', (event: { fromId: string; toId: string }) => {
+      this.emit('typing', event);
+    });
+
+    this.ws.on('file_chunk', (msg: any) => {
+      this.emit('file_progress', msg);
+    });
+
+    this.ws.on('handshake_response', (msg: any) => {
+      this.emit('handshake_progress', {
+        status: msg.status === 'responded' ? 'processing_response' : 'waiting_response',
+        peerInfo: msg.peerInfo,
+        detail: msg.detail,
+      } as HandshakeProgress);
+    });
+
+    this.ws.on('handshake_confirm', (msg: any) => {
+      const progress: HandshakeProgress = {
+        status: msg.status === 'confirmed' ? 'completed' : 'failed',
+        peerInfo: msg.peerInfo,
+        detail: msg.detail,
+      };
+      this.emit('handshake_progress', progress);
+
+      if (msg.status === 'confirmed' && msg.peerInfo) {
+        const friendInfo: FriendInfo = {
+          id: msg.peerInfo.id,
+          publicKey: msg.peerInfo.publicKey,
+          fingerprint: msg.peerInfo.fingerprint,
+          addedAt: new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+          isOnline: true,
+        };
+        this.store.addFriend(friendInfo);
+        this.store.save();
+        this.emit('friend_added', friendInfo);
+
+        // System message
+        const sysMsg: ChatMessage = {
+          id: uuidv4(),
+          fromId: 'system',
+          toId: this.getUserId(),
+          type: 'system',
+          content: `已与 ${msg.peerInfo.fingerprint.slice(0, 8)} 建立加密连接`,
+          timestamp: Date.now(),
+          status: 'delivered',
+        };
+        this.store.addMessage(msg.peerInfo.id, sysMsg);
+      }
+    });
+  }
+
+  /* ─── Public accessors ────────────────────────────────────── */
+
+  getUserId(): string { return this.store.userId; }
+
+  getFingerprint(): string {
+    if (!this.signingKeys) throw new Error('Not initialized');
+    return getPublicKeyFingerprint(this.signingKeys.publicKey);
+  }
+
+  getPublicKey(): Uint8Array {
+    if (!this.signingKeys) throw new Error('Not initialized');
+    return this.signingKeys.publicKey;
+  }
+
+  getSigningKeys(): { publicKey: Uint8Array; secretKey: Uint8Array } | null {
+    return this.signingKeys;
+  }
+
+  getExchangeKeys(): { publicKey: Uint8Array; secretKey: Uint8Array } | null {
+    return this.exchangeKeys;
+  }
+
+  isInitialized(): boolean { return this._initialized; }
+
+  isConnected(): boolean { return this.ws.connected; }
+
+  /* ─── Friends ─────────────────────────────────────────────── */
+
+  getFriends(): FriendInfo[] {
+    return Array.from(this.store.friends.values());
+  }
+
+  async refreshFriends(): Promise<FriendInfo[]> {
+    try {
+      const friends = await this.api.getFriends();
+      for (const f of friends) {
+        this.store.addFriend(f);
+      }
+      this.store.save();
+      return friends;
+    } catch (err) {
+      console.error('[WebClient] Failed to fetch friends:', err);
+      return this.getFriends();
+    }
+  }
+
+  async removeFriend(friendId: string): Promise<void> {
+    await this.api.removeFriend(friendId);
+    this.store.removeFriend(friendId);
+    this.store.save();
+    this.emit('friend_removed', friendId);
+  }
+
+  /* ─── Chat ────────────────────────────────────────────────── */
+
+  getMessages(friendId: string): ChatMessage[] {
+    return this.store.getMessages(friendId);
+  }
+
+  sendMessage(friendId: string, text: string): ChatMessage {
+    const msg: ChatMessage = {
+      id: uuidv4(),
+      fromId: this.getUserId(),
+      toId: friendId,
+      type: 'text',
+      content: text,
+      timestamp: Date.now(),
+      status: 'sent',
+    };
+    this.store.addMessage(friendId, msg);
+    this.ws.send('message', {
+      fromId: msg.fromId,
+      toId: msg.toId,
+      type: 'text',
+      content: text,
+      timestamp: msg.timestamp,
+    });
+    this.store.save();
+    return msg;
+  }
+
+  sendFileInfo(friendId: string, fileInfo: { fileName: string; fileSize: number }): ChatMessage {
+    const content = JSON.stringify(fileInfo);
+    const msg: ChatMessage = {
+      id: uuidv4(),
+      fromId: this.getUserId(),
+      toId: friendId,
+      type: 'file-info',
+      content,
+      timestamp: Date.now(),
+      status: 'sent',
+    };
+    this.store.addMessage(friendId, msg);
+    this.ws.send('message', {
+      fromId: msg.fromId,
+      toId: msg.toId,
+      type: 'file-info',
+      content,
+      timestamp: msg.timestamp,
+    });
+    this.store.save();
+    return msg;
+  }
+
+  sendTyping(friendId: string): void {
+    this.ws.send('typing', { fromId: this.getUserId(), toId: friendId });
+  }
+
+  getLastMessage(friendId: string): ChatMessage | null {
+    const msgs = this.store.getMessages(friendId);
+    return msgs.length > 0 ? msgs[msgs.length - 1] : null;
+  }
+
+  getUnreadCount(friendId: string): number {
+    const msgs = this.store.getMessages(friendId);
+    return msgs.filter((m) => m.fromId !== this.getUserId() && m.status === 'delivered').length;
+  }
+
+  markMessagesRead(friendId: string): void {
+    const msgs = this.store.getMessages(friendId);
+    for (const m of msgs) {
+      if (m.fromId !== this.getUserId() && m.status === 'delivered') {
+        this.store.updateMessageStatus(m.id, 'read');
+      }
+    }
+    this.store.save();
+  }
+
+  /* ─── Temp Numbers ────────────────────────────────────────── */
+
+  getTempNumbers(): TempNumberInfo[] {
+    return this.store.tempNumbers.filter((t) => t.expiresAt > Date.now());
+  }
+
+  async requestTempNumber(): Promise<string> {
+    const number = await this.api.requestTempNumber();
+    const info: TempNumberInfo = {
+      number,
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 min default
+      createdAt: Date.now(),
+    };
+    this.store.addTempNumber(info);
+    this.store.save();
+    return number;
+  }
+
+  async revokeTempNumber(number: string): Promise<void> {
+    await this.api.revokeTempNumber(number);
+    this.store.removeTempNumber(number);
+    this.store.save();
+  }
+
+  async resolveAndAddFriend(tempNumber: string): Promise<FriendInfo> {
+    const resolved = await this.api.resolveTempNumber(tempNumber);
+    if (!resolved.nodeId) throw new Error('号码未找到');
+
+    // Initiate handshake
+    const session = await this.api.initiateHandshake(tempNumber);
+
+    // For now, return a placeholder friend
+    // The actual handshake completion happens via WebSocket events
+    return {
+      id: resolved.nodeId,
+      publicKey: '',
+      fingerprint: '建立中...',
+      addedAt: new Date().toISOString(),
+      lastSeen: new Date().toISOString(),
+      isOnline: true,
+    };
+  }
+
+  /* ─── File Transfer ───────────────────────────────────────── */
+
+  async sendFile(friendId: string, file: File): Promise<FileTransferInfo> {
+    const sessionId = uuidv4();
+    const chunkSize = 64 * 1024; // 64KB
+    const totalChunks = Math.ceil(file.size / chunkSize);
+
+    // Simple hash (for now)
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let hash = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      hash = ((hash << 5) - hash + bytes[i]) | 0;
+    }
+    const fileHash = Math.abs(hash).toString(16).padStart(8, '0');
+
+    const transferInfo: FileTransferInfo = {
+      sessionId,
+      fileName: file.name,
+      fileSize: file.size,
+      progress: 0,
+      status: 'pending',
+      chunks: new Array(totalChunks).fill(false),
+    };
+
+    this.store.setFileTransfer(sessionId, transferInfo);
+
+    // Create session on server
+    try {
+      const sessionRes = await this.api.initiateFileTransfer(friendId, {
+        fileName: file.name,
+        fileSize: file.size,
+        fileHash,
+        chunks: totalChunks,
+        chunkSize,
+      });
+
+      transferInfo.status = 'transferring';
+      transferInfo.sessionId = sessionRes.sessionId;
+      this.store.setFileTransfer(sessionId, transferInfo);
+
+      // Send file metadata as a chat message
+      this.sendFileInfo(friendId, { fileName: file.name, fileSize: file.size });
+
+      // Simulate upload progress (in real impl, would send chunks via WS)
+      for (let i = 0; i < totalChunks; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        transferInfo.chunks[i] = true;
+        transferInfo.progress = (i + 1) / totalChunks;
+        this.store.setFileTransfer(sessionId, transferInfo);
+        this.emit('file_progress', transferInfo);
+      }
+
+      transferInfo.status = 'completed';
+      this.store.setFileTransfer(sessionId, transferInfo);
+      this.emit('file_progress', transferInfo);
+    } catch (err) {
+      transferInfo.status = 'failed';
+      this.store.setFileTransfer(sessionId, transferInfo);
+      this.emit('file_progress', transferInfo);
+      throw err;
+    }
+
+    this.store.save();
+    return transferInfo;
+  }
+
+  getFileTransfers(): FileTransferInfo[] {
+    return Array.from(this.store.fileTransfers.values());
+  }
+
+  /* ─── Lifecycle ───────────────────────────────────────────── */
+
+  destroy(): void {
+    this.ws.destroy();
+    this.store.save();
+    this.removeAllListeners();
+    this._initialized = false;
+  }
+
+  resetStore(): void {
+    this.store.clear();
+  }
+}
+
+export default WebClient;

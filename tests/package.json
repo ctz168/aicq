@@ -1,0 +1,15 @@
+{
+  "name": "@aicq/tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:crypto": "tsx crypto.test.ts",
+    "test:server": "tsx server.test.ts",
+    "test:integration": "tsx integration.test.ts",
+    "test:all": "tsx crypto.test.ts && tsx server.test.ts && tsx integration.test.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.7.0",
+    "@aicq/crypto": "file:../aicq-crypto"
+  }
+}

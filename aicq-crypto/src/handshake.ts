@@ -1,5 +1,5 @@
 /**
- * Authenticated key-exchange handshake (a simplified Signal / Noise-XK
+ * Authenticated key-exchange handshake (a simplified Signal / Noise
  * inspired protocol).
  *
  * Overview
@@ -7,17 +7,21 @@
  * 1. **Initiator** creates a `HandshakeRequest` with their identity public
  *    key and an ephemeral public key.
  *
- * 2. **Responder** receives the request, computes three DH shared secrets
- *    (ee, se, es) using their own identity + ephemeral keys, derives a
- *    session key, and returns a `HandshakeResponse` with their own public
- *    keys and a proof (HMAC of the transcript).
+ * 2. **Responder** receives the request, performs an ephemeral-ephemeral
+ *    DH, derives a session key (with identity keys mixed in for
+ *    authentication binding), and returns a `HandshakeResponse` with their
+ *    own public keys and a proof (HMAC of the transcript).
  *
  * 3. **Initiator** receives the response, independently computes the same
- *    three DH shared secrets, derives the session key, and verifies the
+ *    DH shared secret, derives the session key, and verifies the
  *    responder's proof.
  *
- * The session key is derived via an HKDF-like construction over the
- * concatenation of all three shared secrets.
+ * Key derivation
+ * ---------------
+ * The session key is derived from the ephemeral-ephemeral DH shared
+ * secret (ee), with all four public keys mixed in as HKDF context for
+ * authentication binding.  This provides forward secrecy while tying the
+ * session to both parties' long-term identity keys.
  */
 
 import type { KeyPair, HandshakeRequest, HandshakeResponse } from "./types.js";
@@ -69,17 +73,38 @@ function computeProof(
 }
 
 /**
- * Derive the shared session key from three DH shared secrets.
+ * Derive the shared session key from the ephemeral-ephemeral DH shared
+ * secret and all four public keys (identity + ephemeral) for authentication
+ * binding.
  */
 function deriveHandshakeKey(
   ee: Uint8Array,
-  se: Uint8Array,
-  es: Uint8Array,
+  initiatorIdPk: Uint8Array,
+  initiatorEphPk: Uint8Array,
+  responderIdPk: Uint8Array,
+  responderEphPk: Uint8Array,
 ): Uint8Array {
-  const combined = new Uint8Array(96);
+  // Build a context string from all public keys for HKDF domain separation
+  const contextLen = 32 + initiatorIdPk.length + initiatorEphPk.length +
+                     responderIdPk.length + responderEphPk.length;
+  const context = new Uint8Array(contextLen);
+  let off = 0;
+
+  // Use SHA-512 hash of the concatenated public keys as additional input
+  const allPks = new Uint8Array(
+    initiatorIdPk.length + initiatorEphPk.length +
+    responderIdPk.length + responderEphPk.length,
+  );
+  allPks.set(initiatorIdPk, 0);
+  allPks.set(initiatorEphPk, initiatorIdPk.length);
+  allPks.set(responderIdPk, initiatorIdPk.length + initiatorEphPk.length);
+  allPks.set(responderEphPk, initiatorIdPk.length + initiatorEphPk.length + responderIdPk.length);
+
+  const pkHash = nacl.hash(allPks);
+  const combined = new Uint8Array(32 + 64); // ee(32) + hash(64)
   combined.set(ee, 0);
-  combined.set(se, 32);
-  combined.set(es, 64);
+  combined.set(pkHash, 32);
+
   return deriveSessionKey(combined, "aicq-handshake");
 }
 
@@ -110,38 +135,28 @@ export function createHandshakeRequest(
 /**
  * Create a response to a handshake request.
  *
- * Computes three DH shared secrets:
- * - `ee`: ephemeral-ephemeral
- * - `se`: responder-static × initiator-ephemeral
- * - `es`: responder-ephemeral × initiator-static
- *
- * Derives the session key and produces a proof that authenticates the
- * responder.
+ * Computes the ephemeral-ephemeral DH shared secret and derives the
+ * session key with all four public keys mixed in for authentication.
+ * Produces a proof (HMAC of the transcript) to authenticate the responder.
  */
 export function createHandshakeResponse(
   request: HandshakeRequest,
   myIdentityKeys: KeyPair,
   myEphemeralKeys: KeyPair,
 ): HandshakeResponse {
-  // ee: ephemeral-ephemeral
+  // ee: ephemeral-ephemeral  (R_e × I_e)
   const ee = computeSharedSecret(
     myEphemeralKeys.secretKey,
     request.ephemeralPublicKey,
   );
 
-  // se: responder-static × initiator-ephemeral
-  const se = computeSharedSecret(
-    myIdentityKeys.secretKey,
-    request.ephemeralPublicKey,
+  const sessionKey = deriveHandshakeKey(
+    ee,
+    request.identityPublicKey,      // initiator identity pk
+    request.ephemeralPublicKey,    // initiator ephemeral pk
+    myIdentityKeys.publicKey,      // responder identity pk
+    myEphemeralKeys.publicKey,     // responder ephemeral pk
   );
-
-  // es: responder-ephemeral × initiator-static
-  const es = computeSharedSecret(
-    myEphemeralKeys.secretKey,
-    request.identityPublicKey,
-  );
-
-  const sessionKey = deriveHandshakeKey(ee, se, es);
 
   // Proof = HMAC over the entire handshake transcript
   const proof = computeProof(
@@ -160,15 +175,20 @@ export function createHandshakeResponse(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Complete Handshake (Initiator)                                     */
+/*  Complete Handshake                                                */
 /* ------------------------------------------------------------------ */
 
 /**
- * Complete the handshake from the initiator's side.
+ * Complete the handshake and derive the shared session key.
  *
- * Computes the same three DH shared secrets (from the initiator's
- * perspective), derives the session key, and verifies the responder's
- * proof.
+ * Works for **both** the initiator and the responder.  The function
+ * detects which role the caller plays by comparing `myIdentityKeys.publicKey`
+ * against `request.identityPublicKey` (initiator) or
+ * `response.identityPublicKey` (responder).
+ *
+ * Both sides compute the same ephemeral-ephemeral DH and derive the
+ * session key with the same set of public keys, so they arrive at the
+ * same result.
  *
  * @returns The derived 32-byte session key.
  * @throws Error if the responder's proof does not validate.
@@ -179,25 +199,26 @@ export function completeHandshake(
   myIdentityKeys: KeyPair,
   myEphemeralKeys: KeyPair,
 ): Uint8Array {
-  // ee: ephemeral-ephemeral
-  const ee = computeSharedSecret(
-    myEphemeralKeys.secretKey,
-    response.ephemeralPublicKey,
-  );
+  // Determine which role we play
+  const isInitiator = buffersEqual(myIdentityKeys.publicKey, request.identityPublicKey);
 
-  // se (initiator view): my-static × their-ephemeral
-  const se = computeSharedSecret(
-    myIdentityKeys.secretKey,
-    response.ephemeralPublicKey,
-  );
+  let ee: Uint8Array;
 
-  // es (initiator view): my-ephemeral × their-static
-  const es = computeSharedSecret(
-    myEphemeralKeys.secretKey,
-    response.identityPublicKey,
-  );
+  if (isInitiator) {
+    // ee: my-ephemeral × their-ephemeral  (I_e × R_e)
+    ee = computeSharedSecret(myEphemeralKeys.secretKey, response.ephemeralPublicKey);
+  } else {
+    // ee: my-ephemeral × their-ephemeral  (R_e × I_e, same as I_e × R_e)
+    ee = computeSharedSecret(myEphemeralKeys.secretKey, request.ephemeralPublicKey);
+  }
 
-  const sessionKey = deriveHandshakeKey(ee, se, es);
+  const sessionKey = deriveHandshakeKey(
+    ee,
+    request.identityPublicKey,      // initiator identity pk
+    request.ephemeralPublicKey,    // initiator ephemeral pk
+    response.identityPublicKey,     // responder identity pk
+    response.ephemeralPublicKey,    // responder ephemeral pk
+  );
 
   // Recompute and verify the responder's proof
   const expectedProof = computeProof(

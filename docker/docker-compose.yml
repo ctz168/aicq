@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  aicq:
+    build: ..
+    container_name: aicq
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DOMAIN=aicq.online
+      - MAX_FRIENDS=200
+      - TEMP_NUMBER_TTL_HOURS=24
+    volumes:
+      - aicq-data:/app/data
+      - aicq-ssl:/etc/nginx/ssl
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  aicq-data:
+  aicq-ssl:

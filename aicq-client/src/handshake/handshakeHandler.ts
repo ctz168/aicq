@@ -323,24 +323,16 @@ export class HandshakeHandler {
       ephemeralKeys,
     );
 
-    // Derive session key (responder side)
-    // We need to compute it the same way completeHandshake does, but from
-    // the responder perspective.  Let's compute it directly:
-    const {
-      computeSharedSecret,
-      deriveSessionKey,
-      nacl,
-    } = await import('@aicq/crypto');
+    // Derive session key (responder side) using the same function
+    // that the initiator will use, ensuring both sides agree.
+    const { completeHandshake } = await import('@aicq/crypto');
 
-    const ee = computeSharedSecret(ephemeralKeys.secretKey, pending.request.ephemeralPublicKey);
-    const se = computeSharedSecret(myIdentityKeys.secretKey, pending.request.ephemeralPublicKey);
-    const es = computeSharedSecret(ephemeralKeys.secretKey, pending.request.identityPublicKey);
-
-    const combined = new Uint8Array(96);
-    combined.set(ee, 0);
-    combined.set(se, 32);
-    combined.set(es, 64);
-    const sessionKey = deriveSessionKey(combined, 'aicq-handshake');
+    const sessionKey = completeHandshake(
+      response,
+      pending.request,
+      myIdentityKeys,
+      ephemeralKeys,
+    );
 
     // Store session key
     this.store.setSessionKey(pending.requesterId, sessionKey);

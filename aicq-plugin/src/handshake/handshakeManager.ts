@@ -190,10 +190,10 @@ export class HandshakeManager {
     // Generate our ephemeral key pair
     const ephemeralKeys = generateKeyExchangeKeyPair();
 
-    // Create handshake response — use exchange keys for DH computation
+    // Create handshake response using identity keys
     const myIdentityKeys: KeyPair = {
       publicKey: this.store.identityKeys.publicKey,
-      secretKey: this.store.exchangeKeys.secretKey,
+      secretKey: this.store.identityKeys.secretKey,
     };
 
     const response = createHandshakeResponse(
@@ -263,7 +263,7 @@ export class HandshakeManager {
       // Complete the handshake (initiator side)
       const myIdentityKeys: KeyPair = {
         publicKey: this.store.identityKeys.publicKey,
-        secretKey: this.store.exchangeKeys.secretKey,
+        secretKey: this.store.identityKeys.secretKey,
       };
 
       const sessionKey = completeHandshake(
