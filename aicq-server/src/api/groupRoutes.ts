@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { generalLimiter } from '../middleware/rateLimit';
+import { authenticateJWT } from '../middleware/auth';
 import * as groupService from '../services/groupService';
 import { store } from '../db/memoryStore';
 
@@ -11,7 +12,7 @@ const router = Router();
  * POST /api/v1/group/create
  * 创建新群组
  */
-router.post('/group/create', generalLimiter, (req: Request, res: Response) => {
+router.post('/group/create', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { name, ownerId, description } = req.body;
 
@@ -33,7 +34,7 @@ router.post('/group/create', generalLimiter, (req: Request, res: Response) => {
  * GET /api/v1/group/list?accountId=xxx
  * 获取账号所在的所有群组
  */
-router.get('/group/list', generalLimiter, (req: Request, res: Response) => {
+router.get('/group/list', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const accountId = req.query.accountId as string;
     if (!accountId) {
@@ -57,7 +58,7 @@ router.get('/group/list', generalLimiter, (req: Request, res: Response) => {
  * GET /api/v1/group/:groupId?accountId=xxx
  * 获取群组信息（需是成员）
  */
-router.get('/group/:groupId', generalLimiter, (req: Request, res: Response) => {
+router.get('/group/:groupId', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const accountId = req.query.accountId as string;
@@ -91,7 +92,7 @@ router.get('/group/:groupId', generalLimiter, (req: Request, res: Response) => {
  * POST /api/v1/group/:groupId/invite
  * 邀请成员加入群组
  */
-router.post('/group/:groupId/invite', generalLimiter, (req: Request, res: Response) => {
+router.post('/group/:groupId/invite', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { accountId, targetId, displayName } = req.body;
@@ -114,7 +115,7 @@ router.post('/group/:groupId/invite', generalLimiter, (req: Request, res: Respon
  * POST /api/v1/group/:groupId/kick
  * 踢出群成员
  */
-router.post('/group/:groupId/kick', generalLimiter, (req: Request, res: Response) => {
+router.post('/group/:groupId/kick', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { accountId, targetId } = req.body;
@@ -137,7 +138,7 @@ router.post('/group/:groupId/kick', generalLimiter, (req: Request, res: Response
  * POST /api/v1/group/:groupId/leave
  * 成员退出群组
  */
-router.post('/group/:groupId/leave', generalLimiter, (req: Request, res: Response) => {
+router.post('/group/:groupId/leave', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { accountId } = req.body;
@@ -160,7 +161,7 @@ router.post('/group/:groupId/leave', generalLimiter, (req: Request, res: Respons
  * DELETE /api/v1/group/:groupId
  * 解散群组（仅群主）
  */
-router.delete('/group/:groupId', generalLimiter, (req: Request, res: Response) => {
+router.delete('/group/:groupId', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { accountId } = req.body;
@@ -183,7 +184,7 @@ router.delete('/group/:groupId', generalLimiter, (req: Request, res: Response) =
  * PUT /api/v1/group/:groupId
  * 更新群组名称/描述/头像
  */
-router.put('/group/:groupId', generalLimiter, (req: Request, res: Response) => {
+router.put('/group/:groupId', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { accountId, name, description, avatar } = req.body;
@@ -206,7 +207,7 @@ router.put('/group/:groupId', generalLimiter, (req: Request, res: Response) => {
  * POST /api/v1/group/:groupId/transfer
  * 转让群主身份
  */
-router.post('/group/:groupId/transfer', generalLimiter, (req: Request, res: Response) => {
+router.post('/group/:groupId/transfer', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { accountId, targetId } = req.body;
@@ -229,7 +230,7 @@ router.post('/group/:groupId/transfer', generalLimiter, (req: Request, res: Resp
  * POST /api/v1/group/:groupId/role
  * 设置群成员角色（仅群主）
  */
-router.post('/group/:groupId/role', generalLimiter, (req: Request, res: Response) => {
+router.post('/group/:groupId/role', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { accountId, targetId, role } = req.body;
@@ -257,7 +258,7 @@ router.post('/group/:groupId/role', generalLimiter, (req: Request, res: Response
  * POST /api/v1/group/:groupId/mute
  * 禁言或解禁群成员
  */
-router.post('/group/:groupId/mute', generalLimiter, (req: Request, res: Response) => {
+router.post('/group/:groupId/mute', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { accountId, targetId, muted } = req.body;
@@ -280,7 +281,7 @@ router.post('/group/:groupId/mute', generalLimiter, (req: Request, res: Response
  * GET /api/v1/group/:groupId/messages
  * 获取群组消息历史（支持分页）
  */
-router.get('/group/:groupId/messages', generalLimiter, (req: Request, res: Response) => {
+router.get('/group/:groupId/messages', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const accountId = req.query.accountId as string;

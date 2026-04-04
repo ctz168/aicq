@@ -1,20 +1,29 @@
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
+import nacl from 'tweetnacl';
 import { store } from '../db/memoryStore';
 import { Account, Session, AccountType, FriendPermission } from '../models/types';
 
-// Simple password hashing using SHA-256 + salt (replace with bcrypt in production)
+const BCRYPT_ROUNDS = 12;
+
+// ─── Password Hashing (bcrypt with SHA-256 legacy fallback) ────────
+
 async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.createHash('sha256').update(password + salt).digest('hex');
-  return `${salt}:${hash}`;
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  if (storedHash.startsWith('$2b$') || storedHash.startsWith('$2a$')) {
+    return bcrypt.compare(password, storedHash);
+  }
+  // Legacy SHA-256 fallback
   const [salt, hash] = storedHash.split(':');
   const computed = crypto.createHash('sha256').update(password + salt).digest('hex');
   return computed === hash;
 }
+
+// ─── JWT Token ────────────────────────────────────────────────────
 
 // Generate JWT token (simple implementation, replace with jsonwebtoken in production)
 function generateToken(payload: Record<string, unknown>, secret: string, expiresIn: number): { token: string; expiresAt: number } {
@@ -36,18 +45,40 @@ function generateToken(payload: Record<string, unknown>, secret: string, expires
   return { token, expiresAt: now + expiresIn };
 }
 
-function verifyJWT(token: string, secret: string): Record<string, unknown> | null {
+/**
+ * Verify a JWT token. Checks signature, algorithm, and expiration.
+ * Exported for use by auth middleware.
+ */
+export function verifyJWT(token: string, secret: string): Record<string, unknown> | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
+
+    const header = Buffer.from(parts[0], 'base64url').toString();
+    const headerObj = JSON.parse(header);
+    if (headerObj.alg !== 'HS256') return null;
+
+    // Verify the signature
+    const expectedSig = crypto
+      .createHmac('sha256', secret)
+      .update(`${parts[0]}.${parts[1]}`)
+      .digest('base64url');
+
+    if (expectedSig !== parts[2]) return null;
+
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+
+    // Check expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && (payload.exp as number) < now) return null;
+
     return payload;
   } catch {
     return null;
   }
 }
 
-// ─── Public API ────────────────────────────────────────────────
+// ─── Public API ────────────────────────────────────────────────────
 
 export async function registerHuman(
   target: string,
@@ -95,7 +126,7 @@ export async function registerHuman(
     visitPermissions: [],
   };
 
-  store.accounts.set(accountId, account);
+  store.setAccount(account);
   console.log(`[account] Human registered: ${target} (${accountId})`);
   return account;
 }
@@ -145,7 +176,7 @@ export async function loginHuman(
 
   // Update last login
   account.lastLoginAt = Date.now();
-  store.accounts.set(account.id, account);
+  store.setAccount(account);
 
   // Create session
   const session = createSession(account);
@@ -191,7 +222,7 @@ export async function loginAgent(
 
   agentChallenges.delete(challengeId);
 
-  // Verify signature (simplified - in production use proper tweetnacl verification)
+  // Verify signature using tweetnacl
   const isValid = verifyAgentSignature(publicKey, challengeData.challenge, signature);
   if (!isValid) {
     throw new Error('签名验证失败');
@@ -204,21 +235,21 @@ export async function loginAgent(
   }
 
   account.lastLoginAt = Date.now();
-  store.accounts.set(account.id, account);
+  store.setAccount(account);
 
   const session = createSession(account);
   return { account, session };
 }
 
 function verifyAgentSignature(publicKeyBase64: string, challenge: string, signatureBase64: string): boolean {
-  // Simplified verification using crypto
-  // In production, use tweetnacl's nacl.sign.detached.verify
   try {
-    const data = Buffer.from(challenge);
-    const sig = Buffer.from(signatureBase64, 'base64');
-    // We store the key, real verification would use nacl
-    // For now, accept if signature is non-empty and matches length
-    return sig.length > 0;
+    const message = Buffer.from(challenge, 'utf8');
+    const signature = Buffer.from(signatureBase64, 'base64');
+    const publicKey = Buffer.from(publicKeyBase64, 'base64');
+
+    if (publicKey.length !== 32 || signature.length !== 64) return false;
+
+    return nacl.sign.detached.verify(message, signature, publicKey);
   } catch {
     return false;
   }
@@ -239,26 +270,24 @@ function createAgentAccount(publicKey: string, agentName: string): Account {
     friendPermissions: {},
     visitPermissions: [],
   };
-  store.accounts.set(accountId, account);
+  store.setAccount(account);
   console.log(`[account] AI Agent auto-registered: ${agentName} (${accountId})`);
   return account;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
 
+/** O(1) lookup by email or phone using index maps */
 function findAccountByTarget(target: string, type: 'email' | 'phone'): Account | undefined {
-  for (const account of store.accounts.values()) {
-    if (type === 'email' && account.email === target) return account;
-    if (type === 'phone' && account.phone === target) return account;
-  }
-  return undefined;
+  const index = type === 'email' ? store.emailIndex : store.phoneIndex;
+  const accountId = index.get(target);
+  return accountId ? store.accounts.get(accountId) : undefined;
 }
 
+/** O(1) lookup by publicKey using index map */
 function findAccountByPublicKey(publicKey: string): Account | undefined {
-  for (const account of store.accounts.values()) {
-    if (account.publicKey === publicKey) return account;
-  }
-  return undefined;
+  const accountId = store.publicKeyIndex.get(publicKey);
+  return accountId ? store.accounts.get(accountId) : undefined;
 }
 
 export function createSession(account: Account): Session {

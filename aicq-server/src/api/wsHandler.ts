@@ -7,7 +7,10 @@ import {
   relaySignal,
   isOnline,
   getSignalingChannel,
+  canAcceptConnection,
 } from '../services/p2pDiscoveryService';
+import { verifyJWT } from '../services/accountService';
+import { isWsRateLimited, isWsMessageTooLarge, cleanupWsRateLimit } from '../middleware/wsRateLimit';
 import * as groupService from '../services/groupService';
 import * as friendshipService from '../services/friendshipService';
 import { store } from '../db/memoryStore';
@@ -24,16 +27,43 @@ interface WsMessage {
  */
 export function setupWebSocketHandler(wss: WebSocketServer): void {
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+    // Check max connections
+    if (!canAcceptConnection()) {
+      ws.close(1013, 'Server full');
+      return;
+    }
+
     let nodeId: string | null = null;
 
     ws.on('message', (rawData: WebSocket.Data) => {
+      // Check message size
+      let rawSize = 0;
+      if (Buffer.isBuffer(rawData)) {
+        rawSize = rawData.length;
+      } else if (typeof rawData === 'string') {
+        rawSize = Buffer.byteLength(rawData, 'utf8');
+      } else if (rawData instanceof ArrayBuffer) {
+        rawSize = rawData.byteLength;
+      } else if (Array.isArray(rawData)) {
+        rawSize = rawData.reduce((sum, buf) => sum + (buf.length || 0), 0);
+      }
+      if (isWsMessageTooLarge(rawSize)) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Message too large' }));
+        return;
+      }
+
       try {
         const message: WsMessage = JSON.parse(rawData.toString());
+
+        // Skip rate limiting for online (it's the auth step)
+        if (message.type !== 'online' && isWsRateLimited(ws)) {
+          return;
+        }
+
         handleMessage(ws, message, (assignedNodeId) => {
           nodeId = assignedNodeId;
         });
       } catch (err) {
-        // Ignore malformed messages
         ws.send(JSON.stringify({ type: 'error', error: 'Invalid message format' }));
       }
     });
@@ -43,12 +73,14 @@ export function setupWebSocketHandler(wss: WebSocketServer): void {
         unregisterOnlineNode(nodeId);
         broadcastOnlineStatus(nodeId, false);
       }
+      cleanupWsRateLimit(ws);
     });
 
     ws.on('error', () => {
       if (nodeId) {
         unregisterOnlineNode(nodeId);
       }
+      cleanupWsRateLimit(ws);
     });
   });
 }
@@ -65,14 +97,24 @@ function handleMessage(
     case 'online': {
       // Node announces it's online
       const id: string = message.nodeId;
-      if (!id) {
-        ws.send(JSON.stringify({ type: 'error', error: 'Missing nodeId' }));
+      const token: string = message.token;
+      if (!id || !token) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Missing nodeId or token' }));
         return;
       }
 
-      // Ensure the node is registered
+      // Verify the node is registered
       if (!store.nodes.has(id)) {
         ws.send(JSON.stringify({ type: 'error', error: 'Node not registered' }));
+        return;
+      }
+
+      // Verify JWT token for WebSocket authentication
+      const jwtSecret = process.env.JWT_SECRET || 'aicq-default-jwt-secret-change-in-production';
+      const payload = verifyJWT(token, jwtSecret);
+      if (!payload || payload.sub !== id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Authentication failed' }));
+        ws.close(1008, 'Authentication failed');
         return;
       }
 

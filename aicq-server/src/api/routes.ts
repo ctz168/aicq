@@ -9,6 +9,7 @@ import {
   tempNumberLimiter,
   handshakeLimiter,
 } from '../middleware/rateLimit';
+import { authenticateJWT } from '../middleware/auth';
 
 const router = Router();
 
@@ -49,7 +50,7 @@ router.post('/node/register', generalLimiter, (req: Request, res: Response) => {
  * POST /api/v1/temp-number/request
  * Request a 6-digit temporary number for friend discovery.
  */
-router.post('/temp-number/request', tempNumberLimiter, (req: Request, res: Response) => {
+router.post('/temp-number/request', authenticateJWT, tempNumberLimiter, (req: Request, res: Response) => {
   try {
     const { nodeId } = req.body;
     if (!nodeId) {
@@ -92,7 +93,7 @@ router.get('/temp-number/:number', generalLimiter, (req: Request, res: Response)
  * DELETE /api/v1/temp-number/:number
  * Revoke a temp number.
  */
-router.delete('/temp-number/:number', generalLimiter, (req: Request, res: Response) => {
+router.delete('/temp-number/:number', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const nodeId = req.body.nodeId || req.query.nodeId;
     if (!nodeId) {
@@ -117,7 +118,7 @@ router.delete('/temp-number/:number', generalLimiter, (req: Request, res: Respon
  * POST /api/v1/handshake/initiate
  * Start a handshake with a target temp number.
  */
-router.post('/handshake/initiate', handshakeLimiter, (req: Request, res: Response) => {
+router.post('/handshake/initiate', authenticateJWT, handshakeLimiter, (req: Request, res: Response) => {
   try {
     const { requesterId, targetTempNumber } = req.body;
     if (!requesterId || !targetTempNumber) {
@@ -141,7 +142,7 @@ router.post('/handshake/initiate', handshakeLimiter, (req: Request, res: Respons
  * POST /api/v1/handshake/respond
  * Submit encrypted response data.
  */
-router.post('/handshake/respond', handshakeLimiter, (req: Request, res: Response) => {
+router.post('/handshake/respond', authenticateJWT, handshakeLimiter, (req: Request, res: Response) => {
   try {
     const { sessionId, responseData } = req.body;
     if (!sessionId || !responseData) {
@@ -164,7 +165,7 @@ router.post('/handshake/respond', handshakeLimiter, (req: Request, res: Response
  * POST /api/v1/handshake/confirm
  * Confirm the handshake.
  */
-router.post('/handshake/confirm', handshakeLimiter, (req: Request, res: Response) => {
+router.post('/handshake/confirm', authenticateJWT, handshakeLimiter, (req: Request, res: Response) => {
   try {
     const { sessionId, confirmData } = req.body;
     if (!sessionId || !confirmData) {
@@ -189,7 +190,7 @@ router.post('/handshake/confirm', handshakeLimiter, (req: Request, res: Response
  * POST /api/v1/broadcast
  * 批量转发消息给多个接收者
  */
-router.post('/broadcast', generalLimiter, (req: Request, res: Response) => {
+router.post('/broadcast', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { senderId, recipientIds, message, encryptedContent } = req.body;
 
@@ -258,7 +259,7 @@ router.post('/broadcast', generalLimiter, (req: Request, res: Response) => {
  * POST /api/v1/file/initiate
  * Initiate a file transfer session.
  */
-router.post('/file/initiate', generalLimiter, (req: Request, res: Response) => {
+router.post('/file/initiate', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { senderId, receiverId, fileInfo } = req.body;
     if (!senderId || !receiverId || !fileInfo) {
@@ -352,7 +353,7 @@ router.get('/file/:sessionId/missing', generalLimiter, (req: Request, res: Respo
  *   recipientIds?: string[],   // Optional: specific recipient node IDs
  * }
  */
-router.post('/task-plan/push', generalLimiter, (req: Request, res: Response) => {
+router.post('/task-plan/push', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { senderId, messageType, payload, recipientIds } = req.body;
 
@@ -378,8 +379,8 @@ router.post('/task-plan/push', generalLimiter, (req: Request, res: Response) => 
       if (senderNode && senderNode.friends.size > 0) {
         targets = Array.from(senderNode.friends);
       } else {
-        // No friends registered — broadcast to all online nodes
-        targets = getOnlineNodeIds().filter((id) => id !== senderId);
+        // No friends registered — skip delivery (prevent data leakage)
+        targets = [];
       }
     }
 
@@ -424,7 +425,7 @@ router.post('/task-plan/push', generalLimiter, (req: Request, res: Response) => 
  *   recipientIds?: string[],   // Optional: specific recipient node IDs
  * }
  */
-router.post('/subagent-progress/push', generalLimiter, (req: Request, res: Response) => {
+router.post('/subagent-progress/push', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { senderId, runId, phase, message, payload, recipientIds } = req.body;
 
@@ -448,7 +449,8 @@ router.post('/subagent-progress/push', generalLimiter, (req: Request, res: Respo
       if (senderNode && senderNode.friends.size > 0) {
         targets = Array.from(senderNode.friends);
       } else {
-        targets = getOnlineNodeIds().filter((id) => id !== senderId);
+        // No friends registered — skip delivery (prevent data leakage)
+        targets = [];
       }
     }
 
@@ -497,7 +499,7 @@ router.post('/subagent-progress/push', generalLimiter, (req: Request, res: Respo
  *   recipientIds?: string[]
  * }
  */
-router.post('/agent-execution/push', generalLimiter, (req: Request, res: Response) => {
+router.post('/agent-execution/push', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { senderId, messageType, payload, recipientIds } = req.body;
 
@@ -529,7 +531,8 @@ router.post('/agent-execution/push', generalLimiter, (req: Request, res: Respons
       if (senderNode && senderNode.friends.size > 0) {
         targets = Array.from(senderNode.friends);
       } else {
-        targets = getOnlineNodeIds().filter((id) => id !== senderId);
+        // No friends registered — skip delivery (prevent data leakage)
+        targets = [];
       }
     }
 
@@ -561,6 +564,30 @@ router.post('/agent-execution/push', generalLimiter, (req: Request, res: Respons
 // ─── Agent Execution Abort ──────────────────────────────────
 
 /**
+ * Validate gateway URL to prevent SSRF
+ */
+function isValidGatewayUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    // Only allow http/https
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    // Block private/internal IPs
+    const hostname = parsed.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+      // Allow localhost for local development, but not internal network ranges
+      return true;
+    }
+    // Block private IP ranges
+    if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(hostname)) return false;
+    // Block cloud metadata endpoints
+    if (hostname === '169.254.169.254' || hostname.endsWith('.internal')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * POST /api/v1/agent-execution/abort
  * Proxy abort request from the aicq frontend to the StableClaw gateway.
  * Terminates the current agent execution run.
@@ -572,7 +599,7 @@ router.post('/agent-execution/push', generalLimiter, (req: Request, res: Respons
  *   runId?: string             // Optional: specific run to abort
  * }
  */
-router.post('/agent-execution/abort', generalLimiter, async (req: Request, res: Response) => {
+router.post('/agent-execution/abort', authenticateJWT, generalLimiter, async (req: Request, res: Response) => {
   try {
     const { requesterId, agentId, sessionKey, runId } = req.body;
 
@@ -602,14 +629,25 @@ router.post('/agent-execution/abort', generalLimiter, async (req: Request, res: 
     // Get gateway URL from stored agent metadata
     const gatewayUrl = (agentNode as any).gatewayUrl || 'http://localhost:18789';
 
+    // Validate gateway URL to prevent SSRF
+    if (!isValidGatewayUrl(gatewayUrl)) {
+      res.status(400).json({ error: '无效的 Gateway URL' });
+      return;
+    }
+
     try {
       // Try the gateway's session kill endpoint
       if (sessionKey) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+
         const killResp = await fetch(`${gatewayUrl}/sessions/${encodeURIComponent(sessionKey)}/kill`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-openclaw-requester-session-key': sessionKey },
           body: JSON.stringify({ reason: 'user_abort' }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
 
         if (killResp.ok) {
           const killResult = await killResp.json();
@@ -638,6 +676,9 @@ router.post('/agent-execution/abort', generalLimiter, async (req: Request, res: 
       }
 
       // Fallback: try gateway chat.abort RPC
+      const controller2 = new AbortController();
+      const timeout2 = setTimeout(() => controller2.abort(), 5000);
+
       const abortResp = await fetch(`${gatewayUrl}/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -647,7 +688,9 @@ router.post('/agent-execution/abort', generalLimiter, async (req: Request, res: 
           method: 'chat.abort',
           params: { sessionKey, runId },
         }),
+        signal: controller2.signal,
       });
+      clearTimeout(timeout2);
 
       if (abortResp.ok || abortResp.status === 200) {
         // Notify frontend

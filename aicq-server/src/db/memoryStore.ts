@@ -54,6 +54,47 @@ export class MemoryStore {
   /** Sub-agent sessions keyed by session ID */
   subAgents = new Map<string, SubAgentSession>();
 
+  // ─── Index maps for O(1) lookups ─────────────────────────────
+  /** email -> accountId */
+  emailIndex = new Map<string, string>();
+  /** phone -> accountId */
+  phoneIndex = new Map<string, string>();
+  /** publicKey -> accountId */
+  publicKeyIndex = new Map<string, string>();
+
+  /**
+   * Rebuild all index maps from the accounts store.
+   * Call this after bulk operations or on startup.
+   */
+  rebuildIndexes(): void {
+    this.emailIndex.clear();
+    this.phoneIndex.clear();
+    this.publicKeyIndex.clear();
+    for (const [id, account] of this.accounts) {
+      if (account.email) this.emailIndex.set(account.email, id);
+      if (account.phone) this.phoneIndex.set(account.phone, id);
+      if (account.publicKey) this.publicKeyIndex.set(account.publicKey, id);
+    }
+  }
+
+  /**
+   * Set an account while maintaining index consistency.
+   * Removes old index entries if the account already existed.
+   */
+  setAccount(account: Account): void {
+    // Remove old indexes if account exists
+    const existing = this.accounts.get(account.id);
+    if (existing) {
+      if (existing.email) this.emailIndex.delete(existing.email);
+      if (existing.phone) this.phoneIndex.delete(existing.phone);
+      if (existing.publicKey) this.publicKeyIndex.delete(existing.publicKey);
+    }
+    this.accounts.set(account.id, account);
+    if (account.email) this.emailIndex.set(account.email, account.id);
+    if (account.phone) this.phoneIndex.set(account.phone, account.id);
+    if (account.publicKey) this.publicKeyIndex.set(account.publicKey, account.id);
+  }
+
   /**
    * Remove expired temp numbers from the store.
    * Should be called periodically (e.g. every minute).
@@ -150,6 +191,38 @@ export class MemoryStore {
     }
     return removed;
   }
+
+  /**
+   * Trim group messages to MAX_GROUP_MESSAGES per group.
+   */
+  cleanupBoundedGroupMessages(): number {
+    const MAX_GROUP_MESSAGES = config.maxGroupMessages;
+    let trimmed = 0;
+    for (const [groupId, messages] of this.groupMessages) {
+      if (messages.length > MAX_GROUP_MESSAGES) {
+        const removed = messages.length - MAX_GROUP_MESSAGES;
+        this.groupMessages.set(groupId, messages.slice(-MAX_GROUP_MESSAGES));
+        trimmed += removed;
+      }
+    }
+    return trimmed;
+  }
+
+  /**
+   * Remove old completed/error sub-agent sessions.
+   */
+  cleanupCompletedSubAgents(): number {
+    const MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
+    const now = Date.now();
+    let removed = 0;
+    for (const [id, session] of this.subAgents) {
+      if ((session.status === 'completed' || session.status === 'error') && now - session.updatedAt > MAX_AGE) {
+        this.subAgents.delete(id);
+        removed++;
+      }
+    }
+    return removed;
+  }
 }
 
 /** Singleton store instance */
@@ -181,6 +254,8 @@ export function startPeriodicCleanup(): NodeJS.Timeout {
     store.cleanupExpiredCodes();
     store.cleanupExpiredSessions();
     store.cleanupOldNotifications();
+    store.cleanupBoundedGroupMessages();
+    store.cleanupCompletedSubAgents();
   }, 60_000);
 
   // Don't prevent process exit

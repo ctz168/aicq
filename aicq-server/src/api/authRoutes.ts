@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import * as verificationService from '../services/verificationService';
 import * as accountService from '../services/accountService';
 import { generalLimiter } from '../middleware/rateLimit';
+import { loginRateLimit } from '../middleware/auth';
 
 const router = Router();
 
@@ -100,7 +101,7 @@ router.post('/auth/register', generalLimiter, async (req: Request, res: Response
  * POST /api/v1/auth/login
  * Login with email+password or phone+code.
  */
-router.post('/auth/login', generalLimiter, async (req: Request, res: Response) => {
+router.post('/auth/login', generalLimiter, loginRateLimit, async (req: Request, res: Response) => {
   try {
     const { target, type, password, code } = req.body;
 

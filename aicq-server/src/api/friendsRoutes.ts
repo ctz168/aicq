@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { generalLimiter } from '../middleware/rateLimit';
+import { authenticateJWT } from '../middleware/auth';
 import * as friendshipService from '../services/friendshipService';
 import * as friendRequestService from '../services/friendRequestService';
 import type { FriendPermission } from '../models/types';
@@ -12,7 +13,7 @@ const router = Router();
  * GET /api/v1/friends
  * 获取好友列表（包含每个好友的权限信息）
  */
-router.get('/', generalLimiter, (req: Request, res: Response) => {
+router.get('/', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const nodeId = req.query.nodeId as string;
     if (!nodeId) {
@@ -41,7 +42,7 @@ router.get('/', generalLimiter, (req: Request, res: Response) => {
  * DELETE /api/v1/friends/:friendId
  * 删除好友
  */
-router.delete('/:friendId', generalLimiter, (req: Request, res: Response) => {
+router.delete('/:friendId', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const nodeId = req.body.nodeId;
     if (!nodeId) {
@@ -66,7 +67,7 @@ router.delete('/:friendId', generalLimiter, (req: Request, res: Response) => {
  * GET /api/v1/friends/:friendId/permissions
  * 获取对某个好友的授权权限
  */
-router.get('/:friendId/permissions', generalLimiter, (req: Request, res: Response) => {
+router.get('/:friendId/permissions', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const accountId = req.query.accountId as string;
     if (!accountId) {
@@ -86,7 +87,7 @@ router.get('/:friendId/permissions', generalLimiter, (req: Request, res: Respons
  * 更新对某个好友的授权权限
  * Body: { accountId, permissions: ('chat' | 'exec')[] }
  */
-router.put('/:friendId/permissions', generalLimiter, (req: Request, res: Response) => {
+router.put('/:friendId/permissions', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { accountId, permissions } = req.body;
     if (!accountId) {
@@ -130,7 +131,7 @@ router.put('/:friendId/permissions', generalLimiter, (req: Request, res: Respons
  * GET /api/v1/friends/requests
  * 获取当前账号的所有好友请求（发送的和接收的）
  */
-router.get('/requests', generalLimiter, (req: Request, res: Response) => {
+router.get('/requests', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const accountId = req.query.accountId as string;
     if (!accountId) {
@@ -156,7 +157,7 @@ router.get('/requests', generalLimiter, (req: Request, res: Response) => {
  * POST /api/v1/friends/requests/:userId
  * 向指定用户发送好友请求
  */
-router.post('/requests/:userId', generalLimiter, (req: Request, res: Response) => {
+router.post('/requests/:userId', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { fromId, message } = req.body;
     const toId = req.params.userId;
@@ -180,7 +181,7 @@ router.post('/requests/:userId', generalLimiter, (req: Request, res: Response) =
  * 接受好友请求，并指定授权权限
  * Body: { accountId, permissions?: ('chat' | 'exec')[] }
  */
-router.post('/requests/:requestId/accept', generalLimiter, (req: Request, res: Response) => {
+router.post('/requests/:requestId/accept', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { accountId, permissions } = req.body;
     if (!accountId) {
@@ -208,7 +209,7 @@ router.post('/requests/:requestId/accept', generalLimiter, (req: Request, res: R
  * POST /api/v1/friends/requests/:requestId/reject
  * 拒绝好友请求
  */
-router.post('/requests/:requestId/reject', generalLimiter, (req: Request, res: Response) => {
+router.post('/requests/:requestId/reject', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { accountId } = req.body;
     if (!accountId) {

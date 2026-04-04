@@ -1,8 +1,12 @@
 import WebSocket from 'ws';
 import { store } from '../db/memoryStore';
+import { config } from '../config';
 
 /** Map of nodeId -> WebSocket for online node tracking */
 const onlineSockets = new Map<string, WebSocket>();
+
+/** Reverse map: WebSocket -> nodeId for O(1) lookup */
+const socketToNodeMap = new WeakMap<WebSocket, string>();
 
 /**
  * Get the WebSocket connection for an online node.
@@ -13,10 +17,18 @@ export function getSignalingChannel(nodeId: string): WebSocket | null {
 }
 
 /**
+ * Check if the server can accept more WebSocket connections.
+ */
+export function canAcceptConnection(): boolean {
+  return onlineSockets.size < config.maxWsConnections;
+}
+
+/**
  * Register a node as online with its WebSocket connection.
  */
 export function registerOnlineNode(nodeId: string, ws: WebSocket): void {
   onlineSockets.set(nodeId, ws);
+  socketToNodeMap.set(ws, nodeId); // Add reverse map
 
   // Also update the node record
   const node = store.nodes.get(nodeId);
@@ -30,6 +42,10 @@ export function registerOnlineNode(nodeId: string, ws: WebSocket): void {
  * Unregister a node (went offline).
  */
 export function unregisterOnlineNode(nodeId: string): void {
+  const ws = onlineSockets.get(nodeId);
+  if (ws) {
+    socketToNodeMap.delete(ws); // Clean reverse map
+  }
   onlineSockets.delete(nodeId);
 
   const node = store.nodes.get(nodeId);
@@ -40,13 +56,10 @@ export function unregisterOnlineNode(nodeId: string): void {
 }
 
 /**
- * Get the node ID associated with a WebSocket, if any.
+ * Get the node ID associated with a WebSocket, if any. O(1) lookup.
  */
 export function getNodeIdBySocket(ws: WebSocket): string | null {
-  for (const [nodeId, socket] of onlineSockets) {
-    if (socket === ws) return nodeId;
-  }
-  return null;
+  return socketToNodeMap.get(ws) || null;
 }
 
 /**
