@@ -7,6 +7,7 @@ import FileTransferProgress from '../components/FileTransferProgress';
 import ForwardMessageModal from '../components/ForwardMessageModal';
 import SubAgentPanel from '../components/SubAgentPanel';
 import TaskProgressPanel from '../components/TaskProgressPanel';
+import BotMenuPanel from '../components/BotMenuPanel';
 import type { ChatMessage, StreamingState } from '../types';
 
 const ChatScreen: React.FC = () => {
@@ -34,6 +35,8 @@ const ChatScreen: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showBotMenu, setShowBotMenu] = useState(false);
+  const [botMenuFilter, setBotMenuFilter] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: ChatMessage } | null>(null);
@@ -48,6 +51,7 @@ const ChatScreen: React.FC = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
+  const botMenuPanelRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
 
   const friendId = state.activeFriendId;
@@ -162,6 +166,47 @@ const ChatScreen: React.FC = () => {
     }
   }, [showAttachmentMenu]);
 
+  // Detect "/" input to trigger bot menu
+  const handleInputChangeForBotMenu = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    // Show bot menu when user types "/" at the beginning of input
+    if (value === '/') {
+      setShowBotMenu(true);
+      setBotMenuFilter('');
+      setShowAttachmentMenu(false);
+    } else if (value.startsWith('/') && showBotMenu) {
+      // Update filter as user types
+      setBotMenuFilter(value.slice(1));
+    } else if (showBotMenu) {
+      // Close bot menu if user types something else
+      setShowBotMenu(false);
+      setBotMenuFilter('');
+    }
+  }, [showBotMenu]);
+
+  // Handle bot command selection
+  const handleBotCommandSelect = useCallback((commandText: string) => {
+    setInputText(commandText);
+    setShowBotMenu(false);
+    setBotMenuFilter('');
+    inputRef.current?.focus();
+  }, []);
+
+  // Close bot menu on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showBotMenu) {
+        e.stopPropagation();
+        setShowBotMenu(false);
+        setBotMenuFilter('');
+      }
+    };
+    if (showBotMenu) {
+      document.addEventListener('keydown', handleKeyDown, true);
+      return () => document.removeEventListener('keydown', handleKeyDown, true);
+    }
+  }, [showBotMenu]);
+
   // Close context menu on click anywhere
   useEffect(() => {
     if (!contextMenu) return;
@@ -203,6 +248,7 @@ const ChatScreen: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
     handleTyping();
+    handleInputChangeForBotMenu(e);
     const textarea = e.target;
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
@@ -502,11 +548,31 @@ const ChatScreen: React.FC = () => {
       {/* Input area */}
       <div className="chat-input-area">
         <div className="chat-input-row">
-          {/* Attachment button */}
+          {/* Bot menu button ("/" trigger) */}
           <div className="chat-input-actions">
+            {isAiFriend && (
+              <button
+                className="btn-attach bot-menu-trigger"
+                onClick={() => {
+                  setShowBotMenu(!showBotMenu);
+                  setShowAttachmentMenu(false);
+                  setBotMenuFilter('');
+                  inputRef.current?.focus();
+                }}
+                title="命令菜单"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                  <path d="M2 17l10 5 10-5" />
+                  <path d="M2 12l10 5 10-5" />
+                </svg>
+              </button>
+            )}
+
+            {/* Attachment button */}
             <button
               className="btn-attach"
-              onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
+              onClick={() => { setShowAttachmentMenu(!showAttachmentMenu); setShowBotMenu(false); }}
               title="发送附件"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -515,6 +581,17 @@ const ChatScreen: React.FC = () => {
                 <line x1="8" y1="12" x2="16" y2="12" />
               </svg>
             </button>
+
+          {/* Bot menu panel */}
+          {isAiFriend && showBotMenu && (
+            <BotMenuPanel
+              isOpen={showBotMenu}
+              onClose={() => { setShowBotMenu(false); setBotMenuFilter(''); }}
+              onSelect={handleBotCommandSelect}
+              filterText={botMenuFilter}
+              position="top"
+            />
+          )}
 
             {/* Attachment dropdown menu */}
             {showAttachmentMenu && (

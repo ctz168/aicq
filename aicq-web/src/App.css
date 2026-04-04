@@ -871,6 +871,212 @@ html, body, #root {
   color: var(--text-muted);
 }
 
+/* ─── Bot Menu Panel (Telegram-style) ────────────────────── */
+
+.bot-menu-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 360px;
+  max-height: 420px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: botMenuSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 40;
+}
+
+@keyframes botMenuSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.bot-menu-panel-top {
+  bottom: calc(100% + 8px);
+}
+
+/* Search header */
+.bot-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.bot-menu-search svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.bot-menu-search-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bot-menu-search-text strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.bot-menu-count {
+  font-size: 11px;
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Command list */
+.bot-menu-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.bot-menu-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.bot-menu-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bot-menu-list::-webkit-scrollbar-thumb {
+  background: var(--bg-hover);
+  border-radius: 3px;
+}
+
+/* Category header */
+.bot-menu-category {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bot-menu-category-icon {
+  font-size: 12px;
+}
+
+.bot-menu-category-label {
+  color: var(--text-muted);
+}
+
+/* Command item */
+.bot-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+  gap: 12px;
+}
+
+.bot-menu-item:hover,
+.bot-menu-item.active {
+  background: var(--bg-hover);
+}
+
+.bot-menu-item.active {
+  background: var(--bg-active);
+}
+
+.bot-menu-item-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.bot-menu-command {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.bot-menu-param {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bot-menu-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Empty state */
+.bot-menu-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.bot-menu-empty-icon {
+  font-size: 28px;
+  opacity: 0.5;
+}
+
+/* Footer */
+.bot-menu-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Bot menu trigger button style */
+.bot-menu-trigger {
+  color: var(--accent) !important;
+}
+
+.bot-menu-trigger:hover {
+  background: var(--accent) !important;
+  color: var(--bg-primary) !important;
+}
+
 /* ─── Text Input ─────────────────────────────────────────── */
 
 .chat-input-textarea {
