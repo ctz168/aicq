@@ -369,7 +369,8 @@ async function testFriendsEndpoints() {
     const { status, body } = await get(baseUrl, `/api/v1/friends?nodeId=${nodeAId}`);
     assert.equal(status, 200, "should return 200");
     assert.ok(Array.isArray(body.friends), "friends should be an array");
-    assert.ok(body.friends.includes(nodeBId), "NodeB should be in NodeA's friends");
+    const friendIds = body.friends.map((f: any) => f.id);
+    assert.ok(friendIds.includes(nodeBId), "NodeB should be in NodeA's friends");
     assert.equal(body.count, 1, "count should be 1");
   });
 
@@ -377,7 +378,8 @@ async function testFriendsEndpoints() {
     const { status, body } = await get(baseUrl, `/api/v1/friends?nodeId=${nodeBId}`);
     assert.equal(status, 200, "should return 200");
     assert.ok(Array.isArray(body.friends), "friends should be an array");
-    assert.ok(body.friends.includes(nodeAId), "NodeA should be in NodeB's friends");
+    const friendIds = body.friends.map((f: any) => f.id);
+    assert.ok(friendIds.includes(nodeAId), "NodeA should be in NodeB's friends");
     assert.equal(body.count, 1, "count should be 1");
   });
 
