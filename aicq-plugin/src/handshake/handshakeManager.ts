@@ -338,9 +338,13 @@ export class HandshakeManager {
     const newEphemeralKeys = generateKeyExchangeKeyPair();
 
     // Derive new session key using new ephemeral + existing identity keys
+    // 3 unique DH shared secrets for key derivation:
+    // ee = new_ephemeral × friend_identity (ephemeral-ephemeral-like)
+    // se = our_static_exchange × friend_identity (static-ephemeral)
+    // es = our_static_identity × friend_identity (static-static cross)
     const ee = computeSharedSecret(newEphemeralKeys.secretKey, friend.publicKey);
     const se = computeSharedSecret(this.store.exchangeKeys.secretKey, friend.publicKey);
-    const es = computeSharedSecret(newEphemeralKeys.secretKey, friend.publicKey);
+    const es = computeSharedSecret(this.store.identityKeys.secretKey, friend.publicKey);
 
     // Combine shared secrets for key derivation
     const combined = new Uint8Array(96);

@@ -80,8 +80,10 @@ router.get('/temp-number/:number', generalLimiter, (req: Request, res: Response)
       res.status(404).json({ error: 'Temp number not found or expired' });
       return;
     }
+    const targetNode = store.nodes.get(record.nodeId);
     res.json({
       nodeId: record.nodeId,
+      publicKey: targetNode?.publicKey || '',
       expiresAt: record.expiresAt,
     });
   } catch (err: any) {

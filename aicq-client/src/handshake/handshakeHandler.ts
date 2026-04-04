@@ -325,8 +325,6 @@ export class HandshakeHandler {
 
     // Derive session key (responder side) using the same function
     // that the initiator will use, ensuring both sides agree.
-    const { completeHandshake } = await import('@aicq/crypto');
-
     const sessionKey = completeHandshake(
       response,
       pending.request,
@@ -423,12 +421,27 @@ export class HandshakeHandler {
 
   /* ──────────────── Response / Confirm handlers (outgoing) ──────────────── */
 
+  /** Buffer for signal messages that arrive before waitForResponse is called. */
+  private signalBuffer: Map<string, any> = new Map();
+
   private _handleResponse(data: any): void {
-    // Already handled via waitForResponse in initiateHandshake
+    // Buffer the response in case initiateHandshake hasn't set up waitForResponse yet.
+    // The waitForResponse mechanism in WSClient will pick this up.
+    // If no one consumes it within the timeout, it's safely discarded.
+    const sessionId = data?.sessionId;
+    if (sessionId) {
+      this.signalBuffer.set('response:' + sessionId, data);
+      // Auto-cleanup after 2 minutes
+      setTimeout(() => this.signalBuffer.delete('response:' + sessionId), 120_000);
+    }
   }
 
   private _handleConfirm(data: any): void {
-    // Confirm is handled via waitForResponse in the outgoing flow
+    const sessionId = data?.sessionId;
+    if (sessionId) {
+      this.signalBuffer.set('confirm:' + sessionId, data);
+      setTimeout(() => this.signalBuffer.delete('confirm:' + sessionId), 120_000);
+    }
   }
 
   /* ──────────────── Session key lookup ──────────────── */
@@ -443,6 +456,7 @@ export class HandshakeHandler {
   destroy(): void {
     this.outgoingEphemeral.clear();
     this.incomingRequests.clear();
+    this.signalBuffer.clear();
     this.progressCallback = null;
   }
 }

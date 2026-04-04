@@ -229,31 +229,65 @@ export class IdentityManager {
       }
 
       // Import keys
-      this.signingKeys = {
-        publicKey: Buffer.alloc(0), // Will be re-derived from secret key
-        secretKey: decodeBase64(payloadObj.signingSecretKey),
-      };
-      this.exchangeKeys = {
-        publicKey: Buffer.alloc(0),
-        secretKey: decodeBase64(payloadObj.exchangeSecretKey),
-      };
+      const signingSecretKey = decodeBase64(payloadObj.signingSecretKey);
+      const exchangeSecretKey = decodeBase64(payloadObj.exchangeSecretKey);
 
-      // We need the public keys. Since tweetnacl's sign key pair stores
-      // the public key at secretKey[32..64], extract it.
-      if (this.signingKeys.secretKey.length === 64) {
-        this.signingKeys.publicKey = this.signingKeys.secretKey.slice(32);
-        this.signingKeys.secretKey = this.signingKeys.secretKey;
+      // Derive Ed25519 public key from the 64-byte seed+public combined secret key
+      // tweetnacl stores the 32-byte public key at bytes 32-63 of the secret key
+      if (signingSecretKey.length === 64) {
+        this.signingKeys = {
+          publicKey: Buffer.from(signingSecretKey.slice(32, 64)),
+          secretKey: Buffer.from(signingSecretKey.slice(0, 32)),
+        };
+      } else {
+        // If only the 32-byte seed is provided, we cannot derive the public key
+        // without the full nacl library available here. Store what we have.
+        console.warn('[IdentityManager] Signing secret key is not 64 bytes, public key may be incomplete');
+        this.signingKeys = {
+          publicKey: Buffer.alloc(32), // Placeholder — will need to be derived
+          secretKey: signingSecretKey,
+        };
       }
-      // For exchange keys, we'd need to compute the public key from secret.
-      // For simplicity we'll derive using nacl.scalarMult.base when needed.
-      // Store and let the rest work.
-      // Actually, we need proper public keys. Let's regenerate exchange pair
-      // from the saved secret, and derive signing public from seed.
+
+      // For X25519 exchange keys, compute the public key from the secret key
+      // using scalar multiplication with the base point
+      if (exchangeSecretKey.length === 32) {
+        try {
+          const nacl = await import('tweetnacl');
+          this.exchangeKeys = {
+            publicKey: Buffer.from(nacl.scalarMult.base(exchangeSecretKey)),
+            secretKey: exchangeSecretKey,
+          };
+        } catch {
+          console.warn('[IdentityManager] tweetnacl not available, exchange public key not derived');
+          this.exchangeKeys = {
+            publicKey: Buffer.alloc(32),
+            secretKey: exchangeSecretKey,
+          };
+        }
+      } else if (exchangeSecretKey.length === 64) {
+        // Combined format (secret + public)
+        this.exchangeKeys = {
+          publicKey: Buffer.from(exchangeSecretKey.slice(32, 64)),
+          secretKey: Buffer.from(exchangeSecretKey.slice(0, 32)),
+        };
+      } else {
+        this.exchangeKeys = {
+          publicKey: Buffer.alloc(32),
+          secretKey: exchangeSecretKey,
+        };
+      }
 
       // Update store
       this.store.userId = payloadObj.userId;
-      this.store.signingKeys = this.signingKeys;
-      this.store.exchangeKeys = this.exchangeKeys;
+      this.store.signingKeys = {
+        publicKey: this.signingKeys.publicKey,
+        secretKey: this.signingKeys.secretKey,
+      };
+      this.store.exchangeKeys = {
+        publicKey: this.exchangeKeys.publicKey,
+        secretKey: this.exchangeKeys.secretKey,
+      };
       this.store.save();
 
       return true;

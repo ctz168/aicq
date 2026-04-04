@@ -9,7 +9,8 @@
  * with real WebRTC DataChannels using the same interface.
  */
 
-import { generateNonce, encrypt, decrypt } from '@aicq/crypto';
+// Encryption is handled at the ChatManager message level.
+// The P2P layer provides transport pass-through via WebSocket relay.
 import { WSClient } from '../services/wsClient.js';
 import { ClientStore } from '../store.js';
 import type { ConnectionCallback, DataCallback } from '../types.js';
@@ -138,23 +139,17 @@ export class P2PClient {
    */
   send(peerId: string, data: Buffer): boolean {
     const conn = this.connections.get(peerId);
-    if (!conn || !conn.connected || !conn.channelKey) {
+    if (!conn || !conn.connected) {
       return false;
     }
 
-    // Encrypt with channel key using a unique nonce
-    const nonce = this._deriveNonce(conn.nonceCounter++);
-    const { ciphertext } = encrypt(data, conn.channelKey);
-    // Note: encrypt() generates its own nonce internally. We'll use that.
-    // For simplicity we use the built-in encrypt which generates random nonces.
-    // This is fine for NaCl secretbox.
-
+    // P2P layer is a transport pass-through — encryption happens at ChatManager level.
     this.ws.send('file_chunk', {
       to: peerId,
       data: {
         type: 'p2p_data',
         fromId: this.store.userId,
-        payload: Buffer.from(ciphertext).toString('base64'),
+        payload: data.toString('base64'),
       },
     });
 
@@ -251,28 +246,22 @@ export class P2PClient {
 
   private _handleIncomingData(fromId: string, data: any): void {
     const conn = this.connections.get(fromId);
-    if (!conn || !conn.channelKey) {
+    if (!conn) {
       console.warn(`[P2P] Data from ${fromId} but no active connection`);
       return;
     }
 
     try {
-      const ciphertext = Buffer.from(data.payload, 'base64');
-      const plaintext = decrypt(ciphertext, conn.channelKey, generateNonce());
-
-      // Wait — we need the actual nonce used during encryption.
-      // Since encrypt() generates random nonces, we need a different approach.
-      // For the relay model, let's NOT double-encrypt since the WS relay
-      // already provides transport. The session key encryption is used at
-      // the message level (in ChatManager). Here we just pass through.
-
-      // Actually, the messages are already encrypted at the ChatManager level
-      // using encryptMessage(). So P2P relay just passes them through.
+      // P2P layer acts as a pure transport pass-through.
+      // Encryption is handled at the message level (ChatManager.encryptMessage).
+      // The relay server provides transport security via WSS.
       const raw = Buffer.from(data.payload, 'base64');
 
       // Notify per-peer callbacks
       for (const cb of conn.dataCallbacks) {
-        try { cb(raw); } catch { /* ignore */ }
+        try { cb(raw); } catch (err) {
+          console.warn(`[P2P] Data callback error for ${fromId}:`, err);
+        }
       }
 
       // Notify global callback
@@ -280,15 +269,8 @@ export class P2PClient {
         this.anyDataCallback(fromId, raw);
       }
     } catch (err) {
-      console.error(`[P2P] Failed to decrypt data from ${fromId}:`, err);
+      console.error(`[P2P] Failed to process data from ${fromId}:`, err);
     }
-  }
-
-  private _deriveNonce(counter: number): Uint8Array {
-    const nonce = new Uint8Array(24);
-    const view = new DataView(nonce.buffer);
-    view.setUint32(20, counter, false); // Use last 4 bytes
-    return nonce;
   }
 
   /* ──────────────── Cleanup ──────────────── */

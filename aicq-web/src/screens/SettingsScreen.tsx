@@ -43,30 +43,163 @@ const SettingsScreen: React.FC = () => {
     });
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!exportPassword) {
       setExportError('请输入密码');
       return;
     }
+    if (exportPassword.length < 8) {
+      setExportError('密码至少8位');
+      return;
+    }
     setExportError('');
-    // Generate a mock QR for now (actual crypto export needs @aicq/crypto password encryption)
-    const keys = client?.getSigningKeys();
-    if (!keys) {
-      setExportError('密钥未加载');
+
+    // Get stored key pair
+    const keypairStr = localStorage.getItem('aicq_keypair');
+    if (!keypairStr) {
+      setExportError('未找到本地密钥，请重新注册');
       return;
     }
 
-    // Create a simple encrypted payload representation
-    const payload = `aicq:privkey:v1:${btoa(state.userId)}:${Date.now().toString(36)}`;
-    setExportQR(payload);
+    try {
+      const keypair = JSON.parse(keypairStr);
+      if (!keypair.privateKey || !keypair.publicKey) {
+        setExportError('密钥数据不完整');
+        return;
+      }
+
+      // Create the payload to encrypt
+      const payloadObj = {
+        userId: state.userId,
+        publicKey: keypair.publicKey,
+        privateKey: keypair.privateKey,
+        exportedAt: Date.now(),
+      };
+      const payloadBytes = new TextEncoder().encode(JSON.stringify(payloadObj));
+
+      // Derive encryption key from password using PBKDF2
+      const encoder = new TextEncoder();
+      const passwordKey = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(exportPassword),
+        'PBKDF2',
+        false,
+        ['deriveBits', 'deriveKey']
+      );
+
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+
+      const aesKey = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        passwordKey,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt']
+      );
+
+      const encrypted = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        aesKey,
+        payloadBytes
+      );
+
+      // Build QR payload: aicq:privkey:v1:{salt_b64}:{iv_b64}:{encrypted_b64}:{expiry}
+      const saltB64 = btoa(String.fromCharCode(...salt));
+      const ivB64 = btoa(String.fromCharCode(...iv));
+      const encB64 = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+      const expiresAt = Date.now() + 60_000; // 60 seconds
+
+      const payload = `aicq:privkey:v1:${saltB64}:${ivB64}:${encB64}:${expiresAt.toString(36)}`;
+      setExportQR(payload);
+    } catch (err) {
+      setExportError('导出失败: ' + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!importQRText.trim()) {
       setImportError('请输入QR码数据');
       return;
     }
-    setImportError('导入功能需要在有密码解密支持的环境中使用');
+    if (!importPassword) {
+      setImportError('请输入解密密码');
+      return;
+    }
+    setImportError('');
+
+    try {
+      const qrPayload = importQRText.trim();
+
+      if (!qrPayload.startsWith('aicq:privkey:v1:')) {
+        setImportError('无效的QR码格式');
+        return;
+      }
+
+      const parts = qrPayload.split(':');
+      if (parts.length < 7) {
+        setImportError('QR码数据不完整');
+        return;
+      }
+
+      // Parse: aicq:privkey:v1:{salt}:{iv}:{encrypted}:{expiry}
+      const salt = Uint8Array.from(atob(parts[3]), c => c.charCodeAt(0));
+      const iv = Uint8Array.from(atob(parts[4]), c => c.charCodeAt(0));
+      const encrypted = Uint8Array.from(atob(parts[5]), c => c.charCodeAt(0));
+      const expiresAt = parseInt(parts[6], 36);
+
+      if (Date.now() > expiresAt) {
+        setImportError('QR码已过期（60秒有效期）');
+        return;
+      }
+
+      // Derive decryption key from password
+      const encoder = new TextEncoder();
+      const passwordKey = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(importPassword),
+        'PBKDF2',
+        false,
+        ['deriveBits', 'deriveKey']
+      );
+
+      const aesKey = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        passwordKey,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['decrypt']
+      );
+
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        aesKey,
+        encrypted
+      );
+
+      const payloadObj = JSON.parse(new TextDecoder().decode(decrypted));
+
+      if (!payloadObj.privateKey || !payloadObj.publicKey) {
+        setImportError('密钥数据不完整');
+        return;
+      }
+
+      // Save imported keys to localStorage
+      localStorage.setItem('aicq_keypair', JSON.stringify({
+        publicKey: payloadObj.publicKey,
+        privateKey: payloadObj.privateKey,
+        importedAt: Date.now(),
+      }));
+
+      setImportError('');
+      setShowImportDialog(false);
+      setImportQRText('');
+      setImportPassword('');
+      alert('✅ 密钥导入成功！页面将刷新。');
+      window.location.reload();
+    } catch (err) {
+      setImportError('导入失败: 密码错误或数据已损坏');
+    }
   };
 
   const handleReset = () => {

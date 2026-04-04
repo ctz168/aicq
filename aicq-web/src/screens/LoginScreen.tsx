@@ -5,6 +5,31 @@ type LoginTab = 'login' | 'register';
 type LoginType = 'email' | 'phone';
 
 /**
+ * Generate an Ed25519 key pair using Web Crypto API.
+ * Returns the public key as a base64 string for registration.
+ */
+async function generateEd25519KeyPair(): Promise<string> {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: 'Ed25519', namedCurve: 'Ed25519' },
+    true,
+    ['sign', 'verify']
+  );
+  const publicKeyBuffer = await crypto.subtle.exportKey('raw', keyPair.publicKey);
+  const publicKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(publicKeyBuffer)));
+
+  // Store the full key pair in localStorage for later use
+  const privateKeyBuffer = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+  const privateKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(privateKeyBuffer)));
+  localStorage.setItem('aicq_keypair', JSON.stringify({
+    publicKey: publicKeyBase64,
+    privateKey: privateKeyBase64,
+    createdAt: Date.now(),
+  }));
+
+  return publicKeyBase64;
+}
+
+/**
  * LoginScreen - 支持邮箱/手机号注册登录
  * 
  * 功能:
@@ -160,7 +185,9 @@ const LoginScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      // Generate keys (simplified - in production use crypto lib)
+      // Generate real Ed25519 key pair for E2EE
+      const publicKey = await generateEd25519KeyPair();
+
       const resp = await fetch(`${serverUrl}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,7 +197,7 @@ const LoginScreen: React.FC = () => {
           code: regCode,
           password: regPassword,
           displayName: regDisplayName || undefined,
-          publicKey: 'auto-generated-' + Date.now(), // will be replaced by real key gen in client
+          publicKey,
         }),
       });
       const data = await resp.json();

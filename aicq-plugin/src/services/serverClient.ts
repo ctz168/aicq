@@ -50,10 +50,11 @@ export class ServerClient {
       this.wsConnected = true;
       this.logger.info("[Server] WebSocket connected");
 
-      // Authenticate with the server
+      // Authenticate with the server using 'online' message type + nodeId
+      // The server expects type: "online" with nodeId field for WS registration
       this.wsSend({
-        type: "auth",
-        agentId: this.store.agentId,
+        type: "online",
+        nodeId: this.store.agentId,
         publicKey: Buffer.from(this.store.identityKeys.publicKey).toString("base64"),
       });
 
@@ -153,9 +154,9 @@ export class ServerClient {
    * Resolve a temp number to a node ID and public key.
    */
   async resolveTempNumber(number: string): Promise<{ nodeId: string; publicKey: string } | null> {
-    const res = await this.fetchGet<{ nodeId: string }>("/api/v1/temp-number/" + number);
+    const res = await this.fetchGet<{ nodeId: string; publicKey?: string }>("/api/v1/temp-number/" + number);
     if (!res) return null;
-    return { nodeId: res.nodeId, publicKey: "" };
+    return { nodeId: res.nodeId, publicKey: res.publicKey || "" };
   }
 
   /**
@@ -172,10 +173,19 @@ export class ServerClient {
   async initiateHandshake(
     targetTempNumber: string,
   ): Promise<{ sessionId: string; targetPublicKey: string } | null> {
-    return this.fetchPost("/api/v1/handshake/initiate", {
+    // First resolve the temp number to get target's public key
+    const targetInfo = await this.resolveTempNumber(targetTempNumber);
+    if (!targetInfo || !targetInfo.publicKey) {
+      this.logger.error("[Server] Cannot initiate handshake — could not resolve target or missing publicKey");
+      return null;
+    }
+    // Then initiate handshake
+    const result = await this.fetchPost<{ sessionId: string }>("/api/v1/handshake/initiate", {
       requesterId: this.store.agentId,
       targetTempNumber,
     });
+    if (!result) return null;
+    return { sessionId: result.sessionId, targetPublicKey: targetInfo.publicKey };
   }
 
   /**
