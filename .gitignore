@@ -22,3 +22,4 @@ squashfs-root/
 *.dmg
 *.apk
 android-build.log
+skills/
