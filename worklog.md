@@ -1,4 +1,33 @@
 ---
+Task ID: 7-restructure
+Agent: Main Agent
+Task: 重组目录结构为三大模块 (服务端/插件/客户端)
+
+Work Log:
+- 分析当前目录结构：7个平级子包 (aicq-server/client/plugin/web/admin/app/mobile) + 共享库 (aicq-crypto)
+- 规划目标结构：server/ (服务端), plugin/ (插件), client/ (客户端含 web/cli/desktop/mobile), admin/ (管理界面), shared/crypto/ (共享加密库)
+- 使用 git mv 保留完整 git 历史移动所有目录
+- 更新 monorepo 根 package.json: workspaces 配置和 scripts 路径
+- 更新 5 个子包 package.json 的 file: 依赖路径 (client/cli, plugin, client/web, client/desktop, tests)
+- 更新 Electron main.js 跨包路径 (aicq-web → web)
+- 更新 Capacitor capacitor.config.ts 和 package.json (aicq-web → web)
+- 更新 Dockerfile (3个阶段的路径全部更新)
+- 更新 docker/entrypoint.sh 和 docker/nginx.conf
+- 更新 4 个部署脚本 (deploy-server.sh, deploy-web.sh, deploy-plugin.sh)
+- 更新 5 个构建/发布脚本 (build-all.sh, release.sh, build-android.sh, build-desktop.sh, test-features.sh)
+- 更新 8 个测试文件的 import 路径 (~30 处替换)
+- 验证 TypeScript 编译 (server 编译通过, admin/plugin 预存的类型问题不变)
+- 全局搜索确认无残留旧路径引用
+- 提交并推送到 GitHub
+
+Stage Summary:
+- 290 个文件变更，157 处新增，152 处删除
+- commit 4931bf1 已推送到 main 分支
+- 目录结构清晰为三大模块：服务端 (server/ + admin/)、插件 (plugin/)、客户端 (client/)
+- 共享库独立至 shared/crypto/
+
+---
+
 Task ID: 6-release
 Agent: Main Agent
 Task: 构建客户端、测试、一键打包脚本、GitHub Release 发布
