@@ -10,18 +10,19 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "3000:3000"
+      - "61018:61018"
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=61018
       - DOMAIN=aicq.online
+      - AICQ_SERVER_URL=http://localhost:61018
       - MAX_FRIENDS=200
       - TEMP_NUMBER_TTL_HOURS=24
     volumes:
       - aicq-data:/app/data
       - aicq-ssl:/etc/nginx/ssl
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:61018/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -30,7 +30,7 @@
 ```
 aicq/
 ├── server/             # 🔵 服务端 (Express + WebSocket)
-├── admin/              # 🔵 管理后台 (Next.js)
+│   └── admin/          # 🔵 管理后台 (Next.js)
 ├── plugin/             # 🟢 OpenClaw AI 插件
 ├── client/
 │   ├── web/            # 🟠 Web 客户端 (React + Vite)
@@ -38,7 +38,6 @@ aicq/
 │   ├── desktop/        #    桌面端 (Electron)
 │   └── mobile/         #    移动端 (Capacitor)
 ├── shared/crypto/      # ⚙️ 共享加密库
-├── tests/              # 测试
 ├── scripts/            # 构建和发布脚本
 └── deploy-all.sh       # 全栈一键部署
 ```
@@ -87,8 +86,9 @@ sudo ./client/web/deploy.sh
 ## 服务器
 
 - 域名: `aicq.online`
-- 端口: `3000`
-- API: `https://aicq.online/api/v1/`
+- 管理后台: `https://aicq.online/` (端口 80)
+- API: `https://aicq.online/api/v1/` (端口 61018)
+- WebSocket: `wss://aicq.online/ws` (端口 61018)
 
 ## License
 

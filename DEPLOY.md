@@ -11,7 +11,7 @@
 ```
 aicq/
 ├── server/             # 🔵 服务端 (Express + WebSocket)
-├── admin/              # 🔵 管理后台 (Next.js)
+│   └── admin/          #    管理后台 (Next.js)
 ├── plugin/             # 🟢 OpenClaw AI 插件
 ├── client/             # 🟠 客户端
 │   ├── web/            #   Web 客户端 (React + Vite)
@@ -21,7 +21,6 @@ aicq/
 ├── shared/crypto/      # ⚙️ 共享加密库 (Ed25519/X25519/AES-256-GCM)
 ├── deploy-all.sh       # 全栈一键部署
 ├── scripts/            # 构建和发布脚本
-├── tests/              # 测试
 └── DEPLOY.md           # 本文件 (总览)
 ```
 

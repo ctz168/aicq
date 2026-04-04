@@ -18,8 +18,8 @@ if [ ! -f /etc/nginx/ssl/aicq.online.crt ]; then
     echo "WARNING: Using self-signed certificate. Replace with Let's Encrypt for production."
 fi
 
-# Start Node.js server (background)
-echo "Starting AICQ server on port 3000..."
+# Start Node.js server (background) on port 61018
+echo "Starting AICQ server on port 61018..."
 cd /app/server
 node dist/index.js &
 SERVER_PID=$!
@@ -27,8 +27,24 @@ SERVER_PID=$!
 # Wait for server to be ready
 echo "Waiting for server to start..."
 for i in $(seq 1 30); do
-    if wget -q -O /dev/null http://127.0.0.1:3000/health 2>/dev/null; then
+    if wget -q -O /dev/null http://127.0.0.1:61018/health 2>/dev/null; then
         echo "Server is ready!"
+        break
+    fi
+    sleep 1
+done
+
+# Start Admin panel (Next.js standalone) on port 80
+echo "Starting Admin panel on port 80..."
+cd /app/admin
+AICQ_SERVER_URL=http://localhost:61018 node server.js &
+ADMIN_PID=$!
+
+# Wait for admin to be ready
+echo "Waiting for admin panel to start..."
+for i in $(seq 1 30); do
+    if wget -q -O /dev/null http://127.0.0.1:80/ 2>/dev/null; then
+        echo "Admin panel is ready!"
         break
     fi
     sleep 1
@@ -42,6 +58,7 @@ NGINX_PID=$!
 # Cleanup on exit
 cleanup() {
     echo "Shutting down..."
+    kill $ADMIN_PID 2>/dev/null
     kill $SERVER_PID 2>/dev/null
     kill $NGINX_PID 2>/dev/null
     wait
@@ -49,9 +66,10 @@ cleanup() {
 trap cleanup SIGTERM SIGINT
 
 echo "=== AICQ is running ==="
-echo "  Web UI:    https://aicq.online"
+echo "  Admin UI:  https://aicq.online/"
 echo "  API:       https://aicq.online/api/v1/"
 echo "  WebSocket: wss://aicq.online/ws"
+echo "  Server:    http://localhost:61018 (internal)"
 echo ""
 
 wait

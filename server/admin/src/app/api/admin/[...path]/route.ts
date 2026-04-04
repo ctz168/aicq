@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const AICQ_SERVER_URL = process.env.AICQ_SERVER_URL || 'http://localhost:3001'
+const AICQ_SERVER_URL = process.env.AICQ_SERVER_URL || 'http://localhost:61018'
 
 export async function GET(
   request: NextRequest,
