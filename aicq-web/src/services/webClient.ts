@@ -290,6 +290,11 @@ class BrowserStore {
     if (!this.data.groupMessages[groupId]) this.data.groupMessages[groupId] = [];
     this.data.groupMessages[groupId].push(message);
   }
+
+  /** Clear all chat history (used after migrating to IndexedDB) */
+  clearChatHistory(): void {
+    this.data.chatHistory = {};
+  }
 }
 
 // ─── Event Emitter (simple browser impl) ─────────────────────
@@ -705,6 +710,113 @@ class BrowserWSClient extends SimpleEventEmitter {
   }
 }
 
+// ─── IndexedDB Message Cache ──────────────────────────────
+
+class MessageCache {
+  private static DB_NAME = 'aicq_messages';
+  private static DB_VERSION = 1;
+  private static STORE_NAME = 'messages';
+  private db: IDBDatabase | null = null;
+
+  async init(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(MessageCache.DB_NAME, MessageCache.DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(MessageCache.STORE_NAME)) {
+          const store = db.createObjectStore(MessageCache.STORE_NAME, { keyPath: 'id' });
+          store.createIndex('friendId', 'friendId', { unique: false });
+          store.createIndex('friendId_timestamp', ['friendId', 'timestamp'], { unique: false });
+        }
+      };
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  private async getStore(mode: IDBTransactionMode): Promise<IDBObjectStore> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('IndexedDB not available');
+    const tx = this.db.transaction(MessageCache.STORE_NAME, mode);
+    return tx.objectStore(MessageCache.STORE_NAME);
+  }
+
+  async getMessages(friendId: string, limit?: number, before?: number): Promise<ChatMessage[]> {
+    const store = await this.getStore('readonly');
+    const index = store.index('friendId_timestamp');
+    const range = before ? IDBKeyRange.bound([friendId, 0], [friendId, before]) : undefined;
+    const request = index.openCursor(range, 'prev');
+    const messages: ChatMessage[] = [];
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor && (limit === undefined || messages.length < limit)) {
+          messages.unshift(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(messages);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getMessageCount(friendId: string): Promise<number> {
+    const store = await this.getStore('readonly');
+    const index = store.index('friendId');
+    const request = index.count(IDBKeyRange.only(friendId));
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async addMessage(message: ChatMessage): Promise<void> {
+    const store = await this.getStore('readwrite');
+    return new Promise((resolve, reject) => {
+      const request = store.put(message);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async updateMessage(messageId: string, updates: Partial<ChatMessage>): Promise<void> {
+    const store = await this.getStore('readwrite');
+    const request = store.get(messageId);
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const msg = request.result;
+        if (msg) {
+          store.put({ ...msg, ...updates });
+        }
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async clearFriendMessages(friendId: string): Promise<void> {
+    const store = await this.getStore('readwrite');
+    const index = store.index('friendId');
+    const request = index.openCursor(IDBKeyRange.only(friendId));
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+}
+
 // ─── Main WebClient ──────────────────────────────────────────
 
 export interface WebClientConfig {
@@ -726,6 +838,9 @@ export class WebClient extends SimpleEventEmitter {
   /** Active file transfer abort controllers for pause/cancel */
   private transferControllers = new Map<string, AbortController>();
 
+  /** IndexedDB message cache */
+  private messageCache = new MessageCache();
+
   constructor(config: WebClientConfig) {
     super();
     const wsUrl = config.wsUrl ?? config.serverUrl.replace(/^http/, 'ws') + '/ws';
@@ -737,6 +852,13 @@ export class WebClient extends SimpleEventEmitter {
   /* ─── Initialize ──────────────────────────────────────────── */
 
   async initialize(): Promise<{ userId: string; fingerprint: string; isNewUser: boolean }> {
+    // Initialize IndexedDB message cache early
+    try {
+      await this.messageCache.init();
+    } catch (err) {
+      console.warn('[WebClient] IndexedDB init failed, falling back to localStorage:', err);
+    }
+
     const loaded = this.store.load();
 
     if (loaded && this.store.userId) {
@@ -763,12 +885,43 @@ export class WebClient extends SimpleEventEmitter {
       console.warn('[WebClient] Server registration failed:', err);
     }
 
+    // Migrate messages from localStorage to IndexedDB (one-time)
+    await this._migrateMessagesToIDB();
+
     this.api.setNodeId(userId);
     this.ws.connect(userId);
     this._wireEvents();
     this._initialized = true;
 
     return { userId, fingerprint, isNewUser: !loaded };
+  }
+
+  /**
+   * Migrate messages from localStorage chatHistory to IndexedDB.
+   * Runs once; clears localStorage chatHistory after successful migration.
+   */
+  private async _migrateMessagesToIDB(): Promise<void> {
+    try {
+      const history = this.store.chatHistory;
+      if (history.size === 0) return;
+
+      let migrated = 0;
+      for (const [friendId, messages] of history) {
+        for (const msg of messages) {
+          await this.messageCache.addMessage(msg);
+          migrated++;
+        }
+      }
+
+      if (migrated > 0) {
+        console.log(`[WebClient] Migrated ${migrated} messages to IndexedDB`);
+        // Clear chatHistory from localStorage to free space
+        this.store.clearChatHistory();
+        this.store.save();
+      }
+    } catch (err) {
+      console.warn('[WebClient] Message migration to IndexedDB failed:', err);
+    }
   }
 
   private _generateKeys(): void {
@@ -794,6 +947,8 @@ export class WebClient extends SimpleEventEmitter {
       };
       this.store.addMessage(msg.fromId, chatMsg);
       this.store.updateMessageStatus(chatMsg.id, 'delivered');
+      // Fire-and-forget write to IndexedDB cache
+      this.messageCache.addMessage(chatMsg).catch(() => {});
       this.emit('message', chatMsg);
     });
 
@@ -1041,6 +1196,16 @@ export class WebClient extends SimpleEventEmitter {
     return this.store.getMessages(friendId);
   }
 
+  /** Load a page of messages from IndexedDB cache (for incremental loading) */
+  async loadMessagePage(friendId: string, limit: number, before?: number): Promise<ChatMessage[]> {
+    return this.messageCache.getMessages(friendId, limit, before);
+  }
+
+  /** Get total message count for a friend from IndexedDB */
+  async getMessageCount(friendId: string): Promise<number> {
+    return this.messageCache.getMessageCount(friendId);
+  }
+
   sendMessage(friendId: string, text: string): ChatMessage {
     // Auto-detect markdown for messages that look like markdown
     const isMd = this._detectMarkdown(text);
@@ -1054,6 +1219,8 @@ export class WebClient extends SimpleEventEmitter {
       status: 'sent',
     };
     this.store.addMessage(friendId, msg);
+    // Fire-and-forget write to IndexedDB cache
+    this.messageCache.addMessage(msg).catch(() => {});
     this.ws.send('message', {
       fromId: msg.fromId,
       toId: msg.toId,

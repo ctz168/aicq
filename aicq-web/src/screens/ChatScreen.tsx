@@ -32,6 +32,9 @@ const ChatScreen: React.FC = () => {
   const [dragOver, setDragOver] = useState(false);
   const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: ChatMessage } | null>(null);
+  const [displayCount, setDisplayCount] = useState(50);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -65,13 +68,55 @@ const ChatScreen: React.FC = () => {
     scrollToBottom();
   }, [messages.length, isTyping, streamingState?.content, scrollToBottom]);
 
+  // Compute visible messages (slice from the end for incremental loading)
+  const visibleMessages = useMemo(() => {
+    if (messages.length <= displayCount) {
+      setHasMoreMessages(false);
+      return messages;
+    }
+    setHasMoreMessages(true);
+    return messages.slice(messages.length - displayCount);
+  }, [messages, displayCount]);
+
+  // Load more messages handler (maintains scroll position)
+  const handleLoadMore = useCallback(() => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    // Remember scroll position to maintain visual position
+    const container = messagesContainerRef.current;
+    const prevScrollHeight = container?.scrollHeight ?? 0;
+
+    setDisplayCount(prev => Math.min(prev + 30, messages.length));
+
+    // Restore scroll position after loading more
+    requestAnimationFrame(() => {
+      if (container) {
+        const newScrollHeight = container.scrollHeight;
+        container.scrollTop = newScrollHeight - prevScrollHeight;
+      }
+      setIsLoadingMore(false);
+    });
+  }, [isLoadingMore, messages.length]);
+
   // Track if user scrolls up (disable auto-scroll)
   const handleScroll = useCallback(() => {
     if (!messagesContainerRef.current) return;
     const container = messagesContainerRef.current;
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    const isNearTop = container.scrollTop < 100;
     autoScrollRef.current = isNearBottom;
-  }, []);
+
+    // Load more when scrolling to top
+    if (isNearTop && hasMoreMessages && !isLoadingMore && messages.length > displayCount) {
+      handleLoadMore();
+    }
+  }, [hasMoreMessages, isLoadingMore, messages.length, displayCount, handleLoadMore]);
+
+  // Reset display window when switching friends
+  useEffect(() => {
+    setDisplayCount(50);
+    setHasMoreMessages(true);
+  }, [friendId]);
 
   // Mark messages as read when opening chat
   useEffect(() => {
@@ -238,7 +283,7 @@ const ChatScreen: React.FC = () => {
     const elements: React.ReactNode[] = [];
     let lastDate = '';
 
-    for (const msg of messages) {
+    for (const msg of visibleMessages) {
       // Skip streaming messages that are being shown via StreamingMessage component
       if (msg.type === 'streaming' && !msg.streamingActive) continue;
 
@@ -273,8 +318,17 @@ const ChatScreen: React.FC = () => {
       }
     }
 
+    // Add "Load more" indicator at top if hasMoreMessages
+    if (hasMoreMessages && visibleMessages.length > 0) {
+      elements.unshift(
+        <div key="load-more" className="load-more-indicator" onClick={handleLoadMore}>
+          {isLoadingMore ? '加载中...' : '↑ 加载更多消息'}
+        </div>
+      );
+    }
+
     return elements;
-  }, [messages, state.userId, handleMessageContextMenu]);
+  }, [visibleMessages, state.userId, handleMessageContextMenu, hasMoreMessages, isLoadingMore]);
 
   if (!friendId || !friend) {
     return (

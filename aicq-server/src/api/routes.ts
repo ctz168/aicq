@@ -408,4 +408,78 @@ router.post('/task-plan/push', generalLimiter, (req: Request, res: Response) => 
   }
 });
 
+// ─── Sub-Agent Progress Push ─────────────────────────────────────
+
+/**
+ * POST /api/v1/subagent-progress/push
+ * Push sub-agent progress events (subagent_chunk / subagent_complete) to connected clients.
+ * Used by StableClaw's aicq-chat plugin to forward sub-agent lifecycle events to the web UI.
+ *
+ * Body: {
+ *   senderId: string,          // The AI agent's node ID on the aicq server
+ *   runId: string,             // Sub-agent run identifier
+ *   phase: string,             // Progress phase (spawned/started/tool_call/tool_result/thinking/text/error/completed/killed/timeout)
+ *   message: string,           // Human-readable progress message
+ *   payload: object,           // Full event payload forwarded to WebSocket clients
+ *   recipientIds?: string[],   // Optional: specific recipient node IDs
+ * }
+ */
+router.post('/subagent-progress/push', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const { senderId, runId, phase, message, payload, recipientIds } = req.body;
+
+    if (!senderId || !runId || !phase) {
+      res.status(400).json({ error: '缺少必填字段: senderId, runId, phase' });
+      return;
+    }
+
+    const terminalPhases = ['completed', 'killed', 'timeout'];
+    const messageType = terminalPhases.includes(phase)
+      ? 'subagent_complete'
+      : 'subagent_chunk';
+
+    // Determine target recipients
+    let targets: string[] = [];
+
+    if (Array.isArray(recipientIds) && recipientIds.length > 0) {
+      targets = recipientIds;
+    } else {
+      const senderNode = store.nodes.get(senderId);
+      if (senderNode && senderNode.friends.size > 0) {
+        targets = Array.from(senderNode.friends);
+      } else {
+        targets = getOnlineNodeIds().filter((id) => id !== senderId);
+      }
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    const wsMessage = {
+      type: messageType,
+      fromId: senderId,
+      data: {
+        runId,
+        phase,
+        message,
+        ...payload,
+      },
+      timestamp: Date.now(),
+    };
+
+    for (const targetId of targets) {
+      const delivered = sendDirectMessage(targetId, wsMessage);
+      if (delivered) {
+        sent++;
+      } else {
+        failed++;
+      }
+    }
+
+    res.json({ sent, failed, messageType, runId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -693,6 +693,19 @@ html, body, #root {
 
 /* ─── Typing Indicator ───────────────────────────────────── */
 
+.load-more-indicator {
+  text-align: center;
+  padding: 12px;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+  transition: color 0.2s;
+}
+.load-more-indicator:hover {
+  color: var(--accent, #0084ff);
+}
+
 .typing-indicator {
   padding: 12px 18px !important;
   display: flex !important;

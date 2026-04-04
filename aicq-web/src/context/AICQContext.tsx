@@ -350,6 +350,7 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   const unreadCountsRef = useRef<UnreadCounts>({});
   const streamingRef = useRef<Record<string, StreamingState>>({});
   const taskPlansRef = useRef<TaskPlan[]>([]);
+  const subAgentsRef = useRef<SubAgentSession[]>([]);
 
   const connect = useCallback(async (serverUrl: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -546,12 +547,14 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
 
       client.on('subagent_chunk', (msg: any) => {
         const session = msg.data || msg;
+        // Use ref to avoid stale closure (connect has [] deps)
+        const existingOutput = subAgentsRef.current.find(s => s.id === session.id)?.output || '';
         dispatch({ type: 'UPDATE_SUB_AGENT', payload: {
           id: session.id,
           parentMessageId: session.parentMessageId || '',
           task: session.task || '',
           status: session.status || 'running',
-          output: (state.subAgents.find(s => s.id === session.id)?.output || '') + (session.chunk || ''),
+          output: existingOutput + (session.chunk || ''),
           createdAt: session.createdAt || Date.now(),
           updatedAt: Date.now(),
         }});
@@ -999,9 +1002,13 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Keep taskPlansRef in sync with reducer state
+    // Keep refs in sync with reducer state (avoid stale closures in connect handlers)
     taskPlansRef.current = state.taskPlans;
   }, [state.taskPlans]);
+
+  useEffect(() => {
+    subAgentsRef.current = state.subAgents;
+  }, [state.subAgents]);
 
   useEffect(() => {
     return () => {
