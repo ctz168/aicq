@@ -582,6 +582,41 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         }});
       });
 
+      // ─── Task Plan P2P Events (from stableclaw agent) ───────
+      client.on('task_plan_update', (msg: any) => {
+        const data = msg.data || msg;
+        const plan: TaskPlan = {
+          id: data.planId || data.id,
+          friendId: data.friendId || msg.fromId || '',
+          title: data.title || '任务计划',
+          tasks: (data.steps || []).map((step: any) => ({
+            id: step.id || step.stepId,
+            title: step.description || step.title || '',
+            status: step.status || 'pending',
+            order: step.priority || step.order || 0,
+            createdAt: step.createdAt || Date.now(),
+            updatedAt: step.updatedAt || Date.now(),
+          })),
+          createdAt: data.createdAt || Date.now(),
+          updatedAt: data.updatedAt || Date.now(),
+        };
+
+        const existingPlan = state.taskPlans.find(p => p.id === plan.id);
+        if (existingPlan) {
+          dispatch({ type: 'UPDATE_TASK_PLAN', payload: plan });
+        } else {
+          dispatch({ type: 'ADD_TASK_PLAN', payload: plan });
+        }
+      });
+
+      client.on('task_plan_delete', (msg: any) => {
+        const data = msg.data || msg;
+        const planId = data.planId || data.id;
+        if (planId) {
+          dispatch({ type: 'REMOVE_TASK_PLAN', payload: planId });
+        }
+      });
+
       const result = await client.initialize();
 
       dispatch({
@@ -634,7 +669,7 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [state.typingState, state.activeFriendId]);
+  }, []);
 
   const navigate = useCallback((screen: ScreenName, targetId: string | null = null) => {
     dispatch({ type: 'SET_SCREEN', payload: screen });

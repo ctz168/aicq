@@ -654,6 +654,13 @@ class BrowserWSClient extends SimpleEventEmitter {
       case 'subagent_waiting':
         this.emit('subagent_waiting', msg);
         break;
+      // ─── Task Plan (P2P from stableclaw agent) ─────────────
+      case 'task_plan_update':
+        this.emit('task_plan_update', msg);
+        break;
+      case 'task_plan_delete':
+        this.emit('task_plan_delete', msg);
+        break;
       case 'error':
         this.emit('error', new Error(msg.error ?? 'Server error'));
         break;

@@ -3,7 +3,7 @@ import { getOrCreateNode, store } from '../db/memoryStore';
 import * as tempNumberService from '../services/tempNumberService';
 import * as handshakeService from '../services/handshakeService';
 import * as fileTransferService from '../services/fileTransferService';
-import { relaySignal } from '../services/p2pDiscoveryService';
+import { relaySignal, sendDirectMessage, getOnlineNodeIds } from '../services/p2pDiscoveryService';
 import {
   generalLimiter,
   tempNumberLimiter,
@@ -333,6 +333,76 @@ router.get('/file/:sessionId/missing', generalLimiter, (req: Request, res: Respo
   try {
     const missing = fileTransferService.getMissingChunks(req.params.sessionId);
     res.json({ missingChunks: missing, count: missing.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Task Plan Push ──────────────────────────────────────────────
+
+/**
+ * POST /api/v1/task-plan/push
+ * Push task plan updates (task_plan_update / task_plan_delete) to connected clients.
+ * Used by StableClaw's aicq-chat plugin to forward task_plan tool results to the web UI.
+ *
+ * Body: {
+ *   senderId: string,          // The AI agent's node ID on the aicq server
+ *   messageType: 'task_plan_update' | 'task_plan_delete',
+ *   payload: object,           // { planId, title, steps, friendId?, ... }
+ *   recipientIds?: string[],   // Optional: specific recipient node IDs
+ * }
+ */
+router.post('/task-plan/push', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const { senderId, messageType, payload, recipientIds } = req.body;
+
+    if (!senderId || !messageType || !payload) {
+      res.status(400).json({ error: '缺少必填字段: senderId, messageType, payload' });
+      return;
+    }
+
+    if (!['task_plan_update', 'task_plan_delete'].includes(messageType)) {
+      res.status(400).json({ error: '无效的 messageType，支持: task_plan_update, task_plan_delete' });
+      return;
+    }
+
+    // Determine target recipients
+    let targets: string[] = [];
+
+    if (Array.isArray(recipientIds) && recipientIds.length > 0) {
+      // Use explicitly specified recipients
+      targets = recipientIds;
+    } else {
+      // Fall back to all online friends of the sender
+      const senderNode = store.nodes.get(senderId);
+      if (senderNode && senderNode.friends.size > 0) {
+        targets = Array.from(senderNode.friends);
+      } else {
+        // No friends registered — broadcast to all online nodes
+        targets = getOnlineNodeIds().filter((id) => id !== senderId);
+      }
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    const message = {
+      type: messageType,
+      fromId: senderId,
+      data: payload,
+      timestamp: Date.now(),
+    };
+
+    for (const targetId of targets) {
+      const delivered = sendDirectMessage(targetId, message);
+      if (delivered) {
+        sent++;
+      } else {
+        failed++;
+      }
+    }
+
+    res.json({ sent, failed, messageType });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

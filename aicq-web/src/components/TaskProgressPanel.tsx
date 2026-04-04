@@ -22,8 +22,9 @@ interface TaskProgressPanelProps {
 }
 
 const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
-  const { getTaskPlans } = useAICQ();
+  const { getTaskPlans, clearTaskPlan } = useAICQ();
   const [expanded, setExpanded] = useState(true);
+  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
 
   const plans = useMemo(() => getTaskPlans(friendId), [getTaskPlans, friendId]);
 
@@ -52,8 +53,14 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
     return [...allTasks].sort((a, b) => a.order - b.order);
   }, [allTasks]);
 
+  const isAllDone = progressPercent === 100;
+
+  const togglePlan = (planId: string) => {
+    setExpandedPlanId((prev) => (prev === planId ? null : planId));
+  };
+
   return (
-    <div className="task-progress-panel">
+    <div className={`task-progress-panel ${isAllDone ? 'all-done' : ''}`}>
       {/* Collapsible Header */}
       <div
         className="task-progress-header"
@@ -68,9 +75,9 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
         }}
       >
         <div className="task-progress-header-left">
-          <span className="task-progress-icon">📋</span>
+          <span className="task-progress-icon">{isAllDone ? '🎉' : '📋'}</span>
           <span className="task-progress-title">
-            {activeTask ? activeTask.title : '任务计划'}
+            {activeTask ? activeTask.title : isAllDone ? '任务全部完成' : '任务计划'}
           </span>
         </div>
         <div className="task-progress-header-right">
@@ -79,7 +86,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
             {completedCount}/{totalCount}
           </span>
           {/* Progress percentage */}
-          <span className={`task-progress-percent ${progressPercent === 100 ? 'done' : ''}`}>
+          <span className={`task-progress-percent ${isAllDone ? 'done' : ''}`}>
             {progressPercent}%
           </span>
           {/* Expand/collapse arrow */}
@@ -94,24 +101,86 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
       {/* Progress bar */}
       <div className="task-progress-bar-container">
         <div
-          className={`task-progress-bar-fill ${progressPercent === 100 ? 'complete' : ''}`}
+          className={`task-progress-bar-fill ${isAllDone ? 'complete' : ''}`}
           style={{ width: `${progressPercent}%` }}
-        />
+        >
+          {!isAllDone && (
+            <div className="task-progress-bar-glow" />
+          )}
+        </div>
       </div>
 
       {/* Expanded task list */}
       {expanded && (
         <div className="task-progress-list">
-          {sortedTasks.map((task) => (
-            <div
-              key={task.id}
-              className={`task-progress-item ${task.status} ${task.status === 'in_progress' ? 'active' : ''}`}
-            >
-              <span className="task-progress-item-icon">{statusIcons[task.status]}</span>
-              <span className="task-progress-item-title">{task.title}</span>
-              <span className="task-progress-item-status">{statusLabels[task.status]}</span>
+          {plans.length > 1 && (
+            <div className="task-progress-plan-group">
+              {plans.map((plan) => {
+                const planCompleted = plan.tasks.filter(t => t.status === 'completed').length;
+                const planTotal = plan.tasks.length;
+                const planPercent = planTotal > 0 ? Math.round((planCompleted / planTotal) * 100) : 0;
+
+                return (
+                  <div key={plan.id} className="task-progress-plan-item">
+                    <div
+                      className="task-progress-plan-header"
+                      onClick={() => togglePlan(plan.id)}
+                    >
+                      <span className="task-progress-plan-title">{plan.title}</span>
+                      <div className="task-progress-plan-meta">
+                        <span className="task-progress-counter">{planCompleted}/{planTotal}</span>
+                        <span className={`task-progress-percent ${planPercent === 100 ? 'done' : ''}`}>
+                          {planPercent}%
+                        </span>
+                        <span className={`task-progress-arrow ${expandedPlanId === plan.id ? 'expanded' : ''}`}>
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                            <path d="M3 5L6 8L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+                      </div>
+                    </div>
+                    {/* Mini progress bar for plan */}
+                    <div className="task-progress-bar-container mini">
+                      <div
+                        className={`task-progress-bar-fill ${planPercent === 100 ? 'complete' : ''}`}
+                        style={{ width: `${planPercent}%` }}
+                      />
+                    </div>
+                    {expandedPlanId === plan.id && (
+                      <div className="task-progress-steps">
+                        {[...plan.tasks]
+                          .sort((a, b) => a.order - b.order)
+                          .map((task) => (
+                            <div
+                              key={task.id}
+                              className={`task-progress-item ${task.status} ${task.status === 'in_progress' ? 'active' : ''}`}
+                            >
+                              <span className="task-progress-item-icon">{statusIcons[task.status]}</span>
+                              <span className="task-progress-item-title">{task.title}</span>
+                              <span className="task-progress-item-status">{statusLabels[task.status]}</span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
+          {plans.length <= 1 && (
+            <div className="task-progress-steps">
+              {sortedTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className={`task-progress-item ${task.status} ${task.status === 'in_progress' ? 'active' : ''}`}
+                >
+                  <span className="task-progress-item-icon">{statusIcons[task.status]}</span>
+                  <span className="task-progress-item-title">{task.title}</span>
+                  <span className="task-progress-item-status">{statusLabels[task.status]}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

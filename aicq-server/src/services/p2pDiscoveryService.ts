@@ -93,3 +93,28 @@ export function relaySignal(
 export function getOnlineCount(): number {
   return onlineSockets.size;
 }
+
+/**
+ * Send a message directly to an online node (not wrapped in signal envelope).
+ * The message is sent as-is with JSON.stringify.
+ * Returns true if the message was successfully sent.
+ */
+export function sendDirectMessage(toId: string, message: any): boolean {
+  const targetSocket = onlineSockets.get(toId);
+  if (!targetSocket || targetSocket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+  try {
+    targetSocket.send(JSON.stringify(message));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get the IDs of all currently online nodes.
+ */
+export function getOnlineNodeIds(): string[] {
+  return Array.from(onlineSockets.keys());
+}
