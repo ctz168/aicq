@@ -324,7 +324,7 @@ function handleMessage(
 
       // 更新权限
       const validPerms = newPermissions.filter((p) => ['chat', 'exec'].includes(p));
-      const success = friendshipService.setFriendPermissions(id, targetId, validPerms as any);
+      const success = friendshipService.setFriendPermissions(id, targetId, validPerms as import('../models/types').FriendPermission[]);
 
       if (!success) {
         ws.send(JSON.stringify({ type: 'error', error: '更新权限失败' }));

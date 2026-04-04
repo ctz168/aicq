@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import nacl from 'tweetnacl';
 import { store } from '../db/memoryStore';
-import { Account, Session, AccountType, FriendPermission } from '../models/types';
+import { Account, Session, AccountType } from '../models/types';
 import { config } from '../config';
 
 const BCRYPT_ROUNDS = 12;
@@ -124,7 +124,6 @@ export async function registerHuman(
     status: 'active',
     friends: [],
     maxFriends: 200,
-    friendPermissions: {},
     visitPermissions: [],
   };
 
@@ -270,7 +269,6 @@ function createAgentAccount(publicKey: string, agentName: string): Account {
     status: 'active',
     friends: [],
     maxFriends: 200,
-    friendPermissions: {},
     visitPermissions: [],
   };
   store.setAccount(account);

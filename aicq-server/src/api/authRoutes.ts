@@ -3,6 +3,7 @@ import * as verificationService from '../services/verificationService';
 import * as accountService from '../services/accountService';
 import { generalLimiter } from '../middleware/rateLimit';
 import { loginRateLimit } from '../middleware/auth';
+import { store } from '../db/memoryStore';
 import type { Account, Session } from '../models/types';
 
 const router = Router();
@@ -191,6 +192,10 @@ router.post('/auth/refresh', generalLimiter, async (req: Request, res: Response)
 // ─── Helpers ──────────────────────────────────────────────────
 
 function sanitizeAccount(account: Account): Record<string, unknown> {
+  // Derive friend count from node-level data (authoritative source)
+  const node = store.nodes.get(account.id);
+  const friendCount = node ? node.friends.size : (account.friends?.length || 0);
+
   return {
     id: account.id,
     type: account.type,
@@ -202,9 +207,8 @@ function sanitizeAccount(account: Account): Record<string, unknown> {
     createdAt: account.createdAt,
     lastLoginAt: account.lastLoginAt,
     status: account.status,
-    friendCount: account.friends?.length || 0,
+    friendCount,
     maxFriends: account.maxFriends,
-    friendPermissions: account.friendPermissions || {},
   };
 }
 

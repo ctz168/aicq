@@ -46,7 +46,17 @@ export function addFriend(nodeA: string, nodeB: string): boolean {
 }
 
 /**
+ * Clean up permissions for a removed friendship.
+ * Removes permission entries from both sides (nodeA's grants to nodeB and vice versa).
+ */
+function cleanupPermissions(nodeA: string, nodeB: string): void {
+  store.nodePermissions.get(nodeA)?.delete(nodeB);
+  store.nodePermissions.get(nodeB)?.delete(nodeA);
+}
+
+/**
  * Remove a bidirectional friendship between two nodes.
+ * Also cleans up any associated permissions.
  * Returns true if the friendship existed and was removed.
  */
 export function removeFriend(nodeA: string, nodeB: string): boolean {
@@ -57,12 +67,17 @@ export function removeFriend(nodeA: string, nodeB: string): boolean {
   const aHad = a.friends.has(nodeB);
   const bHad = b.friends.has(nodeA);
 
+  if (!aHad && !bHad) return false;
+
   a.friends.delete(nodeB);
   a.friendCount = a.friends.size;
   b.friends.delete(nodeA);
   b.friendCount = b.friends.size;
 
-  return aHad || bHad;
+  // Clean up permissions for both sides
+  cleanupPermissions(nodeA, nodeB);
+
+  return true;
 }
 
 /**
@@ -74,71 +89,63 @@ export function areFriends(nodeA: string, nodeB: string): boolean {
   return a.friends.has(nodeB);
 }
 
-// ─── Account-Level Friend Permission Management ──────────────────
+// ─── Node-Level Friend Permission Management ──────────────────
 
 /**
- * Get the permissions that accountId has granted to friendId.
+ * Get the permissions that nodeId has granted to friendId.
+ * Uses areFriends() to validate the friendship at the Node layer.
  * Returns the permission array or empty array if not friends or no permissions set.
  */
-export function getFriendPermissions(accountId: string, friendId: string): FriendPermission[] {
-  const account = store.accounts.get(accountId);
-  if (!account) {
-    // No account yet (node-only registration) — check node-level friendship
-    const node = store.nodes.get(accountId);
-    if (node && node.friends.has(friendId)) {
-      return ['chat']; // default permission for node-level friends
-    }
+export function getFriendPermissions(nodeId: string, friendId: string): FriendPermission[] {
+  if (!areFriends(nodeId, friendId)) {
     return [];
   }
-  if (!account.friends.includes(friendId)) {
-    // Account exists but friend list may be stale — also check node-level
-    const node = store.nodes.get(accountId);
-    if (node && node.friends.has(friendId)) {
-      return ['chat'];
-    }
-    return [];
-  }
-  return account.friendPermissions[friendId] || ['chat']; // default: chat only
+  const perms = store.nodePermissions.get(nodeId)?.get(friendId);
+  return perms || ['chat']; // default: chat only
 }
 
 /**
- * Set the permissions that accountId grants to friendId.
+ * Set the permissions that nodeId grants to friendId.
+ * Uses areFriends() to validate the friendship at the Node layer.
  * Both must be friends. Returns true on success.
  */
 export function setFriendPermissions(
-  accountId: string,
+  nodeId: string,
   friendId: string,
   permissions: FriendPermission[],
 ): boolean {
-  const account = store.accounts.get(accountId);
-  if (!account) return false;
-  if (!account.friends.includes(friendId)) return false;
+  if (!areFriends(nodeId, friendId)) return false;
 
   // Always ensure at least 'chat' is present if any permission is granted
   if (permissions.length > 0 && !permissions.includes('chat')) {
     permissions = ['chat', ...permissions];
   }
 
-  if (permissions.length === 0) {
-    // Remove all permissions (effectively blocks the friend)
-    delete account.friendPermissions[friendId];
-  } else {
-    account.friendPermissions[friendId] = permissions;
+  let friendPerms = store.nodePermissions.get(nodeId);
+  if (!friendPerms) {
+    friendPerms = new Map();
+    store.nodePermissions.set(nodeId, friendPerms);
   }
 
-  store.accounts.set(accountId, account);
+  if (permissions.length === 0) {
+    // Remove all permissions (effectively blocks the friend)
+    friendPerms.delete(friendId);
+  } else {
+    friendPerms.set(friendId, permissions);
+  }
+
   return true;
 }
 
 /**
- * Check if accountId has granted a specific permission to friendId.
+ * Check if nodeId has granted a specific permission to friendId.
  */
 export function hasFriendPermission(
-  accountId: string,
+  nodeId: string,
   friendId: string,
   permission: FriendPermission,
 ): boolean {
-  const perms = getFriendPermissions(accountId, friendId);
+  const perms = getFriendPermissions(nodeId, friendId);
   return perms.includes(permission);
 }
 
@@ -146,12 +153,15 @@ export function hasFriendPermission(
  * Initialize default permissions when a new friendship is established.
  * By default, only 'chat' is granted.
  */
-export function initDefaultPermissions(accountId: string, friendId: string): void {
-  const account = store.accounts.get(accountId);
-  if (!account) return;
+export function initDefaultPermissions(nodeId: string, friendId: string): void {
   // Only set if not already set
-  if (!account.friendPermissions[friendId]) {
-    account.friendPermissions[friendId] = ['chat'];
-    store.accounts.set(accountId, account);
+  const existing = store.nodePermissions.get(nodeId)?.get(friendId);
+  if (!existing) {
+    let friendPerms = store.nodePermissions.get(nodeId);
+    if (!friendPerms) {
+      friendPerms = new Map();
+      store.nodePermissions.set(nodeId, friendPerms);
+    }
+    friendPerms.set(friendId, ['chat']);
   }
 }

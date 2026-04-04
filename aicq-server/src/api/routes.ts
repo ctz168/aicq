@@ -654,7 +654,7 @@ router.post('/agent-execution/abort', authenticateJWT, generalLimiter, async (re
         clearTimeout(timeout);
 
         if (killResp.ok) {
-          const killResult = await killResp.json();
+          const killResult = await killResp.json() as { killed?: boolean };
 
           // Notify the frontend that execution was aborted
           const abortMessage = {
@@ -674,7 +674,7 @@ router.post('/agent-execution/abort', authenticateJWT, generalLimiter, async (re
           // Send abort notification to requester
           sendDirectMessage(requesterId, abortMessage);
 
-          res.json({ aborted: (killResult as any).killed ?? true, gatewayUrl });
+          res.json({ aborted: killResult.killed ?? true, gatewayUrl });
           return;
         }
       }

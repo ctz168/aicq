@@ -69,13 +69,13 @@ router.delete('/:friendId', authenticateJWT, generalLimiter, (req: Request, res:
  */
 router.get('/:friendId/permissions', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
-    const accountId = req.query.accountId as string;
-    if (!accountId) {
-      res.status(400).json({ error: '缺少查询参数: accountId' });
+    const nodeId = req.query.nodeId as string;
+    if (!nodeId) {
+      res.status(400).json({ error: '缺少查询参数: nodeId' });
       return;
     }
 
-    const permissions = friendshipService.getFriendPermissions(accountId, req.params.friendId);
+    const permissions = friendshipService.getFriendPermissions(nodeId, req.params.friendId);
     res.json({ friendId: req.params.friendId, permissions });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -85,13 +85,13 @@ router.get('/:friendId/permissions', authenticateJWT, generalLimiter, (req: Requ
 /**
  * PUT /api/v1/friends/:friendId/permissions
  * 更新对某个好友的授权权限
- * Body: { accountId, permissions: ('chat' | 'exec')[] }
+ * Body: { nodeId, permissions: ('chat' | 'exec')[] }
  */
 router.put('/:friendId/permissions', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
-    const { accountId, permissions } = req.body;
-    if (!accountId) {
-      res.status(400).json({ error: '缺少必填字段: accountId' });
+    const { nodeId, permissions } = req.body;
+    if (!nodeId) {
+      res.status(400).json({ error: '缺少必填字段: nodeId' });
       return;
     }
     if (!Array.isArray(permissions)) {
@@ -108,7 +108,7 @@ router.put('/:friendId/permissions', authenticateJWT, generalLimiter, (req: Requ
     }
 
     const success = friendshipService.setFriendPermissions(
-      accountId,
+      nodeId,
       req.params.friendId,
       permissions as FriendPermission[],
     );
@@ -118,7 +118,7 @@ router.put('/:friendId/permissions', authenticateJWT, generalLimiter, (req: Requ
       return;
     }
 
-    const updatedPerms = friendshipService.getFriendPermissions(accountId, req.params.friendId);
+    const updatedPerms = friendshipService.getFriendPermissions(nodeId, req.params.friendId);
     res.json({ success: true, friendId: req.params.friendId, permissions: updatedPerms });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

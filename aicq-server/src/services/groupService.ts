@@ -53,7 +53,6 @@ function ensureAccount(nodeId: string): Account {
     status: 'active',
     friends: Array.from(node.friends),
     maxFriends: config.maxFriends,
-    friendPermissions: {},
     visitPermissions: [],
   };
   store.accounts.set(nodeId, account);

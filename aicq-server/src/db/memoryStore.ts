@@ -12,6 +12,7 @@ import {
   PushNotification,
   SubAgentSession,
   GroupMessage,
+  FriendPermission,
 } from '../models/types';
 import { config } from '../config';
 
@@ -54,6 +55,14 @@ export class MemoryStore {
 
   /** Sub-agent sessions keyed by session ID */
   subAgents = new Map<string, SubAgentSession>();
+
+  /**
+   * Node-level friend permissions.
+   * Key: nodeId (permission granter) → Map<friendId (receiver), FriendPermission[]>.
+   * This lives at the Node layer (aligned with node.friends) rather than Account layer,
+   * so permissions are always in sync with the actual friendship relationship.
+   */
+  nodePermissions = new Map<string, Map<string, FriendPermission[]>>();
 
   // ─── Index maps for O(1) lookups ─────────────────────────────
   /** email -> accountId */

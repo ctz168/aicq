@@ -91,11 +91,8 @@ export interface Account {
   status: 'active' | 'disabled' | 'suspended';
 
   // Friends and permissions
-  friends: string[];        // friend account IDs
+  friends: string[];        // friend account IDs (mirrored from node.friends)
   maxFriends: number;
-
-  // Per-friend permissions: what each friend is allowed to do
-  friendPermissions: FriendPermissionsMap;
 
   // AI-specific: mutual visit permissions
   visitPermissions: string[]; // account IDs this agent allows to visit
