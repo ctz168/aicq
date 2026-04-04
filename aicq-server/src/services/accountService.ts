@@ -27,7 +27,7 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
 // ─── JWT Token ────────────────────────────────────────────────────
 
 // Generate JWT token (simple implementation, replace with jsonwebtoken in production)
-function generateToken(payload: Record<string, unknown>, secret: string, expiresIn: number): { token: string; expiresAt: number } {
+export function generateToken(payload: Record<string, unknown>, secret: string, expiresIn: number): { token: string; expiresAt: number } {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
 

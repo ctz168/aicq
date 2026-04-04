@@ -23,7 +23,29 @@ const jwtSecret = (() => {
   return secret;
 })();
 
-export const config = {
+export interface Config {
+  port: number;
+  domain: string;
+  jwtSecret: string;
+  allowLocalhost: boolean;
+  maxFriends: number;
+  tempNumberTtlHours: number;
+  qrCodeValiditySeconds: number;
+  maxGroupsPerAccount: number;
+  maxGroupMembers: number;
+  maxConnections: number;
+  maxWsConnections: number;
+  maxGroupMessages: number;
+  maxFriendsHumanToHuman: number;
+  maxFriendsHumanToAI: number;
+  maxFriendsAIToHuman: number;
+  maxFriendsAIToAI: number;
+  maxGroupsCreate: number;
+  maxGroupsJoin: number;
+  [key: string]: string | number | boolean;
+}
+
+export const config: Config = {
   port: parseInt(process.env.PORT || '3000', 10),
   domain: process.env.DOMAIN || 'aicq.online',
   jwtSecret,
@@ -36,6 +58,10 @@ export const config = {
   maxConnections: parseInt(process.env.MAX_HTTP_CONNECTIONS || '5000', 10),
   maxWsConnections: parseInt(process.env.MAX_WS_CONNECTIONS || '10000', 10),
   maxGroupMessages: parseInt(process.env.MAX_GROUP_MESSAGES || '5000', 10),
-} as const;
-
-export type Config = typeof config;
+  maxFriendsHumanToHuman: parseInt(process.env.MAX_FRIENDS_HUMAN_TO_HUMAN || '200', 10),
+  maxFriendsHumanToAI: parseInt(process.env.MAX_FRIENDS_HUMAN_TO_AI || '500', 10),
+  maxFriendsAIToHuman: parseInt(process.env.MAX_FRIENDS_AI_TO_HUMAN || '1000', 10),
+  maxFriendsAIToAI: parseInt(process.env.MAX_FRIENDS_AI_TO_AI || '1000', 10),
+  maxGroupsCreate: parseInt(process.env.MAX_GROUPS_CREATE || '20', 10),
+  maxGroupsJoin: parseInt(process.env.MAX_GROUPS_JOIN || '50', 10),
+};

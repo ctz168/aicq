@@ -10,6 +10,7 @@ import authRoutes from './api/authRoutes';
 import groupRoutes from './api/groupRoutes';
 import friendsRoutes from './api/friendsRoutes';
 import subAgentRoutes from './api/subAgentRoutes';
+import adminRoutes from './api/adminRoutes';
 import { setupWebSocketHandler } from './api/wsHandler';
 import { generalLimiter } from './middleware/rateLimit';
 
@@ -38,6 +39,7 @@ app.use('/api/v1', authRoutes);
 app.use('/api/v1', groupRoutes);
 app.use('/api/v1/friends', friendsRoutes);
 app.use('/api/v1', subAgentRoutes);
+app.use('/api/v1', adminRoutes);
 
 // ─── Global Error Handler ──────────────────────────────────────────
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
