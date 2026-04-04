@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAICQ } from '../context/AICQContext';
 import StatusBadge from '../components/StatusBadge';
 import type { FriendInfo, ChatMessage } from '../types';
@@ -27,15 +27,17 @@ const ChatListScreen: React.FC = () => {
   const [addTempNumber, setAddTempNumber] = useState('');
   const [addError, setAddError] = useState('');
 
-  // Friend list with last message
-  const friendList = state.friends
-    .filter((f) => !search || f.id.includes(search) || f.fingerprint.includes(search))
-    .sort((a, b) => {
-      // Online friends first
-      if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
-      // Then by last seen
-      return new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime();
-    });
+  // Friend list with last message (memoized to avoid re-sorting on every render)
+  const friendList = useMemo(() => {
+    return state.friends
+      .filter((f) => !search || f.id.includes(search) || f.fingerprint.includes(search))
+      .sort((a, b) => {
+        // Online friends first
+        if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+        // Then by last seen
+        return new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime();
+      });
+  }, [state.friends, search]);
 
   const handleOpenChat = (friendId: string) => {
     navigate('chat', friendId);

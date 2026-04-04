@@ -31,11 +31,17 @@ import type {
 // ─── Helpers ──────────────────────────────────────────────────
 
 function uint8ArrayToBase64(data: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < data.length; i++) {
-    binary += String.fromCharCode(data[i]);
+  const chunks: string[] = [];
+  const chunkSize = 8192;
+  for (let i = 0; i < data.length; i += chunkSize) {
+    const slice = data.subarray(i, i + chunkSize);
+    let binary = '';
+    for (let j = 0; j < slice.length; j++) {
+      binary += String.fromCharCode(slice[j]);
+    }
+    chunks.push(binary);
   }
-  return btoa(binary);
+  return btoa(chunks.join(''));
 }
 
 function base64ToUint8Array(b64: string): Uint8Array {
@@ -103,6 +109,7 @@ interface StoreData {
 
 class BrowserStore {
   private static KEY = 'aicq_store';
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private data: StoreData = {
     version: 1,
     userId: '',
@@ -142,6 +149,23 @@ class BrowserStore {
   }
 
   save(): void {
+    if (this.saveTimer) return; // Already scheduled
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      try {
+        localStorage.setItem(BrowserStore.KEY, JSON.stringify(this.data));
+      } catch (err) {
+        console.error('[BrowserStore] Failed to save:', err);
+      }
+    }, 500); // Debounce 500ms
+  }
+
+  /** Save immediately (for critical operations like key generation) */
+  saveNow(): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
     try {
       localStorage.setItem(BrowserStore.KEY, JSON.stringify(this.data));
     } catch (err) {
@@ -948,7 +972,7 @@ export class WebClient extends SimpleEventEmitter {
     this.exchangeKeys = generateKeyExchangeKeyPair();
     this.store.signingKeys = this.signingKeys;
     this.store.exchangeKeys = this.exchangeKeys;
-    this.store.save();
+    this.store.saveNow();
   }
 
   private _wireEvents(): void {

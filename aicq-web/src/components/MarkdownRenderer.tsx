@@ -1,13 +1,33 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, lazy, Suspense } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+const SyntaxHighlighter = lazy(() =>
+  import('react-syntax-highlighter').then(mod => ({ default: mod.Prism }))
+);
 
 interface MarkdownRendererProps {
   content: string;
   isOwn?: boolean;
 }
+
+const CodeBlock: React.FC<{ codeString: string; language: string }> = ({ codeString, language }) => (
+  <Suspense fallback={<pre style={{ background: '#0d1117', padding: '12px', borderRadius: '0 0 8px 8px', fontSize: '13px', overflow: 'auto', margin: 0, color: '#c9d1d9' }}><code>{codeString}</code></pre>}>
+    <SyntaxHighlighter
+      language={language || 'text'}
+      PreTag="div"
+      customStyle={{
+        margin: 0,
+        borderRadius: '0 0 8px 8px',
+        fontSize: '13px',
+        lineHeight: '1.5',
+        background: '#0d1117',
+      }}
+    >
+      {codeString}
+    </SyntaxHighlighter>
+  </Suspense>
+);
 
 const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isOwn = false }) => {
   const components = useMemo(() => ({
@@ -30,21 +50,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isOwn = fa
                 复制
               </button>
             </div>
-            <SyntaxHighlighter
-              style={oneDark}
-              language={match ? match[1] : 'text'}
-              PreTag="div"
-              customStyle={{
-                margin: 0,
-                borderRadius: '0 0 8px 8px',
-                fontSize: '13px',
-                lineHeight: '1.5',
-                background: '#0d1117',
-              }}
-              {...props}
-            >
-              {codeString}
-            </SyntaxHighlighter>
+            <CodeBlock codeString={codeString} language={match ? match[1] : 'text'} />
           </div>
         );
       }

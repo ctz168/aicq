@@ -35,7 +35,21 @@ function getFileIcon(fileType?: string): string {
   return '📄';
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, userId }) => {
+// Pre-compiled markdown detection patterns (module-level, compiled once)
+const MARKDOWN_PATTERNS: RegExp[] = [
+  /^#{1,6}\s/m,           // headings
+  /\*\*[^*]+\*\*/,         // bold
+  /\*[^*]+\*/,             // italic
+  /^[-*+]\s/m,             // unordered list
+  /^\d+\.\s/m,             // ordered list
+  /^```[\s\S]*?```/m,      // code blocks
+  /`[^`]+`/,               // inline code
+  /^\|.*\|$/m,             // table rows
+  /\[.+\]\(.+\)/,          // links
+  /^>\s/m,                 // blockquotes
+];
+
+const MessageBubble = React.memo(function MessageBubble({ message, isOwn, userId }: MessageBubbleProps) {
   // System messages
   if (message.type === 'system') {
     return (
@@ -140,7 +154,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, userId })
       </div>
     </div>
   );
-};
+});
 
 function renderFileCard(message: ChatMessage, fileInfo: any, isOwn: boolean) {
   const icon = getFileIcon(fileInfo.mimeType);
@@ -198,27 +212,15 @@ function formatDuration(seconds: number): string {
  */
 function detectMarkdown(content: string): boolean {
   if (!content || content.length < 10) return false;
-  const patterns = [
-    /^#{1,6}\s/m,           // headings
-    /\*\*[^*]+\*\*/,         // bold
-    /\*[^*]+\*/,             // italic
-    /^[-*+]\s/m,             // unordered list
-    /^\d+\.\s/m,             // ordered list
-    /^```[\s\S]*?```/m,      // code blocks
-    /`[^`]+`/,               // inline code
-    /^\|.*\|$/m,             // table rows
-    /\[.+\]\(.+\)/,          // links
-    /^>\s/m,                 // blockquotes
-  ];
   let matchCount = 0;
-  for (const p of patterns) {
+  for (const p of MARKDOWN_PATTERNS) {
     if (p.test(content)) matchCount++;
   }
   return matchCount >= 2;
 }
 
 /** Date separator component */
-export const DateSeparator: React.FC<{ date: Date }> = ({ date }) => {
+export const DateSeparator = React.memo(function DateSeparator({ date }: { date: Date }) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
@@ -237,6 +239,6 @@ export const DateSeparator: React.FC<{ date: Date }> = ({ date }) => {
       <span className="message-system-text">{label}</span>
     </div>
   );
-};
+});
 
 export default MessageBubble;

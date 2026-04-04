@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useRef, useEffect, useMemo } from 'react';
 import { WebClient } from '../services/webClient';
 import type {
   FriendInfo,
@@ -49,6 +49,8 @@ interface AICQState {
   agentExecution: Record<string, AgentExecutionState>;
   /** Queued messages waiting for agent to finish processing */
   messageQueue: ChatMessage[];
+  /** Incremented on each message add to force re-renders for ref-based consumers */
+  messageVersion: number;
 }
 
 const initialState: AICQState = {
@@ -75,6 +77,7 @@ const initialState: AICQState = {
   taskPlans: [],
   agentExecution: {},
   messageQueue: [],
+  messageVersion: 0,
 };
 
 type Action =
@@ -127,7 +130,8 @@ type Action =
   | { type: 'CLEAR_AGENT_EXECUTION'; payload: string }
   | { type: 'ADD_TO_QUEUE'; payload: ChatMessage }
   | { type: 'FLUSH_QUEUE'; payload: ChatMessage[] }
-  | { type: 'CLEAR_QUEUE' };
+  | { type: 'CLEAR_QUEUE' }
+  | { type: 'BUMP_MESSAGE_VERSION' };
 
 function reducer(state: AICQState, action: Action): AICQState {
   switch (action.type) {
@@ -309,6 +313,8 @@ function reducer(state: AICQState, action: Action): AICQState {
       return { ...state, messageQueue: [] };
     case 'CLEAR_QUEUE':
       return { ...state, messageQueue: [] };
+    case 'BUMP_MESSAGE_VERSION':
+      return { ...state, messageVersion: state.messageVersion + 1 };
     default:
       return state;
   }
@@ -392,6 +398,8 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   const subAgentsRef = useRef<SubAgentSession[]>([]);
   const agentExecutionRef = useRef<Record<string, AgentExecutionState>>({});
   const messageQueueRef = useRef<ChatMessage[]>([]);
+  const typingStateRef = useRef<TypingState>({});
+  const activeFriendIdRef = useRef<string | null>(null);
 
   const connect = useCallback(async (serverUrl: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -426,6 +434,7 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         }
         messagesRef.current.set(friendId, msgs);
         dispatch({ type: 'ADD_MESSAGE', payload: { friendId, message: msg } });
+        dispatch({ type: 'BUMP_MESSAGE_VERSION' });
       });
 
       client.on('friend_online', (event: { nodeId: string; online: boolean }) => {
@@ -443,15 +452,13 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
       });
 
       client.on('typing', (event: { fromId: string }) => {
-        dispatch({
-          type: 'SET_TYPING',
-          payload: { ...state.typingState, [event.fromId]: true },
-        });
+        const current = { ...typingStateRef.current, [event.fromId]: true };
+        typingStateRef.current = current;
+        dispatch({ type: 'SET_TYPING', payload: current });
         setTimeout(() => {
-          dispatch({
-            type: 'SET_TYPING',
-            payload: { [event.fromId]: false },
-          });
+          const cleared = { ...typingStateRef.current, [event.fromId]: false };
+          typingStateRef.current = cleared;
+          dispatch({ type: 'SET_TYPING', payload: cleared });
         }, 3000);
       });
 
@@ -476,19 +483,20 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         streamingRef.current[streaming.messageId] = streaming;
         dispatch({
           type: 'UPDATE_STREAMING',
-          payload: { friendId: state.activeFriendId || '', state: streaming },
+          payload: { friendId: activeFriendIdRef.current || '', state: streaming },
         });
       });
 
       client.on('streaming_complete', (streaming: StreamingState) => {
-        if (state.activeFriendId) {
-          dispatch({ type: 'CLEAR_STREAMING', payload: state.activeFriendId });
+        const activeId = activeFriendIdRef.current;
+        if (activeId) {
+          dispatch({ type: 'CLEAR_STREAMING', payload: activeId });
         }
         // Add the final message
-        const msgs = messagesRef.current.get(state.activeFriendId || '') || [];
+        const msgs = messagesRef.current.get(activeId || '') || [];
         const finalMsg: ChatMessage = {
           id: streaming.messageId,
-          fromId: state.activeFriendId || '',
+          fromId: activeId || '',
           toId: client.getUserId(),
           type: 'markdown',
           content: streaming.content,
@@ -499,14 +507,14 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         const streamIdx = msgs.findIndex(m => m.type === 'streaming');
         if (streamIdx >= 0) msgs.splice(streamIdx, 1);
         msgs.push(finalMsg);
-        messagesRef.current.set(state.activeFriendId || '', msgs);
+        messagesRef.current.set(activeId || '', msgs);
       });
 
       client.on('streaming_error', (streaming: StreamingState) => {
         dispatch({
           type: 'UPDATE_STREAMING',
           payload: {
-            friendId: state.activeFriendId || '',
+            friendId: activeFriendIdRef.current || '',
             state: { ...streaming, isComplete: false, error: streaming.error },
           },
         });
@@ -1148,6 +1156,14 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   }, [state.taskPlans]);
 
   useEffect(() => {
+    typingStateRef.current = state.typingState;
+  }, [state.typingState]);
+
+  useEffect(() => {
+    activeFriendIdRef.current = state.activeFriendId;
+  }, [state.activeFriendId]);
+
+  useEffect(() => {
     subAgentsRef.current = state.subAgents;
   }, [state.subAgents]);
 
@@ -1165,7 +1181,7 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const value: AICQContextValue = {
+  const value: AICQContextValue = useMemo(() => ({
     state,
     client: clientRef.current,
     connect,
@@ -1225,7 +1241,7 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     messageQueue: state.messageQueue,
     loadMoreMessages,
     getMessageCount,
-  };
+  }), [state]);
 
   return <AICQContext.Provider value={value}>{children}</AICQContext.Provider>;
 }
