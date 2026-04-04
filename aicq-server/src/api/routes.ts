@@ -482,4 +482,200 @@ router.post('/subagent-progress/push', generalLimiter, (req: Request, res: Respo
   }
 });
 
+// ─── Agent Execution Push ────────────────────────────────────
+
+/**
+ * POST /api/v1/agent-execution/push
+ * Push agent execution state events (start/end) to connected clients.
+ * Used by StableClaw's aicq-chat plugin to signal when the agent is actively processing.
+ * The frontend uses this to queue user messages and show a stop button.
+ *
+ * Body: {
+ *   senderId: string,
+ *   messageType: 'agent_execution_start' | 'agent_execution_end',
+ *   payload: { friendId, phase, sessionKey, runId, gatewayUrl, timestamp },
+ *   recipientIds?: string[]
+ * }
+ */
+router.post('/agent-execution/push', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const { senderId, messageType, payload, recipientIds } = req.body;
+
+    if (!senderId || !messageType || !payload) {
+      res.status(400).json({ error: '缺少必填字段: senderId, messageType, payload' });
+      return;
+    }
+
+    if (!['agent_execution_start', 'agent_execution_end'].includes(messageType)) {
+      res.status(400).json({ error: '无效的 messageType，支持: agent_execution_start, agent_execution_end' });
+      return;
+    }
+
+    // Store gateway URL from the plugin push for abort proxying
+    if (payload.gatewayUrl) {
+      const senderNode = store.nodes.get(senderId);
+      if (senderNode) {
+        (senderNode as any).gatewayUrl = payload.gatewayUrl;
+      }
+    }
+
+    // Determine target recipients
+    let targets: string[] = [];
+
+    if (Array.isArray(recipientIds) && recipientIds.length > 0) {
+      targets = recipientIds;
+    } else {
+      const senderNode = store.nodes.get(senderId);
+      if (senderNode && senderNode.friends.size > 0) {
+        targets = Array.from(senderNode.friends);
+      } else {
+        targets = getOnlineNodeIds().filter((id) => id !== senderId);
+      }
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    const message = {
+      type: messageType,
+      fromId: senderId,
+      data: payload,
+      timestamp: Date.now(),
+    };
+
+    for (const targetId of targets) {
+      const delivered = sendDirectMessage(targetId, message);
+      if (delivered) {
+        sent++;
+      } else {
+        failed++;
+      }
+    }
+
+    res.json({ sent, failed, messageType });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Agent Execution Abort ──────────────────────────────────
+
+/**
+ * POST /api/v1/agent-execution/abort
+ * Proxy abort request from the aicq frontend to the StableClaw gateway.
+ * Terminates the current agent execution run.
+ *
+ * Body: {
+ *   requesterId: string,       // The user's node ID (for auth)
+ *   agentId: string,           // The AI agent's node ID
+ *   sessionKey?: string,       // Optional: specific session to abort
+ *   runId?: string             // Optional: specific run to abort
+ * }
+ */
+router.post('/agent-execution/abort', generalLimiter, async (req: Request, res: Response) => {
+  try {
+    const { requesterId, agentId, sessionKey, runId } = req.body;
+
+    if (!requesterId || !agentId) {
+      res.status(400).json({ error: '缺少必填字段: requesterId, agentId' });
+      return;
+    }
+
+    // Verify requester and agent are friends
+    const agentNode = store.nodes.get(agentId);
+    if (!agentNode) {
+      res.status(404).json({ error: 'Agent 不在线' });
+      return;
+    }
+
+    const requesterNode = store.nodes.get(requesterId);
+    if (!requesterNode) {
+      res.status(404).json({ error: '请求者不存在' });
+      return;
+    }
+
+    if (!agentNode.friends.has(requesterId) && !requesterNode.friends.has(agentId)) {
+      res.status(403).json({ error: '无权中止此 Agent' });
+      return;
+    }
+
+    // Get gateway URL from stored agent metadata
+    const gatewayUrl = (agentNode as any).gatewayUrl || 'http://localhost:18789';
+
+    try {
+      // Try the gateway's session kill endpoint
+      if (sessionKey) {
+        const killResp = await fetch(`${gatewayUrl}/sessions/${encodeURIComponent(sessionKey)}/kill`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-openclaw-requester-session-key': sessionKey },
+          body: JSON.stringify({ reason: 'user_abort' }),
+        });
+
+        if (killResp.ok) {
+          const killResult = await killResp.json();
+
+          // Notify the frontend that execution was aborted
+          const abortMessage = {
+            type: 'agent_execution_end',
+            fromId: agentId,
+            data: {
+              friendId: agentId,
+              phase: 'cancelled',
+              reason: 'user_abort',
+              sessionKey,
+              runId,
+              timestamp: Date.now(),
+            },
+            timestamp: Date.now(),
+          };
+
+          // Send abort notification to requester
+          sendDirectMessage(requesterId, abortMessage);
+
+          res.json({ aborted: killResult.killed ?? true, gatewayUrl });
+          return;
+        }
+      }
+
+      // Fallback: try gateway chat.abort RPC
+      const abortResp = await fetch(`${gatewayUrl}/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: `abort-${Date.now()}`,
+          method: 'chat.abort',
+          params: { sessionKey, runId },
+        }),
+      });
+
+      if (abortResp.ok || abortResp.status === 200) {
+        // Notify frontend
+        const abortMessage = {
+          type: 'agent_execution_end',
+          fromId: agentId,
+          data: {
+            friendId: agentId,
+            phase: 'cancelled',
+            reason: 'user_abort',
+            sessionKey,
+            runId,
+            timestamp: Date.now(),
+          },
+          timestamp: Date.now(),
+        };
+        sendDirectMessage(requesterId, abortMessage);
+
+        res.json({ aborted: true, gatewayUrl });
+      } else {
+        res.status(502).json({ error: '无法连接到 Agent Gateway', gatewayUrl });
+      }
+    } catch (fetchErr: any) {
+      res.status(502).json({ error: 'Agent Gateway 连接失败: ' + (fetchErr.message || String(fetchErr)) });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

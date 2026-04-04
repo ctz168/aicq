@@ -192,6 +192,30 @@ export interface SubAgentSession {
   output: string;
   createdAt: number;
   updatedAt: number;
+  /** Current execution phase from stableclaw */
+  phase?: string;
+  /** Label/tag for the sub-agent (e.g. "research", "code-review") */
+  label?: string;
+  /** Parent agent's session key */
+  parentSessionKey?: string;
+  /** Sub-agent's own session key */
+  sessionKey?: string;
+}
+
+/** Agent execution state tracked per AI friend. */
+export interface AgentExecutionState {
+  /** Whether the agent is currently processing */
+  isExecuting: boolean;
+  /** Current phase (started, streaming, tool_executing, thinking, completed, error, cancelled) */
+  phase: string;
+  /** Session key of the current run */
+  sessionKey?: string;
+  /** Run ID of the current execution */
+  runId?: string;
+  /** Gateway URL for abort requests */
+  gatewayUrl?: string;
+  /** Timestamp when execution started */
+  startedAt?: number;
 }
 
 /** Task item for task planning progress tracking. */

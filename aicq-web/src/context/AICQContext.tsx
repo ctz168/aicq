@@ -17,6 +17,7 @@ import type {
   SubAgentSession,
   TaskPlan,
   TaskItem,
+  AgentExecutionState,
 } from '../types';
 
 // ─── State ───────────────────────────────────────────────────
@@ -44,6 +45,10 @@ interface AICQState {
   notifications: PushNotification[];
   subAgents: SubAgentSession[];
   taskPlans: TaskPlan[];
+  /** Agent execution state per friend (whether the agent is processing) */
+  agentExecution: Record<string, AgentExecutionState>;
+  /** Queued messages waiting for agent to finish processing */
+  messageQueue: ChatMessage[];
 }
 
 const initialState: AICQState = {
@@ -68,6 +73,8 @@ const initialState: AICQState = {
   notifications: [],
   subAgents: [],
   taskPlans: [],
+  agentExecution: {},
+  messageQueue: [],
 };
 
 type Action =
@@ -115,7 +122,12 @@ type Action =
   | { type: 'ADD_TASK_PLAN'; payload: TaskPlan }
   | { type: 'UPDATE_TASK_PLAN'; payload: TaskPlan }
   | { type: 'REMOVE_TASK_PLAN'; payload: string }
-  | { type: 'UPDATE_TASK_ITEM'; payload: { planId: string; taskId: string; updates: Partial<TaskItem> } };
+  | { type: 'UPDATE_TASK_ITEM'; payload: { planId: string; taskId: string; updates: Partial<TaskItem> } }
+  | { type: 'SET_AGENT_EXECUTION'; payload: { friendId: string; state: AgentExecutionState } }
+  | { type: 'CLEAR_AGENT_EXECUTION'; payload: string }
+  | { type: 'ADD_TO_QUEUE'; payload: ChatMessage }
+  | { type: 'FLUSH_QUEUE'; payload: ChatMessage[] }
+  | { type: 'CLEAR_QUEUE' };
 
 function reducer(state: AICQState, action: Action): AICQState {
   switch (action.type) {
@@ -276,6 +288,27 @@ function reducer(state: AICQState, action: Action): AICQState {
         }),
       };
     }
+    case 'SET_AGENT_EXECUTION': {
+      const { friendId, state: execState } = action.payload;
+      return {
+        ...state,
+        agentExecution: {
+          ...state.agentExecution,
+          [friendId]: execState,
+        },
+      };
+    }
+    case 'CLEAR_AGENT_EXECUTION': {
+      const newExec = { ...state.agentExecution };
+      delete newExec[action.payload];
+      return { ...state, agentExecution: newExec };
+    }
+    case 'ADD_TO_QUEUE':
+      return { ...state, messageQueue: [...state.messageQueue, action.payload] };
+    case 'FLUSH_QUEUE':
+      return { ...state, messageQueue: [] };
+    case 'CLEAR_QUEUE':
+      return { ...state, messageQueue: [] };
     default:
       return state;
   }
@@ -337,6 +370,12 @@ interface AICQContextValue {
   createTaskPlan: (friendId: string, title: string, tasks: Omit<TaskItem, 'id' | 'createdAt' | 'updatedAt'>[]) => TaskPlan;
   updateTaskItem: (planId: string, taskId: string, updates: Partial<TaskItem>) => void;
   clearTaskPlan: (planId: string) => void;
+  abortAgent: (friendId: string) => Promise<void>;
+  getAgentExecutionState: (friendId: string) => AgentExecutionState | null;
+  isAgentExecuting: (friendId: string) => boolean;
+  messageQueue: ChatMessage[];
+  loadMoreMessages: (friendId: string, before?: number) => Promise<{ messages: ChatMessage[], hasMore: boolean }>;
+  getMessageCount: (friendId: string) => Promise<number>;
 }
 
 const AICQContext = createContext<AICQContextValue | null>(null);
@@ -351,6 +390,8 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   const streamingRef = useRef<Record<string, StreamingState>>({});
   const taskPlansRef = useRef<TaskPlan[]>([]);
   const subAgentsRef = useRef<SubAgentSession[]>([]);
+  const agentExecutionRef = useRef<Record<string, AgentExecutionState>>({});
+  const messageQueueRef = useRef<ChatMessage[]>([]);
 
   const connect = useCallback(async (serverUrl: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -622,6 +663,46 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
+      // ─── Agent Execution State (from stableclaw agent) ──────
+      client.on('agent_execution_start', (msg: any) => {
+        const data = msg.data || msg;
+        const friendId = data.friendId || msg.fromId || '';
+        const execState: AgentExecutionState = {
+          isExecuting: true,
+          phase: data.phase || 'started',
+          sessionKey: data.sessionKey,
+          runId: data.runId,
+          gatewayUrl: data.gatewayUrl,
+          startedAt: data.timestamp || Date.now(),
+        };
+        dispatch({ type: 'SET_AGENT_EXECUTION', payload: { friendId, state: execState } });
+      });
+
+      client.on('agent_execution_end', (msg: any) => {
+        const data = msg.data || msg;
+        const friendId = data.friendId || msg.fromId || '';
+
+        // Flush any queued messages for this friend
+        const queue = messageQueueRef.current;
+        if (queue.length > 0) {
+          const friendQueue = queue.filter((m) => m.toId === friendId);
+          if (friendQueue.length > 0) {
+            const c = clientRef.current;
+            if (c) {
+              for (const qMsg of friendQueue) {
+                c.sendMessage(friendId, qMsg.content);
+              }
+            }
+            const msgs = messagesRef.current.get(friendId) || [];
+            msgs.push(...friendQueue);
+            messagesRef.current.set(friendId, msgs);
+          }
+          dispatch({ type: 'CLEAR_QUEUE' });
+        }
+
+        dispatch({ type: 'CLEAR_AGENT_EXECUTION', payload: friendId });
+      });
+
       const result = await client.initialize();
 
       dispatch({
@@ -634,7 +715,8 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_FRIENDS', payload: friends });
 
       for (const f of friends) {
-        messagesRef.current.set(f.id, client.getMessages(f.id));
+        const msgs = await client.getCachedMessages(f.id, 50);
+        messagesRef.current.set(f.id, msgs);
         const count = client.getUnreadCount(f.id);
         if (count > 0) {
           unreadCountsRef.current[f.id] = count;
@@ -693,6 +775,14 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     const client = clientRef.current;
     if (!client) throw new Error('Client not initialized');
     const msg = client.sendMessage(friendId, text);
+    
+    // If agent is executing for this friend, queue the message instead of adding to display
+    const execState = agentExecutionRef.current[friendId];
+    if (execState?.isExecuting) {
+      dispatch({ type: 'ADD_TO_QUEUE', payload: msg });
+      return msg;
+    }
+    
     const msgs = messagesRef.current.get(friendId) || [];
     msgs.push(msg);
     messagesRef.current.set(friendId, msgs);
@@ -1001,6 +1091,57 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'REMOVE_TASK_PLAN', payload: planId });
   }, []);
 
+  const abortAgentFn = useCallback(async (friendId: string) => {
+    const client = clientRef.current;
+    if (!client) return;
+    try {
+      const execState = agentExecutionRef.current[friendId];
+      await (client as any).abortAgentExecution(
+        friendId,
+        execState?.sessionKey,
+        execState?.runId,
+      );
+      dispatch({ type: 'CLEAR_AGENT_EXECUTION', payload: friendId });
+    } catch (err) {
+      console.error('[AICQ] Abort agent failed:', err);
+    }
+  }, []);
+
+  const getAgentExecutionState = useCallback((friendId: string): AgentExecutionState | null => {
+    return state.agentExecution[friendId] || null;
+  }, [state.agentExecution]);
+
+  const isAgentExecuting = useCallback((friendId: string): boolean => {
+    return !!state.agentExecution[friendId]?.isExecuting;
+  }, [state.agentExecution]);
+
+  const loadMoreMessages = useCallback(async (friendId: string, before?: number): Promise<{ messages: ChatMessage[], hasMore: boolean }> => {
+    const client = clientRef.current;
+    if (!client) return { messages: [], hasMore: false };
+
+    const currentMsgs = messagesRef.current.get(friendId) || [];
+    const oldestTimestamp = before || (currentMsgs.length > 0 ? currentMsgs[0].timestamp : Date.now());
+
+    const olderMsgs = await client.getCachedMessages(friendId, 30, oldestTimestamp);
+    if (olderMsgs.length === 0) return { messages: [], hasMore: false };
+
+    // Prepend older messages, avoiding duplicates
+    const existingIds = new Set(currentMsgs.map(m => m.id));
+    const newMsgs = olderMsgs.filter(m => !existingIds.has(m.id));
+
+    const merged = [...newMsgs, ...currentMsgs];
+    messagesRef.current.set(friendId, merged);
+
+    const totalCount = await client.getCachedMessageCount(friendId);
+    return { messages: merged, hasMore: merged.length < totalCount };
+  }, []);
+
+  const getMessageCount = useCallback(async (friendId: string): Promise<number> => {
+    const client = clientRef.current;
+    if (!client) return 0;
+    return client.getCachedMessageCount(friendId);
+  }, []);
+
   useEffect(() => {
     // Keep refs in sync with reducer state (avoid stale closures in connect handlers)
     taskPlansRef.current = state.taskPlans;
@@ -1009,6 +1150,14 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     subAgentsRef.current = state.subAgents;
   }, [state.subAgents]);
+
+  useEffect(() => {
+    agentExecutionRef.current = state.agentExecution;
+  }, [state.agentExecution]);
+
+  useEffect(() => {
+    messageQueueRef.current = state.messageQueue;
+  }, [state.messageQueue]);
 
   useEffect(() => {
     return () => {
@@ -1070,6 +1219,12 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     createTaskPlan,
     updateTaskItem: updateTaskItemFn,
     clearTaskPlan: clearTaskPlanFn,
+    abortAgent: abortAgentFn,
+    getAgentExecutionState,
+    isAgentExecuting,
+    messageQueue: state.messageQueue,
+    loadMoreMessages,
+    getMessageCount,
   };
 
   return <AICQContext.Provider value={value}>{children}</AICQContext.Provider>;

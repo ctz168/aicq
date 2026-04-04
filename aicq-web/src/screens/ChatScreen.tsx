@@ -24,6 +24,11 @@ const ChatScreen: React.FC = () => {
     cancelTransfer,
     markMessagesRead,
     getStreamingState,
+    abortAgent,
+    isAgentExecuting,
+    messageQueue,
+    loadMoreMessages,
+    getMessageCount,
   } = useAICQ();
 
   const [inputText, setInputText] = useState('');
@@ -54,6 +59,9 @@ const ChatScreen: React.FC = () => {
   // Determine if this is an AI friend
   const isAiFriend = friend?.friendType === 'ai';
 
+  const agentExecuting = isAiFriend ? isAgentExecuting(friendId || '') : false;
+  const queuedCount = messageQueue.filter(m => m.toId === friendId).length;
+
   // Scroll to bottom on new messages (only if already near bottom)
   const scrollToBottom = useCallback((force = false) => {
     if (!messagesContainerRef.current) return;
@@ -71,22 +79,31 @@ const ChatScreen: React.FC = () => {
   // Compute visible messages (slice from the end for incremental loading)
   const visibleMessages = useMemo(() => {
     if (messages.length <= displayCount) {
-      setHasMoreMessages(false);
       return messages;
     }
-    setHasMoreMessages(true);
     return messages.slice(messages.length - displayCount);
   }, [messages, displayCount]);
 
   // Load more messages handler (maintains scroll position)
-  const handleLoadMore = useCallback(() => {
-    if (isLoadingMore) return;
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !friendId) return;
     setIsLoadingMore(true);
     // Remember scroll position to maintain visual position
     const container = messagesContainerRef.current;
     const prevScrollHeight = container?.scrollHeight ?? 0;
 
-    setDisplayCount(prev => Math.min(prev + 30, messages.length));
+    if (messages.length <= displayCount) {
+      // All in-memory messages are displayed, try loading from IndexedDB
+      try {
+        const oldestMsg = messages.length > 0 ? messages[0] : null;
+        const result = await loadMoreMessages(friendId, oldestMsg?.timestamp);
+        if (!result.hasMore) setHasMoreMessages(false);
+      } catch (err) {
+        console.error('Failed to load more from cache:', err);
+      }
+    } else {
+      setDisplayCount(prev => Math.min(prev + 30, messages.length));
+    }
 
     // Restore scroll position after loading more
     requestAnimationFrame(() => {
@@ -96,7 +113,7 @@ const ChatScreen: React.FC = () => {
       }
       setIsLoadingMore(false);
     });
-  }, [isLoadingMore, messages.length]);
+  }, [isLoadingMore, messages.length, displayCount, friendId, loadMoreMessages]);
 
   // Track if user scrolls up (disable auto-scroll)
   const handleScroll = useCallback(() => {
@@ -116,6 +133,13 @@ const ChatScreen: React.FC = () => {
   useEffect(() => {
     setDisplayCount(50);
     setHasMoreMessages(true);
+    // Load total count from IndexedDB to determine if there are more messages
+    if (friendId) {
+      getMessageCount(friendId).then(count => {
+        const msgs = getMessages(friendId);
+        setHasMoreMessages(msgs.length < count);
+ }).catch(() => {});
+    }
   }, [friendId]);
 
   // Mark messages as read when opening chat
@@ -277,6 +301,16 @@ const ChatScreen: React.FC = () => {
       }
     }
   }, [friendId, sendImage, sendVideo, sendFile]);
+
+  // Handle agent abort (stop button)
+  const handleAbort = useCallback(async () => {
+    if (!friendId) return;
+    try {
+      await abortAgent(friendId);
+    } catch (err) {
+      console.error('[ChatScreen] Abort failed:', err);
+    }
+  }, [friendId, abortAgent]);
 
   // Build message list with date separators
   const messageElements = useMemo(() => {
@@ -446,6 +480,25 @@ const ChatScreen: React.FC = () => {
       {/* Task progress panel - above input area */}
       <TaskProgressPanel friendId={friendId || ''} />
 
+      {/* Agent execution state bar */}
+      {agentExecuting && (
+        <div className="agent-execution-bar">
+          <div className="agent-execution-info">
+            <div className="agent-execution-spinner" />
+            <span className="agent-execution-text">Agent 正在执行中...</span>
+            {queuedCount > 0 && (
+              <span className="agent-queue-badge">{queuedCount} 条消息排队中</span>
+            )}
+          </div>
+          <button className="btn-abort-agent" onClick={handleAbort} title="停止执行">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            停止
+          </button>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="chat-input-area">
         <div className="chat-input-row">
@@ -499,6 +552,13 @@ const ChatScreen: React.FC = () => {
             onKeyDown={handleKeyDown}
             rows={1}
           />
+
+          {/* Queue indicator */}
+          {agentExecuting && queuedCount > 0 && (
+            <span className="send-queue-badge" title={`${queuedCount} 条消息排队中`}>
+              {queuedCount}
+            </span>
+          )}
 
           {/* Send button */}
           <button

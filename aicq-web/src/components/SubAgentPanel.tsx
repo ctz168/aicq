@@ -18,6 +18,26 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({ session, onAbort, onSendInp
   const isCompleted = session.status === 'completed';
   const isError = session.status === 'error';
 
+  // Phase-specific display
+  const phaseLabels: Record<string, string> = {
+    spawned: '启动中',
+    started: '执行中',
+    tool_call: '调用工具',
+    tool_result: '工具返回',
+    thinking: '思考中',
+    text: '生成文本',
+    error: '执行出错',
+    completed: '已完成',
+    killed: '已终止',
+    timeout: '已超时',
+  };
+  const phaseLabel = session.phase ? (phaseLabels[session.phase] || session.phase) : '';
+  const phaseIcon = session.phase === 'thinking' ? '🧠' :
+                    session.phase === 'tool_call' || session.phase === 'tool_result' ? '🔧' :
+                    session.phase === 'text' ? '📝' :
+                    session.phase === 'started' ? '🚀' :
+                    session.phase === 'error' ? '❌' : '';
+
   // Auto-scroll output to bottom
   useEffect(() => {
     if (expanded && outputRef.current) {
@@ -51,14 +71,20 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({ session, onAbort, onSendInp
 
   return (
     <div className={`subagent-card${isWaitingHuman ? ' waiting' : ''}${isError ? ' error' : ''}`}>
-      {/* Header - always visible */}
       <div className="subagent-card-header" onClick={() => setExpanded((prev) => !prev)}>
         <span className="subagent-title">
           {isCompleted && '✅ '}
           {isError && '❌ '}
+          {phaseIcon && `${phaseIcon} `}
+          {session.label && <span className="subagent-label-tag">{session.label}</span>}
           {session.task}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Phase badge for running tasks */}
+          {isRunning && phaseLabel && (
+            <span className="subagent-phase-badge">{phaseLabel}</span>
+          )}
+
           {/* Status dot */}
           <div className={`subagent-status ${session.status}`} title={session.status} />
 
@@ -83,12 +109,17 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({ session, onAbort, onSendInp
         </div>
       </div>
 
-      {/* Expanded body */}
       {expanded && (
         <div className="subagent-body" ref={outputRef}>
           <div className="subagent-output">
             {session.output || (isRunning ? '处理中...' : isError ? '执行出错' : '')}
           </div>
+          {/* Show phase progress bar for running tasks */}
+          {isRunning && (
+            <div className="subagent-progress-bar">
+              <div className="subagent-progress-indicator" />
+            </div>
+          )}
         </div>
       )}
 

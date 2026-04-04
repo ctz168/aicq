@@ -534,6 +534,18 @@ class BrowserAPIClient {
     return this.request('GET', `/subagent/${encodeURIComponent(subAgentId)}/status`);
   }
 
+  /* ─── Agent Execution API ────────────────────────────── */
+
+  async abortAgentExecution(agentId: string, sessionKey?: string, runId?: string): Promise<{ aborted: boolean }> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request<{ aborted: boolean }>('POST', '/agent-execution/abort', {
+      requesterId: this.nodeId,
+      agentId,
+      sessionKey,
+      runId,
+    });
+  }
+
   /* ─── Group Message History API ─────────────────────── */
 
   async getGroupMessageHistory(groupId: string, limit?: number, before?: number): Promise<GroupMessage[]> {
@@ -665,6 +677,13 @@ class BrowserWSClient extends SimpleEventEmitter {
         break;
       case 'task_plan_delete':
         this.emit('task_plan_delete', msg);
+        break;
+      // ─── Agent Execution State (from stableclaw agent) ─────
+      case 'agent_execution_start':
+        this.emit('agent_execution_start', msg);
+        break;
+      case 'agent_execution_end':
+        this.emit('agent_execution_end', msg);
         break;
       case 'error':
         this.emit('error', new Error(msg.error ?? 'Server error'));
@@ -1753,6 +1772,33 @@ export class WebClient extends SimpleEventEmitter {
 
   async getGroupMessageHistory(groupId: string, limit?: number, before?: number): Promise<GroupMessage[]> {
     return this.api.getGroupMessageHistory(groupId, limit, before);
+  }
+
+  /* ─── IndexedDB Message Cache Access ────────────────────────── */
+
+  /**
+   * Get paginated messages from IndexedDB cache with localStorage fallback.
+   * Returns messages sorted by timestamp ascending.
+   */
+  async getCachedMessages(friendId: string, limit: number = 50, before?: number): Promise<ChatMessage[]> {
+    try {
+      const messages = await this.messageCache.getMessages(friendId, limit, before);
+      if (messages.length > 0) return messages;
+    } catch {
+      // IndexedDB unavailable, fall through to localStorage
+    }
+    return this.store.getMessages(friendId);
+  }
+
+  /**
+   * Get total message count for a friend from IndexedDB cache with localStorage fallback.
+   */
+  async getCachedMessageCount(friendId: string): Promise<number> {
+    try {
+      return await this.messageCache.getMessageCount(friendId);
+    } catch {
+      return this.store.getMessages(friendId).length;
+    }
   }
 
   /* ─── Media Helpers ──────────────────────────────────────── */
