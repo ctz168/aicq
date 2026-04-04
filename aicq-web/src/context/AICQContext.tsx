@@ -349,6 +349,7 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   const messagesRef = useRef<Map<string, ChatMessage[]>>(new Map());
   const unreadCountsRef = useRef<UnreadCounts>({});
   const streamingRef = useRef<Record<string, StreamingState>>({});
+  const taskPlansRef = useRef<TaskPlan[]>([]);
 
   const connect = useCallback(async (serverUrl: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -601,7 +602,8 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
           updatedAt: data.updatedAt || Date.now(),
         };
 
-        const existingPlan = state.taskPlans.find(p => p.id === plan.id);
+        // Use ref to avoid stale closure (connect has [] deps)
+        const existingPlan = taskPlansRef.current.find(p => p.id === plan.id);
         if (existingPlan) {
           dispatch({ type: 'UPDATE_TASK_PLAN', payload: plan });
         } else {
@@ -995,6 +997,11 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   const clearTaskPlanFn = useCallback((planId: string) => {
     dispatch({ type: 'REMOVE_TASK_PLAN', payload: planId });
   }, []);
+
+  useEffect(() => {
+    // Keep taskPlansRef in sync with reducer state
+    taskPlansRef.current = state.taskPlans;
+  }, [state.taskPlans]);
 
   useEffect(() => {
     return () => {
