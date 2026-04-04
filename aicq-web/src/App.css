@@ -3081,3 +3081,217 @@ input:disabled {
   background: rgba(248, 81, 73, 0.12);
   color: var(--red);
 }
+
+/* ─── Task Item Actions Button ─────────────────────────── */
+.task-item-actions-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.task-progress-item:hover .task-item-actions-btn {
+  opacity: 1;
+}
+.task-item-actions-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+/* ─── Task Action Popup ────────────────────────────────── */
+.task-action-popup {
+  position: absolute;
+  right: 4px;
+  top: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  z-index: 50;
+  min-width: 120px;
+  box-shadow: 0 4px 16px var(--shadow);
+  animation: taskPopupIn 0.12s ease;
+}
+@keyframes taskPopupIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.task-action-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+.task-action-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.task-action-item.danger-confirm {
+  color: var(--red);
+  background: rgba(248, 81, 73, 0.08);
+  font-weight: 600;
+}
+.task-action-item.danger-confirm:hover {
+  background: rgba(248, 81, 73, 0.15);
+}
+.task-action-disabled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Make task items position:relative for popup */
+.task-progress-item {
+  position: relative;
+}
+
+/* ─── Task Add Button ──────────────────────────────────── */
+.task-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  margin-top: 4px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.task-add-btn:hover {
+  background: rgba(88, 166, 255, 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ─── Task Add Input Row ───────────────────────────────── */
+.task-add-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  animation: taskPopupIn 0.15s ease;
+}
+.task-add-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 6px 8px;
+  font-family: inherit;
+}
+.task-add-input::placeholder {
+  color: var(--text-muted);
+}
+.task-add-confirm-btn,
+.task-add-cancel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.task-add-confirm-btn {
+  background: var(--accent);
+  color: white;
+}
+.task-add-confirm-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.task-add-confirm-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.task-add-cancel-btn {
+  background: none;
+  color: var(--text-muted);
+}
+.task-add-cancel-btn:hover {
+  color: var(--red);
+  background: rgba(248, 81, 73, 0.1);
+}
+
+/* ─── Task Plan Actions (Sync / Clear) ─────────────────── */
+.task-plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.task-sync-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: rgba(88, 166, 255, 0.08);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.task-sync-btn:hover:not(.syncing) {
+  background: rgba(88, 166, 255, 0.18);
+  box-shadow: 0 0 12px rgba(88, 166, 255, 0.15);
+}
+.task-sync-btn.syncing {
+  border-color: var(--green);
+  background: rgba(63, 185, 80, 0.1);
+  color: var(--green);
+  cursor: default;
+}
+.task-clear-plan-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.task-clear-plan-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(248, 81, 73, 0.06);
+}

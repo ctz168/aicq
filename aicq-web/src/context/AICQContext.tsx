@@ -126,6 +126,8 @@ type Action =
   | { type: 'UPDATE_TASK_PLAN'; payload: TaskPlan }
   | { type: 'REMOVE_TASK_PLAN'; payload: string }
   | { type: 'UPDATE_TASK_ITEM'; payload: { planId: string; taskId: string; updates: Partial<TaskItem> } }
+  | { type: 'ADD_TASK_ITEM'; payload: { planId: string; task: TaskItem } }
+  | { type: 'DELETE_TASK_ITEM'; payload: { planId: string; taskId: string } }
   | { type: 'SET_AGENT_EXECUTION'; payload: { friendId: string; state: AgentExecutionState } }
   | { type: 'CLEAR_AGENT_EXECUTION'; payload: string }
   | { type: 'ADD_TO_QUEUE'; payload: ChatMessage }
@@ -292,6 +294,34 @@ function reducer(state: AICQState, action: Action): AICQState {
         }),
       };
     }
+    case 'ADD_TASK_ITEM': {
+      const { planId, task } = action.payload;
+      return {
+        ...state,
+        taskPlans: state.taskPlans.map(plan => {
+          if (plan.id !== planId) return plan;
+          return {
+            ...plan,
+            tasks: [...plan.tasks, task],
+            updatedAt: Date.now(),
+          };
+        }),
+      };
+    }
+    case 'DELETE_TASK_ITEM': {
+      const { planId, taskId } = action.payload;
+      return {
+        ...state,
+        taskPlans: state.taskPlans.map(plan => {
+          if (plan.id !== planId) return plan;
+          return {
+            ...plan,
+            tasks: plan.tasks.filter(t => t.id !== taskId),
+            updatedAt: Date.now(),
+          };
+        }),
+      };
+    }
     case 'SET_AGENT_EXECUTION': {
       const { friendId, state: execState } = action.payload;
       return {
@@ -375,6 +405,9 @@ interface AICQContextValue {
   getTaskPlans: (friendId: string) => TaskPlan[];
   createTaskPlan: (friendId: string, title: string, tasks: Omit<TaskItem, 'id' | 'createdAt' | 'updatedAt'>[]) => TaskPlan;
   updateTaskItem: (planId: string, taskId: string, updates: Partial<TaskItem>) => void;
+  addTaskItem: (planId: string, title: string) => void;
+  deleteTaskItem: (planId: string, taskId: string) => void;
+  syncTaskPlan: (planId: string, friendId: string) => void;
   clearTaskPlan: (planId: string) => void;
   abortAgent: (friendId: string) => Promise<void>;
   getAgentExecutionState: (friendId: string) => AgentExecutionState | null;
@@ -1095,6 +1128,56 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'UPDATE_TASK_ITEM', payload: { planId, taskId, updates } });
   }, []);
 
+  const addTaskItemFn = useCallback((planId: string, title: string) => {
+    const now = Date.now();
+    const plan = taskPlansRef.current.find(p => p.id === planId);
+    const maxOrder = plan ? Math.max(...plan.tasks.map(t => t.order), -1) + 1 : 0;
+    const task: TaskItem = {
+      id: `task-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      title,
+      status: 'pending',
+      order: maxOrder,
+      createdAt: now,
+      updatedAt: now,
+    };
+    dispatch({ type: 'ADD_TASK_ITEM', payload: { planId, task } });
+  }, []);
+
+  const deleteTaskItemFn = useCallback((planId: string, taskId: string) => {
+    dispatch({ type: 'DELETE_TASK_ITEM', payload: { planId, taskId } });
+  }, []);
+
+  const syncTaskPlanFn = useCallback((planId: string, friendId: string) => {
+    const plan = taskPlansRef.current.find(p => p.id === planId);
+    if (!plan) return;
+    const client = clientRef.current;
+    if (!client) return;
+    // Build a structured task list message to send to the AI
+    const taskLines = plan.tasks
+      .sort((a, b) => a.order - b.order)
+      .map((t, i) => {
+        const statusIcon = t.status === 'completed' ? '✅' : t.status === 'in_progress' ? '🔄' : t.status === 'failed' ? '❌' : '⬜';
+        return `${i + 1}. ${statusIcon} ${t.title}`;
+      })
+      .join('\n');
+    const syncMessage = `[任务计划同步 - ${plan.title}]\n以下是更新后的任务列表，请按照此列表严格执行：\n\n${taskLines}\n\n请确认收到并按照任务列表执行。`;
+    client.sendMessage(friendId, syncMessage);
+    // Also add to local messages
+    const msgs = messagesRef.current.get(friendId) || [];
+    const syncMsg: ChatMessage = {
+      id: `sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      fromId: client.getUserId(),
+      toId: friendId,
+      type: 'text',
+      content: syncMessage,
+      timestamp: Date.now(),
+      status: 'sent',
+    };
+    msgs.push(syncMsg);
+    messagesRef.current.set(friendId, msgs);
+    dispatch({ type: 'BUMP_MESSAGE_VERSION' });
+  }, []);
+
   const clearTaskPlanFn = useCallback((planId: string) => {
     dispatch({ type: 'REMOVE_TASK_PLAN', payload: planId });
   }, []);
@@ -1234,6 +1317,9 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     getTaskPlans,
     createTaskPlan,
     updateTaskItem: updateTaskItemFn,
+    addTaskItem: addTaskItemFn,
+    deleteTaskItem: deleteTaskItemFn,
+    syncTaskPlan: syncTaskPlanFn,
     clearTaskPlan: clearTaskPlanFn,
     abortAgent: abortAgentFn,
     getAgentExecutionState,
