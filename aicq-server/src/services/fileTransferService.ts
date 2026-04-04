@@ -1,9 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { store } from '../db/memoryStore';
-import {
-  FileTransferRecord,
-  FileTransferSession,
-} from '../models/types';
+import { FileTransferRecord } from '../models/types';
 
 /**
  * Initiate a file transfer session between two nodes.
@@ -18,7 +15,7 @@ export function initiateTransfer(
     chunks: number;
     chunkSize: number;
   },
-): FileTransferSession {
+): FileTransferRecord {
   const senderNode = store.nodes.get(senderId);
   if (!senderNode) {
     throw new Error('Sender node not registered');
@@ -47,7 +44,7 @@ export function initiateTransfer(
 
   store.fileTransfers.set(transfer.id, transfer);
 
-  return transfer as FileTransferSession;
+  return transfer;
 }
 
 /**
@@ -55,10 +52,10 @@ export function initiateTransfer(
  */
 export function getTransferSession(
   sessionId: string,
-): FileTransferSession | null {
+): FileTransferRecord | null {
   const record = store.fileTransfers.get(sessionId);
   if (!record) return null;
-  return record as unknown as FileTransferSession;
+  return record;
 }
 
 /**

@@ -3,6 +3,7 @@ import type { ChatMessage } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImagePreview from './ImagePreview';
 import VideoPlayer from './VideoPlayer';
+import { detectMarkdown } from '../utils/markdown';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -34,20 +35,6 @@ function getFileIcon(fileType?: string): string {
   if (fileType.includes('presentation') || fileType.includes('ppt')) return '📽️';
   return '📄';
 }
-
-// Pre-compiled markdown detection patterns (module-level, compiled once)
-const MARKDOWN_PATTERNS: RegExp[] = [
-  /^#{1,6}\s/m,           // headings
-  /\*\*[^*]+\*\*/,         // bold
-  /\*[^*]+\*/,             // italic
-  /^[-*+]\s/m,             // unordered list
-  /^\d+\.\s/m,             // ordered list
-  /^```[\s\S]*?```/m,      // code blocks
-  /`[^`]+`/,               // inline code
-  /^\|.*\|$/m,             // table rows
-  /\[.+\]\(.+\)/,          // links
-  /^>\s/m,                 // blockquotes
-];
 
 const MessageBubble = React.memo(function MessageBubble({ message, isOwn, userId }: MessageBubbleProps) {
   // System messages
@@ -204,19 +191,6 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-/**
- * Auto-detect if content looks like Markdown.
- * Simple heuristic: check for common markdown patterns.
- */
-function detectMarkdown(content: string): boolean {
-  if (!content || content.length < 10) return false;
-  let matchCount = 0;
-  for (const p of MARKDOWN_PATTERNS) {
-    if (p.test(content)) matchCount++;
-  }
-  return matchCount >= 2;
 }
 
 /** Date separator component */

@@ -19,6 +19,9 @@ export class ChatManager {
   private ws: WSClient;
   private identity: IdentityManager;
 
+  /** Debounced save timer to avoid blocking the event loop on hot paths. */
+  private _saveTimer: ReturnType<typeof setTimeout> | null = null;
+
   /** Emitter-like callbacks for external consumers. */
   private messageCallbacks: ((msg: ChatMessage) => void)[] = [];
 
@@ -133,7 +136,7 @@ export class ChatManager {
 
     message.status = delivered ? 'delivered' : 'sent';
     this.store.addMessage(friendId, message);
-    this.store.save();
+    this._debouncedSave();
 
     return message;
   }
@@ -189,7 +192,7 @@ export class ChatManager {
 
     message.status = delivered ? 'delivered' : 'sent';
     this.store.addMessage(friendId, message);
-    this.store.save();
+    this._debouncedSave();
 
     return message;
   }
@@ -244,7 +247,7 @@ export class ChatManager {
     };
 
     this.store.addMessage(fromId, message);
-    this.store.save();
+    this._debouncedSave();
 
     return message;
   }
@@ -259,13 +262,13 @@ export class ChatManager {
   /** Delete a specific message from history. */
   deleteMessage(messageId: string): void {
     this.store.deleteMessage(messageId);
-    this.store.save();
+    this._debouncedSave();
   }
 
   /** Mark all messages from a friend as read. */
   markAsRead(friendId: string): void {
     this.store.markAllRead(friendId);
-    this.store.save();
+    this._debouncedSave();
   }
 
   /* ──────────────── Typing indicator ──────────────── */
@@ -282,5 +285,24 @@ export class ChatManager {
 
   destroy(): void {
     this.messageCallbacks.length = 0;
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+      this.store.save();
+    }
+  }
+
+  /* ──────────────── Debounced save ──────────────── */
+
+  /**
+   * Debounced store.save() — coalesces rapid calls into at most one
+   * write per 500 ms window, avoiding synchronous I/O on every message.
+   */
+  private _debouncedSave(): void {
+    if (this._saveTimer) return; // already scheduled
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      this.store.save();
+    }, 500);
   }
 }

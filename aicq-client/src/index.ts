@@ -60,7 +60,8 @@ export class AICQClient extends EventEmitter {
     this.config = loadConfig(configOverrides);
     this.store = new ClientStore(getStorePath(this.config.dataDir));
     this.api = new APIClient(this.config.serverUrl);
-    this.ws = new WSClient(this.config.wsUrl!);
+    if (!this.config.wsUrl) throw new Error('wsUrl is required in config');
+    this.ws = new WSClient(this.config.wsUrl);
     this.identity = new IdentityManager(this.store);
     this.handshake = new HandshakeHandler(this.api, this.ws, this.identity, this.store);
     this.p2p = new P2PClient(this.ws, this.store);

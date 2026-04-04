@@ -42,7 +42,6 @@ export class WSClient extends EventEmitter {
   /** Heartbeat interval handle. */
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private readonly heartbeatIntervalMs = 30_000;
-  private readonly heartbeatTimeoutMs = 10_000;
 
   /** Pending handshake requests keyed by sessionId. */
   private pendingRequests = new Map<string, PendingRequest>();

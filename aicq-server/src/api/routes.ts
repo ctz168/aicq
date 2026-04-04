@@ -10,6 +10,7 @@ import {
   handshakeLimiter,
 } from '../middleware/rateLimit';
 import { authenticateJWT } from '../middleware/auth';
+import { config } from '../config';
 
 const router = Router();
 
@@ -283,7 +284,7 @@ router.post('/file/initiate', authenticateJWT, generalLimiter, (req: Request, re
  * GET /api/v1/file/:sessionId
  * Get file transfer session info.
  */
-router.get('/file/:sessionId', generalLimiter, (req: Request, res: Response) => {
+router.get('/file/:sessionId', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const session = fileTransferService.getTransferSession(req.params.sessionId);
     if (!session) {
@@ -332,7 +333,7 @@ router.post('/file/:sessionId/chunk', generalLimiter, (req: Request, res: Respon
  * GET /api/v1/file/:sessionId/missing
  * Get missing chunks for resume after disconnection.
  */
-router.get('/file/:sessionId/missing', generalLimiter, (req: Request, res: Response) => {
+router.get('/file/:sessionId/missing', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const missing = fileTransferService.getMissingChunks(req.params.sessionId);
     res.json({ missingChunks: missing, count: missing.length });
@@ -519,7 +520,7 @@ router.post('/agent-execution/push', authenticateJWT, generalLimiter, (req: Requ
     if (payload.gatewayUrl) {
       const senderNode = store.nodes.get(senderId);
       if (senderNode) {
-        (senderNode as any).gatewayUrl = payload.gatewayUrl;
+        senderNode.gatewayUrl = payload.gatewayUrl;
       }
     }
 
@@ -575,9 +576,10 @@ function isValidGatewayUrl(url: string): boolean {
     if (!['http:', 'https:'].includes(parsed.protocol)) return false;
     // Block private/internal IPs
     const hostname = parsed.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
-      // Allow localhost for local development, but not internal network ranges
-      return true;
+    // Block localhost/loopback unless explicitly allowed via ALLOW_LOCALHOST env var
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' ||
+        hostname === '0.0.0.0' || hostname === '[::1]') {
+      return config.allowLocalhost;
     }
     // Block private IP ranges
     if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(hostname)) return false;
@@ -629,7 +631,7 @@ router.post('/agent-execution/abort', authenticateJWT, generalLimiter, async (re
     }
 
     // Get gateway URL from stored agent metadata
-    const gatewayUrl = (agentNode as any).gatewayUrl || 'http://localhost:18789';
+    const gatewayUrl = agentNode.gatewayUrl || '';
 
     // Validate gateway URL to prevent SSRF
     if (!isValidGatewayUrl(gatewayUrl)) {

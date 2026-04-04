@@ -5,7 +5,7 @@
  * the full friend-adding flow.
  */
 
-import { getPublicKeyFingerprint } from '@aicq/crypto';
+
 import { APIClient } from '../services/apiClient.js';
 import { WSClient } from '../services/wsClient.js';
 import { HandshakeHandler } from '../handshake/handshakeHandler.js';

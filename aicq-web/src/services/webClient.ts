@@ -6,6 +6,7 @@
  * Supports: text, markdown, image, video, file transfer with resume, streaming AI output.
  */
 
+import { detectMarkdown } from '../utils/markdown';
 import * as aicqCrypto from '@aicq/crypto';
 const {
   generateSigningKeyPair,
@@ -499,7 +500,7 @@ class BrowserAPIClient {
     await this.request('POST', `/group/${encodeURIComponent(groupId)}/transfer`, { accountId: this.nodeId, targetId });
   }
 
-  async setGroupMemberRole(groupId: string, targetId: string, role: string): Promise<void> {
+  async setGroupMemberRole(groupId: string, targetId: string, role: 'owner' | 'admin' | 'member'): Promise<void> {
     if (!this.nodeId) throw new Error('Node ID not set');
     await this.request('POST', `/group/${encodeURIComponent(groupId)}/role`, { accountId: this.nodeId, targetId, role });
   }
@@ -735,6 +736,17 @@ class BrowserWSClient extends SimpleEventEmitter {
     this._send({ type, ...data });
   }
 
+  /**
+   * Send a binary ArrayBuffer over the WebSocket connection.
+   * Used for file chunk transfer. The binary frame is prefixed with
+   * a JSON header (sent as a text frame) containing metadata,
+   * followed by the raw binary chunk.
+   */
+  sendBinary(data: ArrayBuffer): void {
+    if (!this.connected) return;
+    this.socket!.send(data);
+  }
+
   private _send(payload: Record<string, any>): void {
     if (!this.connected) return;
     this.socket!.send(JSON.stringify(payload));
@@ -896,6 +908,9 @@ export class WebClient extends SimpleEventEmitter {
 
   /** Active file transfer abort controllers for pause/cancel */
   private transferControllers = new Map<string, AbortController>();
+
+  /** In-memory file data buffers for active/resumable transfers (sessionId -> Uint8Array) */
+  private fileDataBuffers = new Map<string, Uint8Array>();
 
   /** IndexedDB message cache */
   private messageCache = new MessageCache();
@@ -1506,9 +1521,11 @@ export class WebClient extends SimpleEventEmitter {
     const totalChunks = Math.ceil(file.size / chunkSize);
     const fileType = detectFileType(file.type, file.name);
 
-    // Compute hash
+    // Read file data into memory for chunk upload
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
+    // Store file data for potential resume
+    this.fileDataBuffers.set(sessionId, bytes);
     let hash = 0;
     for (let i = 0; i < bytes.length; i++) {
       hash = ((hash << 5) - hash + bytes[i]) | 0;
@@ -1583,8 +1600,30 @@ export class WebClient extends SimpleEventEmitter {
         // Check for existing chunks (resume support)
         if (transferInfo.chunks[i]) continue;
 
-        // Simulate chunk upload (in production, send via WS as binary)
-        await new Promise((r) => setTimeout(r, 30));
+        // Send binary chunk via WebSocket with metadata header
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize, bytes.length);
+        const chunkData = bytes.slice(start, end);
+
+        // Build binary frame: 4-byte chunkIndex (big-endian) + 4-byte totalChunks + chunk data
+        const headerSize = 8; // 4 bytes index + 4 bytes total
+        const binaryFrame = new ArrayBuffer(headerSize + chunkData.length);
+        const headerView = new DataView(binaryFrame);
+        headerView.setUint32(0, i, false); // chunkIndex
+        headerView.setUint32(4, totalChunks, false); // totalChunks
+        const dataView = new Uint8Array(binaryFrame);
+        dataView.set(chunkData, headerSize);
+
+        this.ws.send('file_chunk', {
+          sessionId,
+          friendId,
+          chunkIndex: i,
+          totalChunks,
+          chunkSize,
+          fileName: file.name,
+          fileSize: file.size,
+        });
+        this.ws.sendBinary(binaryFrame);
         transferInfo.chunks[i] = true;
         transferInfo.bytesTransferred = (i + 1) * chunkSize;
         if (transferInfo.bytesTransferred > file.size) {
@@ -1624,6 +1663,7 @@ export class WebClient extends SimpleEventEmitter {
       throw err;
     } finally {
       this.transferControllers.delete(sessionId);
+      this.fileDataBuffers.delete(sessionId);
     }
 
     this.store.save();
@@ -1640,12 +1680,84 @@ export class WebClient extends SimpleEventEmitter {
   async resumeTransfer(sessionId: string): Promise<void> {
     const transfer = this.store.getFileTransfer(sessionId);
     if (!transfer || transfer.status !== 'paused') return;
-    // Resume is handled by creating a new transfer controller and continuing from missing chunks
+
+    const fileData = this.fileDataBuffers.get(sessionId);
+    if (!fileData) {
+      transfer.status = 'failed';
+      this.store.setFileTransfer(sessionId, transfer);
+      this.emit('file_progress', transfer);
+      return;
+    }
+
     const abortController = new AbortController();
     this.transferControllers.set(sessionId, abortController);
     transfer.status = 'transferring';
     this.store.setFileTransfer(sessionId, transfer);
     this.emit('file_progress', transfer);
+
+    const chunkSize = 64 * 1024;
+    const totalChunks = transfer.chunks.length;
+
+    // Find first missing chunk and resume from there
+    let lastSpeedTime = Date.now();
+    let lastSpeedBytes = transfer.bytesTransferred;
+
+    for (let i = 0; i < totalChunks; i++) {
+      if (abortController.signal.aborted) {
+        transfer.status = 'paused';
+        this.store.setFileTransfer(sessionId, transfer);
+        this.emit('file_progress', transfer);
+        return;
+      }
+
+      if (transfer.chunks[i]) continue;
+
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, fileData.length);
+      const chunkData = fileData.slice(start, end);
+
+      const headerSize = 8;
+      const binaryFrame = new ArrayBuffer(headerSize + chunkData.length);
+      const headerView = new DataView(binaryFrame);
+      headerView.setUint32(0, i, false);
+      headerView.setUint32(4, totalChunks, false);
+      const dataView = new Uint8Array(binaryFrame);
+      dataView.set(chunkData, headerSize);
+
+      this.ws.send('file_chunk', {
+        sessionId,
+        chunkIndex: i,
+        totalChunks,
+        chunkSize,
+      });
+      this.ws.sendBinary(binaryFrame);
+
+      transfer.chunks[i] = true;
+      transfer.bytesTransferred = Math.min((i + 1) * chunkSize, transfer.fileSize);
+      transfer.progress = transfer.bytesTransferred / transfer.fileSize;
+
+      const now = Date.now();
+      const timeDiff = (now - lastSpeedTime) / 1000;
+      if (timeDiff > 1) {
+        const bytesDiff = transfer.bytesTransferred - lastSpeedBytes;
+        transfer.speed = bytesDiff / timeDiff;
+        const remaining = transfer.fileSize - transfer.bytesTransferred;
+        transfer.eta = remaining / transfer.speed;
+        lastSpeedTime = now;
+        lastSpeedBytes = transfer.bytesTransferred;
+      }
+
+      this.store.setFileTransfer(sessionId, transfer);
+      this.emit('file_progress', transfer);
+    }
+
+    transfer.status = 'completed';
+    transfer.progress = 1;
+    transfer.bytesTransferred = transfer.fileSize;
+    this.store.setFileTransfer(sessionId, transfer);
+    this.emit('file_progress', transfer);
+    this.fileDataBuffers.delete(sessionId);
+    this.store.save();
   }
 
   /** Cancel a file transfer */
@@ -1737,7 +1849,7 @@ export class WebClient extends SimpleEventEmitter {
     this.emit('group_updated', group);
   }
 
-  async setGroupMemberRole(groupId: string, targetId: string, role: string): Promise<void> {
+  async setGroupMemberRole(groupId: string, targetId: string, role: 'owner' | 'admin' | 'member'): Promise<void> {
     await this.api.setGroupMemberRole(groupId, targetId, role);
     const group = await this.api.getGroupInfo(groupId);
     this.store.addGroup(group);
@@ -1957,24 +2069,7 @@ export class WebClient extends SimpleEventEmitter {
   }
 
   private _detectMarkdown(content: string): boolean {
-    if (!content || content.length < 10) return false;
-    const patterns = [
-      /^#{1,6}\s/m,
-      /\*\*[^*]+\*\*/,
-      /\*[^*]+\*/,
-      /^[-*+]\s/m,
-      /^\d+\.\s/m,
-      /^```[\s\S]*?```/m,
-      /`[^`]+`/,
-      /^\|.*\|$/m,
-      /\[.+\]\(.+\)/,
-      /^>\s/m,
-    ];
-    let matchCount = 0;
-    for (const p of patterns) {
-      if (p.test(content)) matchCount++;
-    }
-    return matchCount >= 2;
+    return detectMarkdown(content);
   }
 
   /* ─── Lifecycle ───────────────────────────────────────────── */

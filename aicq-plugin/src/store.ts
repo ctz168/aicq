@@ -3,10 +3,14 @@
  *
  * Manages identity keys, friends, sessions, temp numbers, pending requests,
  * and handshake state.  Optionally persists to a JSON file.
+ *
+ * Secret key fields (identitySecretKey, exchangeSecretKey) are encrypted
+ * at rest using AES-256-GCM with a machine-derived encryption key.
  */
 
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
 import type { KeyPair } from "@aicq/crypto";
 import type {
   FriendRecord,
@@ -20,9 +24,11 @@ import type {
 interface SerializedStore {
   agentId: string;
   identityPublicKey: string;  // base64
-  identitySecretKey: string;  // base64
+  identitySecretKey: string;  // base64 (encrypted at rest)
   exchangePublicKey: string;  // base64
-  exchangeSecretKey: string;  // base64
+  exchangeSecretKey: string;  // base64 (encrypted at rest)
+  encryptionSalt: string;     // base64, salt used to derive encryption key
+  encryptionKeyId: string;    // hex, key derivation identifier
   friends: Array<{
     id: string;
     publicKey: string;
@@ -54,6 +60,61 @@ function decodeBuffer(b64: string): Uint8Array {
   return new Uint8Array(Buffer.from(b64, "base64"));
 }
 
+/**
+ * Derive a 32-byte AES-256 encryption key from a node ID and random salt
+ * using PBKDF2-SHA512.
+ */
+function deriveEncryptionKey(nodeId: string, salt: Uint8Array): Uint8Array {
+  return Uint8Array.from(
+    crypto.pbkdf2Sync(nodeId, salt, 100_000, 32, "sha512"),
+  );
+}
+
+/**
+ * Encrypt a Uint8Array using AES-256-GCM.
+ * Returns a base64 string of: salt(16) || iv(12) || ciphertext || authTag(16).
+ */
+function aes256GcmEncrypt(plaintext: Uint8Array, key: Uint8Array): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+
+  // Pack: salt is not needed per-field (key already derived), iv + ciphertext + tag
+  const packed = Buffer.concat([iv, encrypted, authTag]);
+  return packed.toString("base64");
+}
+
+/**
+ * Decrypt a base64 string produced by aes256GcmEncrypt.
+ */
+function aes256GcmDecrypt(packedBase64: string, key: Uint8Array): Uint8Array | null {
+  try {
+    const packed = Buffer.from(packedBase64, "base64");
+    if (packed.length < 29) return null; // iv(12) + authTag(16) = minimum 28 + 1 byte ciphertext
+
+    const iv = packed.subarray(0, 12);
+    const authTag = packed.subarray(packed.length - 16);
+    const ciphertext = packed.subarray(12, packed.length - 16);
+
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(authTag);
+
+    const decrypted = Buffer.concat([
+      decipher.update(ciphertext),
+      decipher.final(),
+    ]);
+
+    return new Uint8Array(decrypted);
+  } catch {
+    return null;
+  }
+}
+
 export class PluginStore {
   agentId: string = "";
   identityKeys: KeyPair = { publicKey: new Uint8Array(0), secretKey: new Uint8Array(0) };
@@ -66,6 +127,7 @@ export class PluginStore {
 
   private dataDir: string = "";
   private storePath: string = "";
+  private encryptionSalt: Uint8Array = crypto.randomBytes(16);
 
   /**
    * Set the data directory for persistence.
@@ -81,17 +143,33 @@ export class PluginStore {
   }
 
   /**
+   * Get the encryption key derived from the node ID and stored salt.
+   */
+  private getEncryptionKey(): Uint8Array {
+    return deriveEncryptionKey(this.agentId || "default-aicq-node", this.encryptionSalt);
+  }
+
+  /**
    * Save the current state to disk.
+   *
+   * Secret keys are encrypted at rest using AES-256-GCM with a key
+   * derived from the node ID and a stored random salt.
    */
   save(): void {
     if (!this.storePath) return;
 
+    const encKey = this.getEncryptionKey();
+    const encryptedSecretSigningKey = aes256GcmEncrypt(this.identityKeys.secretKey, encKey);
+    const encryptedSecretExchangeKey = aes256GcmEncrypt(this.exchangeKeys.secretKey, encKey);
+
     const serialized: SerializedStore = {
       agentId: this.agentId,
       identityPublicKey: encodeBuffer(this.identityKeys.publicKey),
-      identitySecretKey: encodeBuffer(this.identityKeys.secretKey),
+      identitySecretKey: encryptedSecretSigningKey,
       exchangePublicKey: encodeBuffer(this.exchangeKeys.publicKey),
-      exchangeSecretKey: encodeBuffer(this.exchangeKeys.secretKey),
+      exchangeSecretKey: encryptedSecretExchangeKey,
+      encryptionSalt: encodeBuffer(this.encryptionSalt),
+      encryptionKeyId: this.agentId,
       friends: Array.from(this.friends.entries()).map(([, f]) => ({
         id: f.id,
         publicKey: encodeBuffer(f.publicKey),
@@ -131,6 +209,10 @@ export class PluginStore {
 
   /**
    * Load state from disk, if available.
+   *
+   * Decrypts secret keys using AES-256-GCM with the stored salt and
+   * node ID.  Falls back to plaintext if the data was stored before
+   * encryption was added (backward compatibility).
    */
   load(): boolean {
     if (!this.storePath || !fs.existsSync(this.storePath)) {
@@ -142,13 +224,38 @@ export class PluginStore {
       const data: SerializedStore = JSON.parse(raw);
 
       this.agentId = data.agentId;
+
+      // Load encryption salt if present (backward compat)
+      if (data.encryptionSalt) {
+        this.encryptionSalt = decodeBuffer(data.encryptionSalt);
+      }
+
+      // Try to decrypt secret keys
+      const encKey = this.getEncryptionKey();
+      let decryptedSigningKey: Uint8Array | null = null;
+      let decryptedExchangeKey: Uint8Array | null = null;
+
+      if (data.encryptionSalt) {
+        // New format: encrypted at rest
+        decryptedSigningKey = aes256GcmDecrypt(data.identitySecretKey, encKey);
+        decryptedExchangeKey = aes256GcmDecrypt(data.exchangeSecretKey, encKey);
+      }
+
+      // If decryption failed, try loading as plaintext (old format fallback)
+      if (!decryptedSigningKey || decryptedSigningKey.length === 0) {
+        decryptedSigningKey = decodeBuffer(data.identitySecretKey);
+      }
+      if (!decryptedExchangeKey || decryptedExchangeKey.length === 0) {
+        decryptedExchangeKey = decodeBuffer(data.exchangeSecretKey);
+      }
+
       this.identityKeys = {
         publicKey: decodeBuffer(data.identityPublicKey),
-        secretKey: decodeBuffer(data.identitySecretKey),
+        secretKey: decryptedSigningKey,
       };
       this.exchangeKeys = {
         publicKey: decodeBuffer(data.exchangePublicKey),
-        secretKey: decodeBuffer(data.exchangeSecretKey),
+        secretKey: decryptedExchangeKey,
       };
 
       this.friends.clear();

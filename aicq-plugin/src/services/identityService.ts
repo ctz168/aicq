@@ -5,6 +5,7 @@
  * and QR-based private key export/import for human takeover scenarios.
  */
 
+import * as crypto from "crypto";
 import QRCode from "qrcode";
 import {
   generateSigningKeyPair,
@@ -22,6 +23,9 @@ export class IdentityService {
   private store: PluginStore;
   private logger: Logger;
   private exportTimers: Map<string, NodeJS.Timeout> = new Map();
+
+  /** Set of valid export tokens — timer invalidates by removing the token. */
+  private validExportTokens: Set<string> = new Set();
 
   constructor(store: PluginStore, logger: Logger) {
     this.store = store;
@@ -76,12 +80,16 @@ export class IdentityService {
    *   - identitySecretKey (encrypted with password)
    *   - identityPublicKey
    *   - createdAt timestamp
+   *   - token (random 32-byte hex, validated on import)
    *
    * Valid for 60 seconds — after that the timer invalidates the export token.
    *
    * @returns QR code data URL (string starting with "data:image/png;base64,")
    */
   async exportPrivateKeyQR(password: string): Promise<string> {
+    // Generate a random export token for validation on import
+    const exportToken = crypto.randomBytes(32).toString("hex");
+
     // Serialize the private key data
     const exportPayload = {
       a: this.store.agentId,
@@ -90,6 +98,7 @@ export class IdentityService {
       ek_pk: encodeBase64(this.store.exchangeKeys.publicKey),
       ek_sk: encodeBase64(this.store.exchangeKeys.secretKey),
       t: Date.now(),
+      token: exportToken,
     };
 
     const payloadJson = JSON.stringify(exportPayload);
@@ -115,7 +124,10 @@ export class IdentityService {
       margin: 2,
     });
 
-    // Set 60-second auto-expiry timer
+    // Register the token as valid
+    this.validExportTokens.add(exportToken);
+
+    // Set 60-second auto-expiry timer that removes the token
     const exportId = encodeBase64(this.store.identityKeys.publicKey).slice(0, 16);
     const existingTimer = this.exportTimers.get(exportId);
     if (existingTimer) {
@@ -123,6 +135,7 @@ export class IdentityService {
     }
 
     const timer = setTimeout(() => {
+      this.validExportTokens.delete(exportToken);
       this.exportTimers.delete(exportId);
       this.logger.info("[Identity] Export QR expired for agent " + this.store.agentId);
     }, 60_000);
@@ -135,6 +148,8 @@ export class IdentityService {
 
   /**
    * Import a private key from a QR code scan result.
+   *
+   * Validates the export token is still in the valid set (not expired/timer-deleted).
    *
    * @param data  The JSON string extracted from the QR code
    * @param password  The password used to encrypt the key
@@ -166,6 +181,16 @@ export class IdentityService {
       if (age > 60_000) {
         this.logger.warn("[Identity] Export data expired (" + Math.round(age / 1000) + "s old)");
         return false;
+      }
+
+      // Validate the export token is still in the valid set
+      if (payload.token && typeof payload.token === "string") {
+        if (!this.validExportTokens.has(payload.token)) {
+          this.logger.warn("[Identity] Export token expired or already used — QR code is no longer valid");
+          return false;
+        }
+        // Remove token after successful use (one-time use)
+        this.validExportTokens.delete(payload.token);
       }
 
       // Restore keys
@@ -200,12 +225,13 @@ export class IdentityService {
   }
 
   /**
-   * Clean up all export timers.
+   * Clean up all export timers and valid tokens.
    */
   cleanup(): void {
     for (const timer of this.exportTimers.values()) {
       clearTimeout(timer);
     }
     this.exportTimers.clear();
+    this.validExportTokens.clear();
   }
 }

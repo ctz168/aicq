@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import nacl from 'tweetnacl';
 import { store } from '../db/memoryStore';
 import { Account, Session, AccountType, FriendPermission } from '../models/types';
+import { config } from '../config';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -73,7 +74,8 @@ export function verifyJWT(token: string, secret: string): Record<string, unknown
     if (payload.exp && (payload.exp as number) < now) return null;
 
     return payload;
-  } catch {
+  } catch (err) {
+    console.warn(`[account] JWT verification failed:`, err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -250,7 +252,8 @@ function verifyAgentSignature(publicKeyBase64: string, challenge: string, signat
     if (publicKey.length !== 32 || signature.length !== 64) return false;
 
     return nacl.sign.detached.verify(message, signature, publicKey);
-  } catch {
+  } catch (err) {
+    console.warn(`[account] Agent signature verification error:`, err instanceof Error ? err.message : err);
     return false;
   }
 }
@@ -291,7 +294,7 @@ function findAccountByPublicKey(publicKey: string): Account | undefined {
 }
 
 export function createSession(account: Account): Session {
-  const jwtSecret = process.env.JWT_SECRET || 'aicq-default-jwt-secret-change-in-production';
+  const jwtSecret = config.jwtSecret;
   const { token, expiresAt } = generateToken(
     { sub: account.id, type: account.type, displayName: account.displayName || account.agentName },
     jwtSecret,
@@ -317,7 +320,7 @@ export function createSession(account: Account): Session {
 }
 
 export function refreshSession(refreshToken: string): Session | null {
-  const jwtSecret = process.env.JWT_SECRET || 'aicq-default-jwt-secret-change-in-production';
+  const jwtSecret = config.jwtSecret;
   const payload = verifyJWT(refreshToken, jwtSecret + '-refresh');
   if (!payload) return null;
 

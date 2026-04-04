@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAICQ } from '../context/AICQContext';
 import StatusBadge from '../components/StatusBadge';
-import type { FriendInfo, ChatMessage } from '../types';
+import type { ChatMessage } from '../types';
 
 function formatTime(ts: number): string {
   const d = new Date(ts);

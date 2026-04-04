@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAICQ } from '../context/AICQContext';
 import Dialog from '../components/Dialog';
 import QRCodeDisplay from '../components/QRCodeDisplay';
+import { APP_VERSION } from '../utils/version';
 
 const SettingsScreen: React.FC = () => {
   const { state, navigate, client } = useAICQ();
@@ -104,13 +105,14 @@ const SettingsScreen: React.FC = () => {
         payloadBytes
       );
 
-      // Build QR payload: aicq:privkey:v1:{salt_b64}:{iv_b64}:{encrypted_b64}:{expiry}
+      // Build QR payload: aicq$privkey$v1$salt_b64$iv_b64$encrypted_b64$expiry
+      // NOTE: Using $ as delimiter because base64 can contain ':' but never '$'
       const saltB64 = btoa(String.fromCharCode(...salt));
       const ivB64 = btoa(String.fromCharCode(...iv));
       const encB64 = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
       const expiresAt = Date.now() + 60_000; // 60 seconds
 
-      const payload = `aicq:privkey:v1:${saltB64}:${ivB64}:${encB64}:${expiresAt.toString(36)}`;
+      const payload = `aicq$privkey$v1$${saltB64}$${ivB64}$${encB64}$${expiresAt.toString(36)}`;
       setExportQR(payload);
     } catch (err) {
       setExportError('导出失败: ' + (err instanceof Error ? err.message : String(err)));
@@ -131,22 +133,25 @@ const SettingsScreen: React.FC = () => {
     try {
       const qrPayload = importQRText.trim();
 
-      if (!qrPayload.startsWith('aicq:privkey:v1:')) {
+      if (!qrPayload.startsWith('aicq$privkey$v1$')) {
         setImportError('无效的QR码格式');
         return;
       }
 
-      const parts = qrPayload.split(':');
-      if (parts.length < 7) {
+      // Use $ as delimiter (base64 never contains $)
+      const prefix = 'aicq$privkey$v1$';
+      const rest = qrPayload.slice(prefix.length);
+      const parts = rest.split('$');
+      if (parts.length < 4) {
         setImportError('QR码数据不完整');
         return;
       }
 
-      // Parse: aicq:privkey:v1:{salt}:{iv}:{encrypted}:{expiry}
-      const salt = Uint8Array.from(atob(parts[3]), c => c.charCodeAt(0));
-      const iv = Uint8Array.from(atob(parts[4]), c => c.charCodeAt(0));
-      const encrypted = Uint8Array.from(atob(parts[5]), c => c.charCodeAt(0));
-      const expiresAt = parseInt(parts[6], 36);
+      // Parse: aicq$privkey$v1$salt$iv$encrypted$expiry
+      const salt = Uint8Array.from(atob(parts[0]), c => c.charCodeAt(0));
+      const iv = Uint8Array.from(atob(parts[1]), c => c.charCodeAt(0));
+      const encrypted = Uint8Array.from(atob(parts[2]), c => c.charCodeAt(0));
+      const expiresAt = parseInt(parts[3], 36);
 
       if (Date.now() > expiresAt) {
         setImportError('QR码已过期（60秒有效期）');
@@ -283,7 +288,7 @@ const SettingsScreen: React.FC = () => {
         <h3 className="settings-section-title">关于</h3>
         <div className="settings-item">
           <span className="settings-label">版本</span>
-          <span className="settings-value">v1.0.0</span>
+          <span className="settings-value">{APP_VERSION}</span>
         </div>
         <div className="settings-item">
           <span className="settings-label">协议</span>

@@ -384,6 +384,9 @@ interface AICQContextValue {
   leaveGroup: (groupId: string) => Promise<void>;
   disbandGroup: (groupId: string) => Promise<void>;
   updateGroup: (groupId: string, updates: { name?: string; description?: string }) => Promise<void>;
+  transferGroupOwnership: (groupId: string, targetId: string) => Promise<void>;
+  muteGroupMember: (groupId: string, targetId: string, muted: boolean) => Promise<void>;
+  setGroupMemberRole: (groupId: string, targetId: string, role: 'owner' | 'admin' | 'member') => Promise<void>;
   sendGroupMessage: (groupId: string, text: string) => GroupMessage;
   getGroupMessages: (groupId: string) => GroupMessage[];
   friendRequests: FriendRequest[];
@@ -432,6 +435,7 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   const agentExecutionRef = useRef<Record<string, AgentExecutionState>>({});
   const messageQueueRef = useRef<ChatMessage[]>([]);
   const typingStateRef = useRef<TypingState>({});
+  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const activeFriendIdRef = useRef<string | null>(null);
 
   const connect = useCallback(async (serverUrl: string) => {
@@ -485,14 +489,22 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
       });
 
       client.on('typing', (event: { fromId: string }) => {
-        const current = { ...typingStateRef.current, [event.fromId]: true };
+        const fromId = event.fromId;
+        const current = { ...typingStateRef.current, [fromId]: true };
         typingStateRef.current = current;
         dispatch({ type: 'SET_TYPING', payload: current });
-        setTimeout(() => {
-          const cleared = { ...typingStateRef.current, [event.fromId]: false };
+
+        // Clear existing timer for this friend to avoid overlapping timers
+        const existingTimer = typingTimersRef.current.get(fromId);
+        if (existingTimer) clearTimeout(existingTimer);
+
+        const timer = setTimeout(() => {
+          const cleared = { ...typingStateRef.current, [fromId]: false };
           typingStateRef.current = cleared;
           dispatch({ type: 'SET_TYPING', payload: cleared });
+          typingTimersRef.current.delete(fromId);
         }, 3000);
+        typingTimersRef.current.set(fromId, timer);
       });
 
       client.on('friend_added', (friend: FriendInfo) => {
@@ -1008,6 +1020,30 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_GROUPS', payload: groups });
   }, []);
 
+  const transferGroupOwnership = useCallback(async (groupId: string, targetId: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.transferGroupOwnership(groupId, targetId);
+    const groups = await client.getGroups();
+    dispatch({ type: 'SET_GROUPS', payload: groups });
+  }, []);
+
+  const muteGroupMember = useCallback(async (groupId: string, targetId: string, muted: boolean) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.muteGroupMember(groupId, targetId, muted);
+    const groups = await client.getGroups();
+    dispatch({ type: 'SET_GROUPS', payload: groups });
+  }, []);
+
+  const setGroupMemberRoleFn = useCallback(async (groupId: string, targetId: string, role: 'owner' | 'admin' | 'member') => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.setGroupMemberRole(groupId, targetId, role);
+    const groups = await client.getGroups();
+    dispatch({ type: 'SET_GROUPS', payload: groups });
+  }, []);
+
   const sendGroupMessage = useCallback((groupId: string, text: string): GroupMessage => {
     const client = clientRef.current;
     if (!client) throw new Error('Client not initialized');
@@ -1281,6 +1317,9 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     leaveGroup,
     disbandGroup,
     updateGroup: updateGroupFn,
+    transferGroupOwnership,
+    muteGroupMember,
+    setGroupMemberRole: setGroupMemberRoleFn,
     sendGroupMessage,
     getGroupMessages,
     friendRequests: state.friendRequests,

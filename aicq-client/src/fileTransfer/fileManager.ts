@@ -12,7 +12,7 @@
 
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
+
 import { APIClient } from '../services/apiClient.js';
 import { WSClient } from '../services/wsClient.js';
 import { ClientStore } from '../store.js';

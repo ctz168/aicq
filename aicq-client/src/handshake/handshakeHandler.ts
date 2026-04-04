@@ -366,8 +366,8 @@ export class HandshakeHandler {
 
     try {
       await this.ws.waitForResponse(pending.sessionId, 'signal', 60_000);
-    } catch {
-      // Non-fatal: we already have the session key
+    } catch (err) {
+      console.warn('[Handshake] Confirm timeout:', err);
     }
 
     // Add friend
@@ -421,27 +421,14 @@ export class HandshakeHandler {
 
   /* ──────────────── Response / Confirm handlers (outgoing) ──────────────── */
 
-  /** Buffer for signal messages that arrive before waitForResponse is called. */
-  private signalBuffer: Map<string, any> = new Map();
-
-  private _handleResponse(data: any): void {
-    // Buffer the response in case initiateHandshake hasn't set up waitForResponse yet.
-    // The waitForResponse mechanism in WSClient will pick this up.
-    // If no one consumes it within the timeout, it's safely discarded.
-    const sessionId = data?.sessionId;
-    if (sessionId) {
-      this.signalBuffer.set('response:' + sessionId, data);
-      // Auto-cleanup after 2 minutes
-      setTimeout(() => this.signalBuffer.delete('response:' + sessionId), 120_000);
-    }
+  private _handleResponse(_data: any): void {
+    // The waitForResponse mechanism in WSClient handles response routing.
+    // No buffering needed here.
   }
 
-  private _handleConfirm(data: any): void {
-    const sessionId = data?.sessionId;
-    if (sessionId) {
-      this.signalBuffer.set('confirm:' + sessionId, data);
-      setTimeout(() => this.signalBuffer.delete('confirm:' + sessionId), 120_000);
-    }
+  private _handleConfirm(_data: any): void {
+    // The waitForResponse mechanism in WSClient handles confirm routing.
+    // No buffering needed here.
   }
 
   /* ──────────────── Session key lookup ──────────────── */
@@ -456,7 +443,6 @@ export class HandshakeHandler {
   destroy(): void {
     this.outgoingEphemeral.clear();
     this.incomingRequests.clear();
-    this.signalBuffer.clear();
     this.progressCallback = null;
   }
 }

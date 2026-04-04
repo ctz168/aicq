@@ -45,13 +45,14 @@ export async function sendVerificationCode(
 
   store.verificationCodes.set(`${type}:${target}:${purpose}`, record);
 
-  // Send the code (replace with real SMS/email in production)
+  // Send the code (replace with real SMS/email provider in production)
+  console.warn('\n⚠️  WARNING: sendVerificationCode is a DEVELOPMENT-MODE STUB.');
+  console.warn('  Verification codes are logged to console only. No email/SMS is sent.');
+  console.warn('  Integrate a real email (SMTP) or SMS provider before deploying to production.\n');
   if (type === 'email') {
     console.log(`[verification] Email verification code for ${target}: ${code}`);
-    // TODO: integrate SMTP to send actual email
   } else {
     console.log(`[verification] SMS verification code for ${target}: ${code}`);
-    // TODO: integrate SMS provider to send actual SMS
   }
 
   return { verificationId: id, expiresAt };

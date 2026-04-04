@@ -1,10 +1,11 @@
 /**
  * X25519 ECDH shared-secret computation and session-key derivation.
  *
- * The HKDF implementation uses tweetnacl's SHA-512 hash (nacl.hash) to
- * approximate HKDF-SHA256.  This is *not* standard HKDF-SHA256, but it
- * provides a functional, self-contained key-derivation primitive that
- * only depends on tweetnacl (no Node.js crypto module required).
+ * The HKDF implementation follows RFC 5869 using HMAC-SHA512 built on
+ * tweetnacl's SHA-512 hash (nacl.hash).  The extract phase uses
+ * HMAC-SHA512(salt, IKM) per the HKDF specification, and the expand
+ * phase derives the output key material. This provides a standard
+ * key-derivation primitive that only depends on tweetnacl.
  */
 
 import { nacl } from "./nacl.js";
@@ -44,9 +45,14 @@ export function deriveSessionKey(
   context: string = "aicq-session",
 ): Uint8Array {
   // ---- Extract phase ----
-  const salt = nacl.hash(
-    new Uint8Array([...new TextEncoder().encode(context), ...sharedSecret]),
-  );
+  // HMAC-SHA512(salt=IKM, message=context || sharedSecret)
+  // Using context as the HMAC key and context||sharedSecret as the message
+  // per standard HKDF extract: PRK = HMAC-Hash(salt, IKM)
+  const contextBytes = new TextEncoder().encode(context);
+  const extractInput = new Uint8Array(contextBytes.length + sharedSecret.length);
+  extractInput.set(contextBytes);
+  extractInput.set(sharedSecret, contextBytes.length);
+  const salt = hmacSha512(contextBytes, extractInput);
 
   // ---- Expand phase ----
   // T(1) = HMAC-SHA512(salt, 0x01 || info)

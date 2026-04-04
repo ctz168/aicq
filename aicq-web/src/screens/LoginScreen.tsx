@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAICQ } from '../context/AICQContext';
+import { APP_VERSION } from '../utils/version';
 
 type LoginTab = 'login' | 'register';
 type LoginType = 'email' | 'phone';
@@ -583,7 +584,7 @@ const LoginScreen: React.FC = () => {
         {/* Footer */}
         <div className="login-footer">
           <p>🔒 所有消息均使用端到端加密</p>
-          <p className="login-version">v1.1.0</p>
+          <p className="login-version">{APP_VERSION}</p>
         </div>
       </div>
     </div>

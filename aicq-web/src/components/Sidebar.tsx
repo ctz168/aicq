@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import type { TabName } from '../types';
 import type { UnreadCounts } from '../types';
 import { NotificationBell } from './NotificationPanel';

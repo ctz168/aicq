@@ -12,6 +12,7 @@ export interface NodeRecord {
   socketId: string | null;
   friendCount: number;
   friends: Set<string>;
+  gatewayUrl?: string;
 }
 
 export interface TempNumberRecord {
@@ -52,21 +53,6 @@ export interface PendingRequest {
   tempNumber: string;
   sessionId: string;
   createdAt: number;
-}
-
-export interface FileTransferSession {
-  id: string;
-  senderId: string;
-  receiverId: string;
-  fileName: string;
-  fileSize: number;
-  fileHash: string;
-  totalChunks: number;
-  chunkSize: number;
-  chunksReceived: boolean[];
-  createdAt: number;
-  completedAt: number | null;
-  cancelledAt: number | null;
 }
 
 // ─── Account System ─────────────────────────────────────────────
@@ -215,6 +201,19 @@ export interface ReportChunkProgressRequest {
 }
 
 // ─── Group System ─────────────────────────────────────────────
+
+export interface GroupMessage {
+  id: string;
+  groupId: string;
+  fromId: string;
+  senderName: string;
+  type: string;
+  content: string;
+  media?: any;
+  fileInfo?: any;
+  timestamp: number;
+}
+
 export type GroupRole = 'owner' | 'admin' | 'member';
 
 export interface GroupMember {

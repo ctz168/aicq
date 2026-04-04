@@ -22,6 +22,7 @@ import {
   computeSharedSecret,
   deriveSessionKey,
 } from "@aicq/crypto";
+import * as crypto from "crypto";
 import type { HandshakeRequest, HandshakeResponse, KeyPair } from "@aicq/crypto";
 import type { PluginStore } from "../store.js";
 import type { ServerClient } from "../services/serverClient.js";
@@ -352,7 +353,9 @@ export class HandshakeManager {
     combined.set(se, 32);
     combined.set(es, 64);
 
-    const newSessionKey = deriveSessionKey(combined, "aicq-session-rotate-" + Date.now());
+    // Use a random nonce instead of predictable timestamp
+    const nonce = crypto.randomBytes(16).toString("hex");
+    const newSessionKey = deriveSessionKey(combined, "aicq-session-rotate-" + nonce);
 
     // Update session
     const updatedSession: SessionState = {

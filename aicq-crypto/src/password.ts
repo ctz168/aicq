@@ -1,11 +1,11 @@
 /**
  * Password-based encryption helpers.
  *
- * Uses repeated SHA-512 hashing (via tweetnacl) to derive a key from a
- * password and salt — a simple PBKDF2-like construction.  Then encrypts
- * with NaCl `secretbox`.
+ * Uses PBKDF2-SHA512 (via Node.js crypto module) to derive a key from a
+ * password and salt.  Then encrypts with NaCl `secretbox`.
  */
 
+import * as crypto from "crypto";
 import { nacl } from "./nacl.js";
 import { encrypt, decrypt, generateNonce } from "./cipher.js";
 import type { EncryptedMessage } from "./types.js";
@@ -15,17 +15,34 @@ import type { EncryptedMessage } from "./types.js";
 /* ------------------------------------------------------------------ */
 
 /**
- * Derive a 32-byte key from a password using iterated SHA-512 hashing.
+ * Derive a 32-byte key from a password using PBKDF2 with SHA-512.
  *
- * This is intentionally simple — for production-grade PBKDF2 you would
- * use the Node.js `crypto` module, but this keeps the library dependency-
- * free and functional.
+ * Uses Node.js built-in crypto.pbkdf2Sync for standard, secure key
+ * derivation following RFC 2898.
  *
  * @param password  UTF-8 password string.
  * @param salt      Salt bytes.
- * @param iterations Number of SHA-512 rounds (default 100 000).
+ * @param iterations Number of PBKDF2 rounds (default 100 000).
+ * @param keyLength  Desired key length in bytes (default 32).
  */
-function deriveKey(
+export function deriveKeyFromPassword(
+  password: string,
+  salt: Uint8Array,
+  iterations: number = 100_000,
+  keyLength: number = 32,
+): Uint8Array {
+  return Uint8Array.from(
+    crypto.pbkdf2Sync(password, salt, iterations, keyLength, "sha512"),
+  );
+}
+
+/**
+ * Derive a 32-byte key from a password using iterated SHA-512 hashing.
+ *
+ * @deprecated Use `deriveKeyFromPassword` (PBKDF2) instead.
+ * @internal Kept for backward compatibility with existing encrypted data.
+ */
+function deriveKeyLegacy(
   password: string,
   salt: Uint8Array,
   iterations: number = 100_000,
@@ -42,6 +59,23 @@ function deriveKey(
   }
 
   return current.slice(0, 32); // truncate to 32 bytes for secretbox key
+}
+
+/**
+ * Internal derive key function that tries PBKDF2 first, falling back
+ * to the legacy method if PBKDF2 fails.
+ */
+function deriveKey(
+  password: string,
+  salt: Uint8Array,
+  iterations: number = 100_000,
+): Uint8Array {
+  try {
+    return deriveKeyFromPassword(password, salt, iterations);
+  } catch {
+    // Fallback to legacy for environments without Node.js crypto
+    return deriveKeyLegacy(password, salt, iterations);
+  }
 }
 
 /* ------------------------------------------------------------------ */

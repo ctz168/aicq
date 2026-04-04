@@ -3,6 +3,7 @@ import * as verificationService from '../services/verificationService';
 import * as accountService from '../services/accountService';
 import { generalLimiter } from '../middleware/rateLimit';
 import { loginRateLimit } from '../middleware/auth';
+import type { Account, Session } from '../models/types';
 
 const router = Router();
 
@@ -189,7 +190,7 @@ router.post('/auth/refresh', generalLimiter, async (req: Request, res: Response)
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-function sanitizeAccount(account: any): any {
+function sanitizeAccount(account: Account): Record<string, unknown> {
   return {
     id: account.id,
     type: account.type,
@@ -207,7 +208,7 @@ function sanitizeAccount(account: any): any {
   };
 }
 
-function sanitizeSession(session: any): any {
+function sanitizeSession(session: Session): Record<string, unknown> {
   return {
     sessionId: session.id,
     token: session.token,

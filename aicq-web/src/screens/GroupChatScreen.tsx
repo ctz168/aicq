@@ -29,6 +29,8 @@ const GroupChatScreen: React.FC = () => {
     inviteToGroup,
     updateGroup,
     refreshGroups,
+    transferGroupOwnership,
+    muteGroupMember,
   } = useAICQ();
 
   const [inputText, setInputText] = useState('');
@@ -164,11 +166,15 @@ const GroupChatScreen: React.FC = () => {
 
   const handleTransfer = async () => {
     if (!groupId || !transferTargetId.trim()) return;
+    if (!confirm(`确定要将群主转让给 ${transferTargetId} 吗？此操作不可撤销。`)) return;
     try {
-      await (await import('../services/webClient')).WebClient.prototype.constructor; // no-op
-      // Use context - but transferGroupOwnership isn't exposed, so just alert
-      alert('群主转让功能需要通过设置面板操作');
-    } catch {}
+      await transferGroupOwnership(groupId, transferTargetId.trim());
+      setTransferTargetId('');
+      setConfirmAction(null);
+    } catch (err) {
+      console.error('Transfer failed:', err);
+      alert('转让失败：' + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
   const handleMute = async (targetId: string) => {
@@ -176,13 +182,13 @@ const GroupChatScreen: React.FC = () => {
     const member = group?.members.find(m => m.accountId === targetId);
     if (!member) return;
     try {
-      const client = (await import('../services/webClient')).default;
-      // We'll use the API directly via a workaround
-      console.log('Mute toggled for', targetId);
+      const isCurrentlyMuted = member.isMuted;
+      await muteGroupMember(groupId, targetId, !isCurrentlyMuted);
       setMuteTargetId(null);
       await refreshGroups();
     } catch (err) {
       console.error('Mute failed:', err);
+      alert('操作失败：' + (err instanceof Error ? err.message : String(err)));
     }
   };
 

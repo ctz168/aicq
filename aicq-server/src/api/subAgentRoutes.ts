@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { generalLimiter } from '../middleware/rateLimit';
+import { authenticateJWT } from '../middleware/auth';
 import * as subAgentService from '../services/subAgentService';
 
 const router = Router();
@@ -10,7 +11,7 @@ const router = Router();
  * POST /api/v1/subagent/start
  * 启动一个子代理会话
  */
-router.post('/subagent/start', generalLimiter, (req: Request, res: Response) => {
+router.post('/subagent/start', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { parentMessageId, task, context } = req.body;
 
@@ -40,7 +41,7 @@ router.post('/subagent/start', generalLimiter, (req: Request, res: Response) => 
  * POST /api/v1/subagent/:id/input
  * 向子代理发送人工输入
  */
-router.post('/subagent/:id/input', generalLimiter, (req: Request, res: Response) => {
+router.post('/subagent/:id/input', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { input } = req.body;
 
@@ -67,7 +68,7 @@ router.post('/subagent/:id/input', generalLimiter, (req: Request, res: Response)
  * POST /api/v1/subagent/:id/abort
  * 中止子代理会话
  */
-router.post('/subagent/:id/abort', generalLimiter, (req: Request, res: Response) => {
+router.post('/subagent/:id/abort', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const session = subAgentService.abortSubAgent(req.params.id);
     res.json({
@@ -87,7 +88,7 @@ router.post('/subagent/:id/abort', generalLimiter, (req: Request, res: Response)
  * GET /api/v1/subagent/:id/status
  * 获取子代理会话状态
  */
-router.get('/subagent/:id/status', generalLimiter, (req: Request, res: Response) => {
+router.get('/subagent/:id/status', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const session = subAgentService.getSubAgentStatus(req.params.id);
     res.json({
@@ -111,7 +112,7 @@ router.get('/subagent/:id/status', generalLimiter, (req: Request, res: Response)
  * GET /api/v1/subagent/by-message/:parentMessageId
  * 获取某个消息关联的所有子代理会话
  */
-router.get('/subagent/by-message/:parentMessageId', generalLimiter, (req: Request, res: Response) => {
+router.get('/subagent/by-message/:parentMessageId', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const sessions = subAgentService.getSubAgentsForMessage(req.params.parentMessageId);
     res.json({

@@ -19,10 +19,6 @@ import type { ConnectionCallback, DataCallback } from '../types.js';
 interface P2PPeerConnection {
   peerId: string;
   connected: boolean;
-  /** Outbound channel key for encrypting data TO this peer. */
-  channelKey: Uint8Array | null;
-  /** Next nonce sequence number (counter mode). */
-  nonceCounter: number;
   /** Connection state callbacks. */
   connectionCallbacks: ConnectionCallback[];
   /** Data callbacks. */
@@ -86,8 +82,6 @@ export class P2PClient {
     const conn: P2PPeerConnection = {
       peerId,
       connected: false,
-      channelKey: sessionKey,
-      nonceCounter: 0,
       connectionCallbacks: [],
       dataCallbacks: [],
     };
@@ -144,7 +138,7 @@ export class P2PClient {
     }
 
     // P2P layer is a transport pass-through — encryption happens at ChatManager level.
-    this.ws.send('file_chunk', {
+    this.ws.send('signal', {
       to: peerId,
       data: {
         type: 'p2p_data',
@@ -171,8 +165,6 @@ export class P2PClient {
       conn = {
         peerId,
         connected: false,
-        channelKey: null,
-        nonceCounter: 0,
         connectionCallbacks: [],
         dataCallbacks: [],
       };
@@ -187,8 +179,6 @@ export class P2PClient {
       conn = {
         peerId,
         connected: false,
-        channelKey: null,
-        nonceCounter: 0,
         connectionCallbacks: [],
         dataCallbacks: [],
       };
@@ -211,8 +201,6 @@ export class P2PClient {
       conn = {
         peerId: fromId,
         connected: false,
-        channelKey: sessionKey,
-        nonceCounter: 0,
         connectionCallbacks: [],
         dataCallbacks: [],
       };
@@ -220,7 +208,6 @@ export class P2PClient {
     }
 
     conn.connected = true;
-    conn.channelKey = sessionKey;
 
     // Notify callbacks
     for (const cb of conn.connectionCallbacks) {

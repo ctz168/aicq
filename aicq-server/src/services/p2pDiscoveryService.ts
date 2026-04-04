@@ -95,7 +95,8 @@ export function relaySignal(
       }),
     );
     return true;
-  } catch {
+  } catch (err) {
+    console.warn('[p2p] relaySignal failed:', err instanceof Error ? err.message : err);
     return false;
   }
 }

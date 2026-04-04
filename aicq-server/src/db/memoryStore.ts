@@ -11,6 +11,7 @@ import {
   FriendRequest,
   PushNotification,
   SubAgentSession,
+  GroupMessage,
 } from '../models/types';
 import { config } from '../config';
 
@@ -49,7 +50,7 @@ export class MemoryStore {
   notifications = new Map<string, PushNotification>();
 
   /** Group message history keyed by group ID */
-  groupMessages = new Map<string, any[]>();
+  groupMessages = new Map<string, GroupMessage[]>();
 
   /** Sub-agent sessions keyed by session ID */
   subAgents = new Map<string, SubAgentSession>();
@@ -256,6 +257,15 @@ export function startPeriodicCleanup(): NodeJS.Timeout {
     store.cleanupOldNotifications();
     store.cleanupBoundedGroupMessages();
     store.cleanupCompletedSubAgents();
+    // Dynamically import to avoid circular dependency
+    import('../services/accountService').then((svc) => {
+      const removed = svc.cleanupExpiredChallenges();
+      if (removed > 0) {
+        console.log(`[cleanup] Removed ${removed} expired agent challenges`);
+      }
+    }).catch(() => {
+      // ignore import errors
+    });
   }, 60_000);
 
   // Don't prevent process exit

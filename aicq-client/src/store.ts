@@ -93,7 +93,8 @@ export class ClientStore {
         fileTransfers: parsed.fileTransfers ?? {},
       };
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('[Store] Failed to load state, starting fresh:', err);
       return false;
     }
   }

@@ -18,7 +18,11 @@ import { ServerClient } from "./services/serverClient.js";
 import { HandshakeManager } from "./handshake/handshakeManager.js";
 import { P2PConnectionManager } from "./p2p/connectionManager.js";
 import { FileTransferManager } from "./fileTransfer/transferManager.js";
-import { decodeBase64 } from "@aicq/crypto";
+import { EncryptedChatChannel } from "./channels/encryptedChat.js";
+import { ChatSendTool } from "./tools/chatSend.js";
+import { ChatExportKeyTool } from "./tools/chatExportKey.js";
+import { BeforeToolCallHook } from "./hooks/beforeToolCall.js";
+import { MessageSendingHook } from "./hooks/messageSending.js";
 import type { Logger } from "./types.js";
 
 // JSON Schema definitions for tools
@@ -103,14 +107,51 @@ const plugin = definePluginEntry({
     const handshakeManager = new HandshakeManager(store, serverClient, config, logger);
     handshakeManager.setupWsHandlers();
 
-    // ChatChannel is initialized lazily when an encrypted chat session is established.
-    // FileTransferManager can work without it initially — file transfer requests
-    // will fail gracefully with a clear error until a chat session exists.
+    // Encrypted chat channel — handles encrypted message send/receive
+    const chatChannel = new EncryptedChatChannel(
+      store, handshakeManager, p2pManager, serverClient, logger, dataDir,
+    );
+
+    // File transfer manager with chat channel integration
     const fileTransferManager = new FileTransferManager(
       store, serverClient, p2pManager,
-      { registerFileBuffer: () => {}, unregisterFileBuffer: () => {} } as any,
+      { registerFileBuffer: (id: string, buf: any) => chatChannel.registerFileBuffer(id, buf),
+        unregisterFileBuffer: (id: string) => chatChannel.removeFileBuffer(id) } as any,
       logger
     );
+
+    // ── Tool handler instances ──────────────────────────────────
+    const chatSendTool = new ChatSendTool(store, chatChannel, handshakeManager, logger);
+    const chatExportKeyTool = new ChatExportKeyTool(identityService, logger);
+
+    // ── Hook instances ──────────────────────────────────────────
+    const beforeToolCallHook = new BeforeToolCallHook(store, config, chatExportKeyTool, logger);
+    const messageSendingHook = new MessageSendingHook(store, handshakeManager, logger);
+
+    // Register hooks with the API if supported
+    if (api.registerHook) {
+      api.registerHook("before_tool_call", {
+        execute: async (data: unknown, metadata?: Record<string, unknown>) => {
+          const toolCall = data as { toolName?: string; params?: Record<string, unknown> };
+          if (!toolCall?.toolName) return { allowed: true };
+          const result = beforeToolCallHook.check(toolCall.toolName, toolCall.params || {});
+          if (!result.allowed) {
+            throw new Error(result.reason || "Tool call blocked by permission check");
+          }
+          return { allowed: true };
+        },
+      });
+      logger.info("[Init] Registered before_tool_call hook");
+    }
+
+    if (api.registerHook) {
+      api.registerHook("message_sending", {
+        execute: async (data: unknown, metadata?: Record<string, unknown>) => {
+          return messageSendingHook.intercept(data, metadata);
+        },
+      });
+      logger.info("[Init] Registered message_sending hook");
+    }
 
     // Serializable values for tool execute (no WebSocket objects!)
     const serverUrl = config.serverUrl;
@@ -125,7 +166,9 @@ const plugin = definePluginEntry({
       if (!msg?.payload) return;
       const payload = msg.payload as Record<string, unknown>;
       if (payload.channel === "encrypted-chat" && payload.data) {
-        try { Buffer.from(decodeBase64(payload.data as string)); } catch (_e) { /* ignore */ }
+        try {
+          chatChannel.onMessage(Buffer.from(payload.data as string, "base64"), msg.fromId as string);
+        } catch (_e) { /* ignore decode/decrypt errors */ }
       }
     });
     setInterval(() => {
@@ -143,6 +186,13 @@ const plugin = definePluginEntry({
       async execute(toolCallId: string, params: any) {
         const action = (params?.action || "") as string;
         if (!action) return { error: "Missing action parameter" };
+
+        // Permission check via hook
+        const permResult = beforeToolCallHook.check("chat-friend", params || {});
+        if (!permResult.allowed) {
+          return { error: permResult.reason };
+        }
+
         try {
           switch (action) {
             case "request-temp-number": {
@@ -220,34 +270,14 @@ const plugin = definePluginEntry({
       parameters: CHAT_SEND_PARAMS,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async execute(toolCallId: string, params: any) {
-        const target = params?.target;
-        const message = params?.message;
-        const msgType = params?.type || 'text';
-        const fileInfo = params?.fileInfo;
-        if (!target || !message) return { error: "Missing target or message" };
-        try {
-          // Check if target is a friend
-          const friendsResp = await fetch(serverUrl + "/api/v1/friends?nodeId=" + aicqAgentId);
-          if (friendsResp.ok) {
-            const friendsData = await friendsResp.json() as Record<string, unknown>;
-            const friends = (friendsData.friends || []) as Array<{ id: string }>;
-            const isFriend = friends.some(f => f.id === target);
-            if (!isFriend) return { error: "Target is not a friend. Add them first using chat-friend." };
-          }
-          // Send encrypted message via server relay
-          serverClient.sendRelayMessage(target, {
-            channel: "encrypted-chat",
-            type: msgType,
-            data: Buffer.from(JSON.stringify({
-              message,
-              fileInfo,
-              timestamp: Date.now(),
-            })).toString("base64"),
-          });
-          return { success: true, message: "Message sent to " + target, target, sentMessage: message, type: msgType };
-        } catch (err: any) {
-          return { error: "Failed to send: " + (err?.message || String(err)) };
+        // Permission check via hook
+        const permResult = beforeToolCallHook.check("chat-send", params || {});
+        if (!permResult.allowed) {
+          return { error: permResult.reason };
         }
+
+        // Delegate to ChatSendTool which handles encryption via EncryptedChatChannel
+        return chatSendTool.handle(params || {});
       },
     });
 
@@ -259,17 +289,14 @@ const plugin = definePluginEntry({
       parameters: CHAT_EXPORT_KEY_PARAMS,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async execute(toolCallId: string, params: any) {
-        const password = params?.password;
-        if (!password) return { error: "Missing password" };
-        try {
-          if (password.length < 8) return { error: "Password must be at least 8 characters" };
-          const qrDataUrl = await identityService.exportPrivateKeyQR(password);
-          // Return a truncated description since QR image can't be passed as text
-          const preview = qrDataUrl.slice(0, 80) + "...";
-          return { success: true, message: "QR code generated (valid for 60 seconds). Length: " + qrDataUrl.length + " chars", qrPreview: preview, qrDataUrl };
-        } catch (err: any) {
-          return { error: "Export failed: " + (err?.message || String(err)) };
+        // Permission check via hook (rate limiting)
+        const permResult = beforeToolCallHook.check("chat-export-key", params || {});
+        if (!permResult.allowed) {
+          return { error: permResult.reason };
         }
+
+        // Delegate to ChatExportKeyTool
+        return chatExportKeyTool.handle(params || {});
       },
     });
 
@@ -294,6 +321,7 @@ const plugin = definePluginEntry({
         stop: async () => {
           logger.info("[Service] identity-service stopping...");
           identityService.cleanup();
+          chatChannel.cleanup();
           serverClient.disconnectWebSocket();
           logger.info("[Service] identity-service stopped");
         },

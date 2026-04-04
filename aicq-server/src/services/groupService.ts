@@ -301,6 +301,7 @@ export function leaveGroup(
         });
       }
     }
+    store.groupMessages.delete(groupId);
     store.groups.delete(groupId);
     console.log(`[group] 群主 ${accountId} 解散了群组 ${groupId}`);
     return { left: true, disbanded: true };
@@ -342,6 +343,7 @@ export function disbandGroup(
     }
   }
 
+  store.groupMessages.delete(groupId);
   store.groups.delete(groupId);
   console.log(`[group] 群主 ${ownerId} 解散了群组 ${groupId}`);
   return true;

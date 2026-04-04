@@ -11,6 +11,7 @@ import {
 } from '../services/p2pDiscoveryService';
 import { verifyJWT } from '../services/accountService';
 import { isWsRateLimited, isWsMessageTooLarge, cleanupWsRateLimit } from '../middleware/wsRateLimit';
+import { config } from '../config';
 import * as groupService from '../services/groupService';
 import * as friendshipService from '../services/friendshipService';
 import { store } from '../db/memoryStore';
@@ -103,14 +104,8 @@ function handleMessage(
         return;
       }
 
-      // Verify the node is registered
-      if (!store.nodes.has(id)) {
-        ws.send(JSON.stringify({ type: 'error', error: 'Node not registered' }));
-        return;
-      }
-
       // Verify JWT token for WebSocket authentication
-      const jwtSecret = process.env.JWT_SECRET || 'aicq-default-jwt-secret-change-in-production';
+      const jwtSecret = config.jwtSecret;
       const payload = verifyJWT(token, jwtSecret);
       if (!payload || payload.sub !== id) {
         ws.send(JSON.stringify({ type: 'error', error: 'Authentication failed' }));
@@ -722,7 +717,9 @@ function sendPushNotification(
 }
 
 /**
- * 模拟 Sub-Agent 流式输出
+ * STUB: Development-mode simulation for Sub-Agent streaming output.
+ * In production, this should connect to a real AI backend.
+ * If NODE_ENV=production, the function sends an error message instead of fake output.
  */
 const activeStreamTimers = new Map<string, NodeJS.Timeout>();
 
@@ -732,7 +729,34 @@ function simulateStreaming(
   task: string,
   requesterId: string,
 ): void {
-  // 清除之前可能存在的定时器
+  // In production, sub-agent backend is not configured — reject immediately
+  if (process.env.NODE_ENV === 'production') {
+    try {
+      ws.send(JSON.stringify({
+        type: 'subagent_completed',
+        data: {
+          id: subAgentId,
+          output: '错误：Sub-Agent 后端未配置。请在生产环境中配置 AI 后端服务。',
+          status: 'error',
+        },
+      }));
+      // Mark session as error
+      const prodSession = store.subAgents.get(subAgentId);
+      if (prodSession) {
+        prodSession.status = 'error';
+        prodSession.output = 'Sub-Agent backend not configured for production.';
+        prodSession.updatedAt = Date.now();
+        store.subAgents.set(subAgentId, prodSession);
+      }
+    } catch {
+      // ignore send errors
+    }
+    return;
+  }
+
+  console.warn(`[ws] STUB: simulateStreaming called in non-production mode for subAgent ${subAgentId}`);
+
+  // Clear previous timer
   const existingTimer = activeStreamTimers.get(subAgentId);
   if (existingTimer) {
     clearTimeout(existingTimer);
@@ -762,7 +786,7 @@ function simulateStreaming(
       session.updatedAt = Date.now();
       store.subAgents.set(subAgentId, session);
 
-      // 发送流式块
+      // Send streaming chunk
       try {
         ws.send(JSON.stringify({
           type: 'subagent_chunk',
@@ -781,7 +805,7 @@ function simulateStreaming(
 
       index++;
     } else {
-      // 流式完成
+      // Streaming complete
       session.status = 'completed';
       session.updatedAt = Date.now();
       store.subAgents.set(subAgentId, session);

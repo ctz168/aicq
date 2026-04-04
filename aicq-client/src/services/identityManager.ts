@@ -239,14 +239,22 @@ export class IdentityManager {
           publicKey: Buffer.from(signingSecretKey.slice(32, 64)),
           secretKey: Buffer.from(signingSecretKey.slice(0, 32)),
         };
+      } else if (signingSecretKey.length === 32) {
+        // 32-byte seed — derive public key via tweetnacl
+        try {
+          const nacl = await import('tweetnacl');
+          const combined = nacl.sign.keyPair.fromSeed(signingSecretKey as Uint8Array);
+          this.signingKeys = {
+            publicKey: Buffer.from(combined.publicKey),
+            secretKey: Buffer.from(signingSecretKey),
+          };
+        } catch {
+          console.error('[IdentityManager] tweetnacl not available for signing key derivation');
+          return false;
+        }
       } else {
-        // If only the 32-byte seed is provided, we cannot derive the public key
-        // without the full nacl library available here. Store what we have.
-        console.warn('[IdentityManager] Signing secret key is not 64 bytes, public key may be incomplete');
-        this.signingKeys = {
-          publicKey: Buffer.alloc(32), // Placeholder — will need to be derived
-          secretKey: signingSecretKey,
-        };
+        console.error('[IdentityManager] Invalid signing secret key length:', signingSecretKey.length);
+        return false;
       }
 
       // For X25519 exchange keys, compute the public key from the secret key
@@ -259,11 +267,8 @@ export class IdentityManager {
             secretKey: exchangeSecretKey,
           };
         } catch {
-          console.warn('[IdentityManager] tweetnacl not available, exchange public key not derived');
-          this.exchangeKeys = {
-            publicKey: Buffer.alloc(32),
-            secretKey: exchangeSecretKey,
-          };
+          console.error('[IdentityManager] tweetnacl not available, cannot derive exchange public key');
+          return false;
         }
       } else if (exchangeSecretKey.length === 64) {
         // Combined format (secret + public)
@@ -272,10 +277,8 @@ export class IdentityManager {
           secretKey: Buffer.from(exchangeSecretKey.slice(0, 32)),
         };
       } else {
-        this.exchangeKeys = {
-          publicKey: Buffer.alloc(32),
-          secretKey: exchangeSecretKey,
-        };
+        console.error('[IdentityManager] Invalid exchange secret key length:', exchangeSecretKey.length);
+        return false;
       }
 
       // Update store

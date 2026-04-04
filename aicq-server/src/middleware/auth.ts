@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyJWT } from '../services/accountService';
+import { config } from '../config';
 
 declare global {
   namespace Express {
@@ -27,7 +28,7 @@ export function authenticateJWT(req: Request, res: Response, next: NextFunction)
   }
 
   const token = authHeader.substring(7);
-  const jwtSecret = process.env.JWT_SECRET || 'aicq-default-jwt-secret-change-in-production';
+  const jwtSecret = config.jwtSecret;
 
   const payload = verifyJWT(token, jwtSecret);
   if (!payload) {
@@ -51,7 +52,7 @@ export function optionalAuth(req: Request, res: Response, next: NextFunction): v
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
-    const jwtSecret = process.env.JWT_SECRET || 'aicq-default-jwt-secret-change-in-production';
+    const jwtSecret = config.jwtSecret;
     const payload = verifyJWT(token, jwtSecret);
     if (payload) {
       req.authenticatedAccount = {

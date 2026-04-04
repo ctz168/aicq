@@ -8,11 +8,11 @@
  */
 
 import * as fs from "fs";
+import * as path from "path";
 import {
   encryptMessage,
   decryptMessage,
   encodeBase64,
-  decodeBase64,
   nacl,
 } from "@aicq/crypto";
 import type { Logger, FileChunkBuffer, OpenClawAPI } from "../types.js";
@@ -21,6 +21,19 @@ import type { HandshakeManager } from "../handshake/handshakeManager.js";
 import type { P2PConnectionManager } from "../p2p/connectionManager.js";
 import type { ServerClient } from "../services/serverClient.js";
 
+/**
+ * Validate that a file path does not escape the allowed directory.
+ * Prevents path traversal attacks (e.g., "../../../etc/passwd").
+ */
+function safeFilePath(filePath: string, allowedDir: string): string {
+  const resolved = path.resolve(filePath);
+  const allowed = path.resolve(allowedDir);
+  if (!resolved.startsWith(allowed + path.sep) && resolved !== allowed) {
+    throw new Error("Path traversal detected");
+  }
+  return resolved;
+}
+
 export class EncryptedChatChannel {
   private store: PluginStore;
   private handshakeManager: HandshakeManager;
@@ -28,6 +41,7 @@ export class EncryptedChatChannel {
   private serverClient: ServerClient;
   private logger: Logger;
   private api: OpenClawAPI | null = null;
+  private dataDir: string = "";
 
   /** Active file chunk receive buffers keyed by sessionId. */
   private fileChunkBuffers: Map<string, FileChunkBuffer> = new Map();
@@ -38,12 +52,14 @@ export class EncryptedChatChannel {
     p2pManager: P2PConnectionManager,
     serverClient: ServerClient,
     logger: Logger,
+    dataDir: string = "",
   ) {
     this.store = store;
     this.handshakeManager = handshakeManager;
     this.p2pManager = p2pManager;
     this.serverClient = serverClient;
     this.logger = logger;
+    this.dataDir = dataDir;
   }
 
   /**
@@ -157,8 +173,8 @@ export class EncryptedChatChannel {
     const session = this.store.getSession(toId);
     if (session) {
       session.messageCount++;
-      // Trigger key rotation after 100 messages
-      if (session.messageCount % 100 === 0) {
+      // Trigger key rotation after 100 messages or 1 hour of session age
+      if (session.messageCount % 100 === 0 || Date.now() - session.createdAt.getTime() > 3_600_000) {
         this.handshakeManager.rotateSessionKey(toId);
       }
       this.store.save();
@@ -256,10 +272,11 @@ export class EncryptedChatChannel {
       return;
     }
 
-    // Write to disk if save path specified
+    // Write to disk if save path specified (with path traversal protection)
     if (buffer.savePath) {
-      fs.writeFileSync(buffer.savePath, fileData);
-      this.logger.info("[Chat] File saved to " + buffer.savePath);
+      const safePath = safeFilePath(buffer.savePath, this.dataDir);
+      fs.writeFileSync(safePath, fileData);
+      this.logger.info("[Chat] File saved to " + safePath);
     }
 
     // Emit completion event
