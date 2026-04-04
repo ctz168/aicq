@@ -1150,8 +1150,6 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   const syncTaskPlanFn = useCallback((planId: string, friendId: string) => {
     const plan = taskPlansRef.current.find(p => p.id === planId);
     if (!plan) return;
-    const client = clientRef.current;
-    if (!client) return;
     // Build a structured task list message to send to the AI
     const taskLines = plan.tasks
       .sort((a, b) => a.order - b.order)
@@ -1161,22 +1159,9 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
       })
       .join('\n');
     const syncMessage = `[任务计划同步 - ${plan.title}]\n以下是更新后的任务列表，请按照此列表严格执行：\n\n${taskLines}\n\n请确认收到并按照任务列表执行。`;
-    client.sendMessage(friendId, syncMessage);
-    // Also add to local messages
-    const msgs = messagesRef.current.get(friendId) || [];
-    const syncMsg: ChatMessage = {
-      id: `sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      fromId: client.getUserId(),
-      toId: friendId,
-      type: 'text',
-      content: syncMessage,
-      timestamp: Date.now(),
-      status: 'sent',
-    };
-    msgs.push(syncMsg);
-    messagesRef.current.set(friendId, msgs);
-    dispatch({ type: 'BUMP_MESSAGE_VERSION' });
-  }, []);
+    // Use context's sendMessage which handles messagesRef push + agent queue
+    sendMessage(friendId, syncMessage);
+  }, [sendMessage]);
 
   const clearTaskPlanFn = useCallback((planId: string) => {
     dispatch({ type: 'REMOVE_TASK_PLAN', payload: planId });

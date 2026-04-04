@@ -3107,9 +3107,7 @@ input:disabled {
 
 /* ─── Task Action Popup ────────────────────────────────── */
 .task-action-popup {
-  position: absolute;
-  right: 4px;
-  top: 100%;
+  position: fixed;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -3157,11 +3155,6 @@ input:disabled {
   padding: 8px 10px;
   font-size: 12px;
   color: var(--text-muted);
-}
-
-/* Make task items position:relative for popup */
-.task-progress-item {
-  position: relative;
 }
 
 /* ─── Task Add Button ──────────────────────────────────── */

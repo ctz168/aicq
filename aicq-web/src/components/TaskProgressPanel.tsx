@@ -30,6 +30,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<{ planId: string; taskId: string } | null>(null);
   const [syncingPlanId, setSyncingPlanId] = useState<string | null>(null);
   const [showActions, setShowActions] = useState<string | null>(null);
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({});
   const addInputRef = useRef<HTMLInputElement>(null);
 
   const plans = useMemo(() => getTaskPlans(friendId), [getTaskPlans, friendId]);
@@ -53,7 +54,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
     }
   }, [addingToPlanId]);
 
-  // Close actions popup on outside click
+  // Close actions popup on outside click or scroll
   useEffect(() => {
     if (!showActions) return;
     const handler = (e: MouseEvent) => {
@@ -63,15 +64,24 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
         setConfirmDeleteId(null);
       }
     };
-    const timer = setTimeout(() => document.addEventListener('mousedown', handler), 0);
+    const scrollHandler = () => {
+      setShowActions(null);
+      setConfirmDeleteId(null);
+    };
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handler);
+      window.addEventListener('scroll', scrollHandler, true);
+    }, 0);
     return () => {
       clearTimeout(timer);
       document.removeEventListener('mousedown', handler);
+      window.removeEventListener('scroll', scrollHandler, true);
     };
   }, [showActions]);
 
-  // Don't render if no tasks exist
-  if (totalCount === 0) return null;
+  // Don't render if no plans exist at all
+  // (But still render if plans exist with 0 tasks, so user can add tasks)
+  if (plans.length === 0) return null;
 
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -127,8 +137,21 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
 
   const toggleActions = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setShowActions((prev) => (prev === taskId ? null : taskId));
+    if (showActions === taskId) {
+      setShowActions(null);
+      setConfirmDeleteId(null);
+      return;
+    }
+    setShowActions(taskId);
     setConfirmDeleteId(null);
+    // Calculate fixed position from button's bounding rect
+    const btn = (e.currentTarget as HTMLElement);
+    const rect = btn.getBoundingClientRect();
+    setPopupStyle({
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      right: `${window.innerWidth - rect.right}px`,
+    });
   };
 
   const renderTaskItem = (task: TaskItem, planId: string) => {
@@ -154,9 +177,9 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
             <circle cx="12" cy="19" r="2" />
           </svg>
         </button>
-        {/* Actions popup */}
+        {/* Actions popup - position:fixed to avoid overflow clipping */}
         {showActions === task.id && (
-          <div className="task-action-popup">
+          <div className="task-action-popup" style={popupStyle}>
             {canDelete && (
               <button
                 className={`task-action-item ${isConfirmingDelete ? 'danger-confirm' : ''}`}
