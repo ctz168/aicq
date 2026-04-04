@@ -1,0 +1,16 @@
+# Source files (not needed at runtime)
+src/
+scripts/
+tsconfig.json
+
+# Dev-only files
+*.ts
+!*.d.ts
+
+# Build intermediates
+node_modules/
+package-lock.json
+
+# Data and misc
+.aicq-data/
+*.log

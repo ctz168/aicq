@@ -140,7 +140,7 @@ const plugin = definePluginEntry({
           }
           return { allowed: true };
         },
-      });
+      }, { name: "aicq-before-tool-call" });
       logger.info("[Init] Registered before_tool_call hook");
     }
 
@@ -149,7 +149,7 @@ const plugin = definePluginEntry({
         execute: async (data: unknown, metadata?: Record<string, unknown>) => {
           return messageSendingHook.intercept(data, metadata);
         },
-      });
+      }, { name: "aicq-message-encrypt" });
       logger.info("[Init] Registered message_sending hook");
     }
 
