@@ -25,11 +25,11 @@ import {
 } from "@aicq/crypto";
 
 // Import compiled client modules
-import { loadConfig, getStorePath } from "../aicq-client/dist/config.js";
-import { ClientStore } from "../aicq-client/dist/store.js";
-import { IdentityManager } from "../aicq-client/dist/services/identityManager.js";
-import { APIClient } from "../aicq-client/dist/services/apiClient.js";
-import type { FriendInfo, ChatMessage, TempNumberInfo, FileTransferInfo } from "../aicq-client/dist/types.js";
+import { loadConfig, getStorePath } from "../client/cli/dist/config.js";
+import { ClientStore } from "../client/cli/dist/store.js";
+import { IdentityManager } from "../client/cli/dist/services/identityManager.js";
+import { APIClient } from "../client/cli/dist/services/apiClient.js";
+import type { FriendInfo, ChatMessage, TempNumberInfo, FileTransferInfo } from "../client/cli/dist/types.js";
 
 // ─── Minimal test runner ────────────────────────────────────────────
 

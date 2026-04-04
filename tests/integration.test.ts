@@ -157,7 +157,7 @@ async function startServer(): Promise<void> {
   process.env.TEMP_NUMBER_TTL_HOURS = "24";
   process.env.RATE_LIMIT_DISABLED = "true";
 
-  const mod = await import("../aicq-server/dist/index.js");
+  const mod = await import("../server/dist/index.js");
   serverInstance = mod.server;
 
   if (!serverInstance.listening) {

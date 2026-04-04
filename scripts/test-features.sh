@@ -33,7 +33,7 @@ if echo "$HEALTH" | grep -q "ok\|running\|healthy"; then
 else
     # Try to start server
     echo "  Starting aicq server..."
-    cd "${PROJECT_ROOT}/aicq-server"
+    cd "${PROJECT_ROOT}/server"
     if [ -f "dist/index.js" ]; then
         PORT=3000 node dist/index.js > "${TEST_DIR}/server.log" 2>&1 &
         SERVER_PID=$!
@@ -46,7 +46,7 @@ else
             echo "  Server log:"; tail -5 "${TEST_DIR}/server.log" 2>/dev/null
         fi
     else
-        skip "Server not built (run: cd aicq-server && npm run build)"
+        skip "Server not built (run: cd server && npm run build)"
     fi
 fi
 
@@ -89,17 +89,17 @@ fi
 # =========================================================================
 section "3. Web Client Build"
 
-if [ -f "${PROJECT_ROOT}/aicq-web/dist/index.html" ]; then
+if [ -f "${PROJECT_ROOT}/client/web/dist/index.html" ]; then
     pass "Web client built (index.html exists)"
 
     # Check for key JS/CSS bundles
-    if ls "${PROJECT_ROOT}/aicq-web/dist/assets/"*.js 1>/dev/null 2>&1; then
-        JS_SIZE=$(du -sh "${PROJECT_ROOT}/aicq-web/dist/assets/"*.js | cut -f1 | head -1)
+    if ls "${PROJECT_ROOT}/client/web/dist/assets/"*.js 1>/dev/null 2>&1; then
+        JS_SIZE=$(du -sh "${PROJECT_ROOT}/client/web/dist/assets/"*.js | cut -f1 | head -1)
         pass "JavaScript bundle: ${JS_SIZE}"
     fi
 
-    if ls "${PROJECT_ROOT}/aicq-web/dist/assets/"*.css 1>/dev/null 2>&1; then
-        CSS_SIZE=$(du -sh "${PROJECT_ROOT}/aicq-web/dist/assets/"*.css | cut -f1 | head -1)
+    if ls "${PROJECT_ROOT}/client/web/dist/assets/"*.css 1>/dev/null 2>&1; then
+        CSS_SIZE=$(du -sh "${PROJECT_ROOT}/client/web/dist/assets/"*.css | cut -f1 | head -1)
         pass "CSS bundle: ${CSS_SIZE}"
     fi
 else
@@ -111,7 +111,7 @@ fi
 # =========================================================================
 section "4. Feature: Text Chat (Code Analysis)"
 
-CHAT_SCREEN="${PROJECT_ROOT}/aicq-web/src/screens/ChatScreen.tsx"
+CHAT_SCREEN="${PROJECT_ROOT}/client/web/src/screens/ChatScreen.tsx"
 if [ -f "$CHAT_SCREEN" ]; then
     if grep -q "sendMessage\|handleSend" "$CHAT_SCREEN"; then
         pass "ChatScreen has send message function"
@@ -139,7 +139,7 @@ fi
 # =========================================================================
 section "5. Feature: Image Preview"
 
-IMAGE_PREVIEW="${PROJECT_ROOT}/aicq-web/src/components/ImagePreview.tsx"
+IMAGE_PREVIEW="${PROJECT_ROOT}/client/web/src/components/ImagePreview.tsx"
 if [ -f "$IMAGE_PREVIEW" ]; then
     if grep -q "onClick\|onClose\|fullscreen\|lightbox" "$IMAGE_PREVIEW"; then
         pass "ImagePreview supports click/fullscreen"
@@ -159,7 +159,7 @@ fi
 # =========================================================================
 section "6. Feature: Video Player"
 
-VIDEO_PLAYER="${PROJECT_ROOT}/aicq-web/src/components/VideoPlayer.tsx"
+VIDEO_PLAYER="${PROJECT_ROOT}/client/web/src/components/VideoPlayer.tsx"
 if [ -f "$VIDEO_PLAYER" ]; then
     if grep -q "video\|Video\|<video" "$VIDEO_PLAYER"; then
         pass "VideoPlayer uses HTML5 video element"
@@ -179,7 +179,7 @@ fi
 # =========================================================================
 section "7. Feature: Streaming Output"
 
-STREAMING="${PROJECT_ROOT}/aicq-web/src/components/StreamingMessage.tsx"
+STREAMING="${PROJECT_ROOT}/client/web/src/components/StreamingMessage.tsx"
 if [ -f "$STREAMING" ]; then
     if grep -q "streaming\|stream\|chunk\|partial" "$STREAMING"; then
         pass "StreamingMessage handles streaming data"
@@ -199,7 +199,7 @@ fi
 # =========================================================================
 section "8. Feature: File Transfer & Breakpoint Resume"
 
-FILE_TRANSFER="${PROJECT_ROOT}/aicq-web/src/components/FileTransferProgress.tsx"
+FILE_TRANSFER="${PROJECT_ROOT}/client/web/src/components/FileTransferProgress.tsx"
 if [ -f "$FILE_TRANSFER" ]; then
     if grep -q "progress\|percent\|loaded\|total" "$FILE_TRANSFER"; then
         pass "FileTransferProgress tracks progress"
@@ -211,7 +211,7 @@ else
     skip "FileTransferProgress.tsx not found"
 fi
 
-WEB_CLIENT="${PROJECT_ROOT}/aicq-web/src/services/webClient.ts"
+WEB_CLIENT="${PROJECT_ROOT}/client/web/src/services/webClient.ts"
 if [ -f "$WEB_CLIENT" ]; then
     if grep -q "chunk\|chunkSize\|offset\|range" "$WEB_CLIENT"; then
         pass "WebClient supports chunked transfer"
@@ -231,7 +231,7 @@ fi
 # =========================================================================
 section "9. Feature: Markdown Rendering"
 
-MARKDOWN="${PROJECT_ROOT}/aicq-web/src/components/MarkdownRenderer.tsx"
+MARKDOWN="${PROJECT_ROOT}/client/web/src/components/MarkdownRenderer.tsx"
 if [ -f "$MARKDOWN" ]; then
     if grep -q "react-markdown\|ReactMarkdown" "$MARKDOWN"; then
         pass "MarkdownRenderer uses react-markdown"
@@ -251,7 +251,7 @@ fi
 # =========================================================================
 section "10. Feature: End-to-End Encryption"
 
-CRYPTO_DIR="${PROJECT_ROOT}/aicq-crypto/src"
+CRYPTO_DIR="${PROJECT_ROOT}/shared/crypto/src"
 if [ -d "$CRYPTO_DIR" ]; then
     if [ -f "${CRYPTO_DIR}/cipher.ts" ] && grep -q "aes\|AES\|256\|GCM" "${CRYPTO_DIR}/cipher.ts"; then
         pass "AES-256-GCM encryption implemented"
@@ -323,7 +323,7 @@ fi
 # =========================================================================
 section "13. Android Project"
 
-ANDROID_DIR="${PROJECT_ROOT}/aicq-mobile/android"
+ANDROID_DIR="${PROJECT_ROOT}/client/mobile/android"
 if [ -d "$ANDROID_DIR" ]; then
     if [ -f "${ANDROID_DIR}/app/build.gradle" ]; then
         pass "Android build.gradle exists"

@@ -35,17 +35,17 @@ log "Timestamp: ${TIMESTAMP}"
 
 # ---- Step 1: Build Web Client -----------------------------------------------
 step "Building web client"
-cd "${PROJECT_ROOT}/aicq-web"
+cd "${PROJECT_ROOT}/client/web"
 if command -v npm &>/dev/null; then
     npm run build
-    log "Web build complete: aicq-web/dist/"
+    log "Web build complete: client/web/dist/"
 else
     err "npm not found — skipping web build"
 fi
 
 # ---- Step 2: Sync to Capacitor platforms ------------------------------------
 step "Syncing web assets to Capacitor platforms"
-cd "${PROJECT_ROOT}/aicq-mobile"
+cd "${PROJECT_ROOT}/client/mobile"
 if [ -d "android" ]; then
     npx cap sync android 2>/dev/null || warn "Capacitor sync for Android had warnings (non-fatal)"
     log "Android platform synced"
@@ -57,11 +57,11 @@ fi
 
 # ---- Step 3: Build Android APK ----------------------------------------------
 step "Building Android APK (debug)"
-cd "${PROJECT_ROOT}/aicq-mobile/android"
+cd "${PROJECT_ROOT}/client/mobile/android"
 if [ -x "./gradlew" ]; then
     chmod +x ./gradlew
     ./gradlew assembleDebug --no-daemon 2>&1 | tail -20
-    APK_PATH="${PROJECT_ROOT}/aicq-mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+    APK_PATH="${PROJECT_ROOT}/client/mobile/android/app/build/outputs/apk/debug/app-debug.apk"
     if [ -f "${APK_PATH}" ]; then
         cp "${APK_PATH}" "${DOWNLOAD_DIR}/AICQ-${TIMESTAMP}-debug.apk"
         cp "${APK_PATH}" "${DOWNLOAD_DIR}/AICQ-latest-debug.apk"
@@ -75,7 +75,7 @@ fi
 
 # ---- Step 4: Build Desktop (Electron) ---------------------------------------
 step "Building Electron desktop app for current platform"
-cd "${PROJECT_ROOT}/aicq-app"
+cd "${PROJECT_ROOT}/client/desktop"
 if [ -f "package.json" ]; then
     # Install deps if needed
     if [ ! -d "node_modules" ]; then
@@ -84,7 +84,7 @@ if [ -f "package.json" ]; then
     npx electron-builder --linux --win 2>&1 | tail -30 || warn "Desktop build had issues (non-fatal)"
     log "Desktop build attempted"
 else
-    warn "aicq-app/package.json not found — skipping desktop build"
+    warn "client/desktop/package.json not found — skipping desktop build"
 fi
 
 # ---- Step 5: Collect Linux AppImage -----------------------------------------
@@ -118,7 +118,7 @@ fi
 # ---- Step 7: Prepare macOS DMG build config ---------------------------------
 step "Preparing macOS DMG build instructions"
 if [ "$(uname)" = "Darwin" ]; then
-    cd "${PROJECT_ROOT}/aicq-app"
+    cd "${PROJECT_ROOT}/client/desktop"
     npx electron-builder --mac --dmg 2>&1 | tail -20
     DMG_PATH="${PROJECT_ROOT}/dist-electron/AICQ-1.0.0.dmg"
     if [ -f "${DMG_PATH}" ]; then
@@ -134,7 +134,7 @@ fi
 step "Archiving Android project source"
 cd "${PROJECT_ROOT}"
 zip -r "${DOWNLOAD_DIR}/AICQ-android-project.zip" \
-    aicq-mobile/android \
+    client/mobile/android \
     -x "*.gradle/*" \
     -x "*build/*" \
     -x "*.git*" \

@@ -9,7 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@aicq/crypto": "file:../aicq-crypto",
+    "@aicq/crypto": "file:../../shared/crypto",
     "dotenv": "^16.3.1",
     "qrcode": "^1.5.3",
     "tweetnacl": "^1.0.3",

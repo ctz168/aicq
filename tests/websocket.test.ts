@@ -156,7 +156,7 @@ async function startServer(): Promise<void> {
   process.env.TEMP_NUMBER_TTL_HOURS = "24";
   process.env.RATE_LIMIT_DISABLED = "true";
 
-  const mod = await import("../aicq-server/dist/index.js");
+  const mod = await import("../server/dist/index.js");
   serverInstance = mod.server;
 
   if (!serverInstance.listening) {
@@ -264,7 +264,7 @@ async function testOnlineOffline() {
     assert.equal(msg.nodeId, nodeAId, "should echo nodeId");
 
     // Verify node is online via service import
-    const { isOnline } = await import("../aicq-server/dist/services/p2pDiscoveryService.js");
+    const { isOnline } = await import("../server/dist/services/p2pDiscoveryService.js");
     assert.equal(isOnline(nodeAId), true, "node should be marked as online");
 
     await wsClose(ws);
@@ -276,7 +276,7 @@ async function testOnlineOffline() {
     await wsSend(ws, { type: "online", nodeId: nodeAId });
     await wsMessage(ws); // consume online_ack
 
-    const { isOnline } = await import("../aicq-server/dist/services/p2pDiscoveryService.js");
+    const { isOnline } = await import("../server/dist/services/p2pDiscoveryService.js");
     assert.equal(isOnline(nodeAId), true, "node should be online before disconnect");
 
     await wsClose(ws);
@@ -318,7 +318,7 @@ async function testOnlineOffline() {
     await wsSend(ws, { type: "online", nodeId: nodeAId });
     await wsMessage(ws); // consume online_ack
 
-    const { isOnline } = await import("../aicq-server/dist/services/p2pDiscoveryService.js");
+    const { isOnline } = await import("../server/dist/services/p2pDiscoveryService.js");
     assert.equal(isOnline(nodeAId), true, "should be online");
 
     await wsSend(ws, { type: "offline" });

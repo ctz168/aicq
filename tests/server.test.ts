@@ -135,7 +135,7 @@ async function startServer(): Promise<void> {
   process.env.RATE_LIMIT_DISABLED = "true";
 
   // Dynamic import triggers server.listen()
-  const mod = await import("../aicq-server/dist/index.js");
+  const mod = await import("../server/dist/index.js");
   serverInstance = mod.server;
 
   // Wait for server to be ready

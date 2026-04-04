@@ -6,7 +6,7 @@
 # Prerequisites:
 #   - Android SDK at /home/z/android-sdk (or set ANDROID_HOME)
 #   - JDK 17+ (or set JAVA_HOME)
-#   - Web client already built: aicq-web/dist/ exists
+#   - Web client already built: client/web/dist/ exists
 #   - Capacitor platforms synced
 #
 # Usage:
@@ -49,9 +49,9 @@ echo "  Timestamp  : ${TIMESTAMP}"
 echo "============================================="
 
 # ---- Step 1: Build web client (if needed) -----------------------------------
-if [ ! -d "${PROJECT_ROOT}/aicq-web/dist" ] || [ -z "$(ls -A "${PROJECT_ROOT}/aicq-web/dist" 2>/dev/null)" ]; then
+if [ ! -d "${PROJECT_ROOT}/client/web/dist" ] || [ -z "$(ls -A "${PROJECT_ROOT}/client/web/dist" 2>/dev/null)" ]; then
     echo "[BUILD] Web client not built — building now..."
-    cd "${PROJECT_ROOT}/aicq-web"
+    cd "${PROJECT_ROOT}/client/web"
     npm run build
 else
     echo "[BUILD] Web client already built, skipping."
@@ -59,12 +59,12 @@ fi
 
 # ---- Step 2: Sync to Capacitor Android --------------------------------------
 echo "[BUILD] Syncing to Capacitor Android..."
-cd "${PROJECT_ROOT}/aicq-mobile"
+cd "${PROJECT_ROOT}/client/mobile"
 npx cap sync android
 
 # ---- Step 3: Run Gradle build -----------------------------------------------
 echo "[BUILD] Running Gradle ${BUILD_TYPE} build..."
-cd "${PROJECT_ROOT}/aicq-mobile/android"
+cd "${PROJECT_ROOT}/client/mobile/android"
 chmod +x ./gradlew
 
 if [ "${BUILD_TYPE}" = "release" ]; then
@@ -79,7 +79,7 @@ fi
 # ---- Step 4: Copy APK to download -------------------------------------------
 mkdir -p "${DOWNLOAD_DIR}"
 
-for APK_PATH in ${PROJECT_ROOT}/aicq-mobile/android/${APK_GLOB}; do
+for APK_PATH in ${PROJECT_ROOT}/client/mobile/android/${APK_GLOB}; do
     if [ -f "${APK_PATH}" ]; then
         APK_NAME="$(basename "${APK_PATH}")"
         cp "${APK_PATH}" "${DOWNLOAD_DIR}/AICQ-${TIMESTAMP}-${APK_NAME}"

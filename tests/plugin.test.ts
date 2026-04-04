@@ -26,19 +26,19 @@ import {
 import type { KeyPair, HandshakeRequest, HandshakeResponse } from "@aicq/crypto";
 
 // ─── Source imports ─────────────────────────────────────────────────
-import { loadConfig } from "../aicq-plugin/dist/config.js";
-import { PluginStore } from "../aicq-plugin/dist/store.js";
-import { IdentityService } from "../aicq-plugin/dist/services/identityService.js";
-import { HandshakeManager } from "../aicq-plugin/dist/handshake/handshakeManager.js";
-import { EncryptedChatChannel } from "../aicq-plugin/dist/channels/encryptedChat.js";
-import { ChatFriendTool } from "../aicq-plugin/dist/tools/chatFriend.js";
-import { ChatSendTool } from "../aicq-plugin/dist/tools/chatSend.js";
-import { ChatExportKeyTool } from "../aicq-plugin/dist/tools/chatExportKey.js";
-import { MessageSendingHook } from "../aicq-plugin/dist/hooks/messageSending.js";
-import { BeforeToolCallHook } from "../aicq-plugin/dist/hooks/beforeToolCall.js";
-import { P2PConnectionManager } from "../aicq-plugin/dist/p2p/connectionManager.js";
-import { FileTransferManager } from "../aicq-plugin/dist/fileTransfer/transferManager.js";
-import type { PluginConfig, FriendRecord, SessionState, Logger } from "../aicq-plugin/dist/types.js";
+import { loadConfig } from "../plugin/dist/config.js";
+import { PluginStore } from "../plugin/dist/store.js";
+import { IdentityService } from "../plugin/dist/services/identityService.js";
+import { HandshakeManager } from "../plugin/dist/handshake/handshakeManager.js";
+import { EncryptedChatChannel } from "../plugin/dist/channels/encryptedChat.js";
+import { ChatFriendTool } from "../plugin/dist/tools/chatFriend.js";
+import { ChatSendTool } from "../plugin/dist/tools/chatSend.js";
+import { ChatExportKeyTool } from "../plugin/dist/tools/chatExportKey.js";
+import { MessageSendingHook } from "../plugin/dist/hooks/messageSending.js";
+import { BeforeToolCallHook } from "../plugin/dist/hooks/beforeToolCall.js";
+import { P2PConnectionManager } from "../plugin/dist/p2p/connectionManager.js";
+import { FileTransferManager } from "../plugin/dist/fileTransfer/transferManager.js";
+import type { PluginConfig, FriendRecord, SessionState, Logger } from "../plugin/dist/types.js";
 
 // ─── Minimal test runner ────────────────────────────────────────────
 

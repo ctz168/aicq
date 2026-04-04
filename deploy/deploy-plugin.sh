@@ -56,7 +56,7 @@ log_info "步骤 1/6: 获取 AICQ 源码..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}/.."
 
-if [ -d "${REPO_ROOT}/aicq-plugin" ]; then
+if [ -d "${REPO_ROOT}/plugin" ]; then
   log_ok "源码目录已找到: ${REPO_ROOT}"
 else
   log_error "未找到源码目录，请确保在 aicq/deploy/ 下运行此脚本"
@@ -64,24 +64,24 @@ else
 fi
 
 # ─── 2. 安装 crypto 依赖 ────────────────────────────────────────────────
-log_info "步骤 2/6: 编译 aicq-crypto 加密库..."
-cd "${REPO_ROOT}/aicq-crypto"
+log_info "步骤 2/6: 编译 shared/crypto 加密库..."
+cd "${REPO_ROOT}/shared/crypto"
 if [ ! -d "node_modules" ]; then
   npm install 2>&1 | tail -1
 fi
 npm run build 2>&1 | tail -1
-log_ok "aicq-crypto 编译完成"
+log_ok "shared/crypto 编译完成"
 
 # ─── 3. 安装 Plugin 依赖 ────────────────────────────────────────────────
-log_info "步骤 3/6: 安装 aicq-plugin 依赖..."
-cd "${REPO_ROOT}/aicq-plugin"
+log_info "步骤 3/6: 安装 plugin 依赖..."
+cd "${REPO_ROOT}/plugin"
 if [ ! -d "node_modules" ]; then
   npm install 2>&1 | tail -1
 fi
 log_ok "依赖安装完成"
 
 # ─── 4. 编译 Plugin ────────────────────────────────────────────────────
-log_info "步骤 4/6: 编译 aicq-plugin..."
+log_info "步骤 4/6: 编译 plugin..."
 npm run build 2>&1 | tail -1
 log_ok "编译完成"
 
@@ -90,15 +90,15 @@ log_info "步骤 5/6: 安装到 ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"
 
 # 复制必要文件
-cp -r "${REPO_ROOT}/aicq-plugin/dist"          "${INSTALL_DIR}/dist"
-cp -r "${REPO_ROOT}/aicq-plugin/node_modules"   "${INSTALL_DIR}/node_modules"
-cp    "${REPO_ROOT}/aicq-plugin/package.json"    "${INSTALL_DIR}/package.json"
-cp    "${REPO_ROOT}/aicq-plugin/openclaw.plugin.json" "${INSTALL_DIR}/openclaw.plugin.json"
+cp -r "${REPO_ROOT}/plugin/dist"          "${INSTALL_DIR}/dist"
+cp -r "${REPO_ROOT}/plugin/node_modules"   "${INSTALL_DIR}/node_modules"
+cp    "${REPO_ROOT}/plugin/package.json"    "${INSTALL_DIR}/package.json"
+cp    "${REPO_ROOT}/plugin/openclaw.plugin.json" "${INSTALL_DIR}/openclaw.plugin.json"
 
 # 复制 crypto 库（运行时依赖）
 mkdir -p "${INSTALL_DIR}/node_modules/@aicq"
-cp -r "${REPO_ROOT}/aicq-crypto/dist"           "${INSTALL_DIR}/node_modules/@aicq/crypto/dist"
-cp    "${REPO_ROOT}/aicq-crypto/package.json"  "${INSTALL_DIR}/node_modules/@aicq/crypto/package.json"
+cp -r "${REPO_ROOT}/shared/crypto/dist"           "${INSTALL_DIR}/node_modules/@aicq/crypto/dist"
+cp    "${REPO_ROOT}/shared/crypto/package.json"  "${INSTALL_DIR}/node_modules/@aicq/crypto/package.json"
 
 log_ok "文件已复制到 ${INSTALL_DIR}"
 

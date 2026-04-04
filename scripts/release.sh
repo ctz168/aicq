@@ -77,14 +77,14 @@ if ! $SKIP_BUILD; then
 
     # 1a. Build Web
     log "Building web client..."
-    cd "${PROJECT_ROOT}/aicq-web"
+    cd "${PROJECT_ROOT}/client/web"
     npm install --silent 2>/dev/null
     npm run build
     log "Web build complete"
 
     # 1b. Build Linux Desktop
     log "Building Linux AppImage..."
-    cd "${PROJECT_ROOT}/aicq-app"
+    cd "${PROJECT_ROOT}/client/desktop"
     if [ -d "node_modules" ]; then
         npx electron-builder --linux 2>&1 | tail -5 || warn "Linux build had issues"
     else
@@ -93,13 +93,13 @@ if ! $SKIP_BUILD; then
 
     # 1c. Build Android APK
     log "Building Android APK..."
-    cd "${PROJECT_ROOT}/aicq-mobile"
+    cd "${PROJECT_ROOT}/client/mobile"
     if [ -d "android" ] && [ -x "android/gradlew" ]; then
         npx cap sync android 2>/dev/null || warn "Capacitor sync warnings"
         cd android
         chmod +x ./gradlew
         ./gradlew assembleDebug --no-daemon 2>&1 | tail -5 || warn "Android build had issues"
-        cd "${PROJECT_ROOT}/aicq-mobile"
+        cd "${PROJECT_ROOT}/client/mobile"
     else
         warn "Android project not found, skipping"
     fi
@@ -115,7 +115,7 @@ mkdir -p "${DOWNLOAD_DIR}"
 ARTIFACTS=()
 
 # Web client
-WEB_DIST="${PROJECT_ROOT}/aicq-web/dist"
+WEB_DIST="${PROJECT_ROOT}/client/web/dist"
 if [ -d "$WEB_DIST" ]; then
     zip -r "${DOWNLOAD_DIR}/AICQ-${VERSION}-web.zip" "$WEB_DIST" -x "*.git*"
     ARTIFACTS+=("${DOWNLOAD_DIR}/AICQ-${VERSION}-web.zip")
@@ -147,7 +147,7 @@ if [ ! -f "${DOWNLOAD_DIR}/AICQ-${VERSION}-windows-x64.zip" ] && [ -f "$WIN_ZIP"
 fi
 
 # Android APK
-APK=$(find "${PROJECT_ROOT}/aicq-mobile/android/app/build/outputs/apk" -name "*.apk" 2>/dev/null | head -1)
+APK=$(find "${PROJECT_ROOT}/client/mobile/android/app/build/outputs/apk" -name "*.apk" 2>/dev/null | head -1)
 if [ -n "$APK" ] && [ -f "$APK" ]; then
     cp "$APK" "${DOWNLOAD_DIR}/AICQ-${VERSION}-android.apk"
     ARTIFACTS+=("${DOWNLOAD_DIR}/AICQ-${VERSION}-android.apk")

@@ -39,16 +39,16 @@ echo "  Project    : ${PROJECT_ROOT}"
 echo "============================================="
 
 # ---- Step 1: Build web client (if needed) -----------------------------------
-if [ ! -d "${PROJECT_ROOT}/aicq-web/dist" ] || [ -z "$(ls -A "${PROJECT_ROOT}/aicq-web/dist" 2>/dev/null)" ]; then
+if [ ! -d "${PROJECT_ROOT}/client/web/dist" ] || [ -z "$(ls -A "${PROJECT_ROOT}/client/web/dist" 2>/dev/null)" ]; then
     echo "[BUILD] Web client not built — building now..."
-    cd "${PROJECT_ROOT}/aicq-web"
+    cd "${PROJECT_ROOT}/client/web"
     npm run build
 else
     echo "[BUILD] Web client already built, skipping."
 fi
 
 # ---- Step 2: Install Electron deps (if needed) -----------------------------
-cd "${PROJECT_ROOT}/aicq-app"
+cd "${PROJECT_ROOT}/client/desktop"
 if [ ! -d "node_modules" ]; then
     echo "[BUILD] Installing Electron dependencies..."
     npm install
@@ -91,7 +91,7 @@ build_platform() {
         mac)
             if [ "$(uname -s)" != "Darwin" ]; then
                 echo "[WARN] macOS builds must be run on a Mac. Skipping."
-                echo "  On macOS, run: cd aicq-app && npx electron-builder --mac --dmg"
+                echo "  On macOS, run: cd client/desktop && npx electron-builder --mac --dmg"
                 return 0
             fi
             npx electron-builder --mac --dmg 2>&1 | tail -20

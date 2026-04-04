@@ -15,7 +15,7 @@
     ]
   },
   "dependencies": {
-    "@aicq/crypto": "file:../aicq-crypto",
+    "@aicq/crypto": "file:../shared/crypto",
     "ws": "^8.16.0",
     "uuid": "^9.0.0",
     "qrcode": "^1.5.3",

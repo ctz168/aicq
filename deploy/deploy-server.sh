@@ -68,7 +68,7 @@ fi
 
 # ─── 4. 获取源码 ──────────────────────────────────────────────────────
 log_info "步骤 4/10: 获取 AICQ 源码..."
-if [ -d "${APP_DIR}/aicq-server" ]; then
+if [ -d "${APP_DIR}/server" ]; then
   log_warn "目录 ${APP_DIR} 已存在, 执行 git pull 更新..."
   cd "${APP_DIR}" && git pull --ff-only 2>/dev/null || true
 else
@@ -79,19 +79,19 @@ fi
 
 # ─── 5. 安装依赖 ──────────────────────────────────────────────────────
 log_info "步骤 5/10: 安装 npm 依赖..."
-cd "${APP_DIR}/aicq-crypto" && npm install --production 2>&1 | tail -1
-cd "${APP_DIR}/aicq-server" && npm install --production 2>&1 | tail -1
+cd "${APP_DIR}/shared/crypto" && npm install --production 2>&1 | tail -1
+cd "${APP_DIR}/server" && npm install --production 2>&1 | tail -1
 log_ok "依赖安装完成"
 
 # ─── 6. 编译 ──────────────────────────────────────────────────────────
 log_info "步骤 6/10: 编译 TypeScript..."
-cd "${APP_DIR}/aicq-crypto" && npm run build 2>&1 | tail -1
-cd "${APP_DIR}/aicq-server" && npm run build 2>&1 | tail -1
+cd "${APP_DIR}/shared/crypto" && npm run build 2>&1 | tail -1
+cd "${APP_DIR}/server" && npm run build 2>&1 | tail -1
 log_ok "编译完成"
 
 # ─── 7. 创建配置文件 ──────────────────────────────────────────────────
 log_info "步骤 7/10: 创建配置文件..."
-cat > "${APP_DIR}/aicq-server/.env" << EOF
+cat > "${APP_DIR}/server/.env" << EOF
 # AICQ Server 配置 - 自动生成于 $(date '+%Y-%m-%d %H:%M:%S')
 PORT=${PORT}
 DOMAIN=${DOMAIN}
@@ -105,7 +105,7 @@ log_ok "配置文件已生成: .env"
 # ─── 8. 启动服务 ──────────────────────────────────────────────────────
 log_info "步骤 8/10: 启动 AICQ Server..."
 pm2 delete aicq-server 2>/dev/null || true
-cd "${APP_DIR}/aicq-server"
+cd "${APP_DIR}/server"
 pm2 start dist/index.js --name "aicq-server" --env production
 pm2 save
 log_ok "AICQ Server 已启动 (PID: $(pm2 pid aicq-server))"
@@ -146,7 +146,7 @@ server {
 
     # 静态文件 (Web UI，如果已构建)
     location / {
-        root __APP_DIR__/aicq-web/dist;
+        root __APP_DIR__/client/web/dist;
         try_files $uri $uri/ /index.html;
         expires 1h;
     }
@@ -233,7 +233,7 @@ echo "║  API:        https://${DOMAIN}/api/v1/$(printf '%*s' $((17 - ${#DOMAIN
 echo "║  WebSocket:  wss://${DOMAIN}/ws$(printf '%*s' $((25 - ${#DOMAIN}))')║"
 echo "║  健康检查:   https://${DOMAIN}/health$(printf '%*s' $((21 - ${#DOMAIN}))')║"
 echo "║                                                          ║"
-echo "║  配置文件:   ${APP_DIR}/aicq-server/.env$(printf '%*s' $((12 - ${#APP_DIR}))')║"
+echo "║  配置文件:   ${APP_DIR}/server/.env$(printf '%*s' $((12 - ${#APP_DIR}))')║"
 echo "║  日志:       pm2 logs aicq-server                            ║"
 echo "║                                                          ║"
 echo "║  [后续] 安装 Let's Encrypt 真实证书:                       ║"

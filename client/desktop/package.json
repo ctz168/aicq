@@ -20,19 +20,19 @@
     "files": [
       "main.js",
       "preload.js",
-      "../aicq-web/dist/**/*"
+      "../web/dist/**/*"
     ],
     "win": {
       "target": "nsis",
-      "icon": "../aicq-web/public/icon.ico"
+      "icon": "../web/public/icon.ico"
     },
     "mac": {
       "target": "dmg",
-      "icon": "../aicq-web/public/icon.icns"
+      "icon": "../web/public/icon.icns"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "../aicq-web/public/icon.png"
+      "icon": "../web/public/icon.png"
     },
     "nsis": {
       "oneClick": false,

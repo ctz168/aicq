@@ -19,7 +19,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'AICQ — 加密聊天',
-    icon: path.join(__dirname, '..', 'aicq-web', 'public', 'icon.png'),
+    icon: path.join(__dirname, '..', 'web', 'public', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -82,11 +82,11 @@ function createWindow() {
   // Load the web client
   const webPath = isDev
     ? 'http://localhost:5173'
-    : path.join(__dirname, '..', 'aicq-web', 'dist', 'index.html');
+    : path.join(__dirname, '..', 'web', 'dist', 'index.html');
 
   mainWindow.loadFile(path.resolve(webPath)).catch(() => {
     // Fallback to loading from dist
-    mainWindow.loadURL(`file://${path.join(__dirname, '..', 'aicq-web', 'dist', 'index.html')}`);
+    mainWindow.loadURL(`file://${path.join(__dirname, '..', 'web', 'dist', 'index.html')}`);
   });
 
   // Open external links in browser

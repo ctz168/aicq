@@ -20,7 +20,7 @@ fi
 
 # Start Node.js server (background)
 echo "Starting AICQ server on port 3000..."
-cd /app/aicq-server
+cd /app/server
 node dist/index.js &
 SERVER_PID=$!
 

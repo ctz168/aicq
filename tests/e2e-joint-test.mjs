@@ -105,7 +105,7 @@ async function startServer() {
   process.env.MAX_FRIENDS = "200";
   process.env.RATE_LIMIT_DISABLED = "true";
 
-  const mod = await import("../aicq-server/dist/index.js");
+  const mod = await import("../server/dist/index.js");
   const server = mod.server;
 
   if (!server.listening) {

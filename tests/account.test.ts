@@ -138,7 +138,7 @@ async function startServer(): Promise<void> {
   // Disable rate limiting in tests
   process.env.RATE_LIMIT_DISABLED = "true";
 
-  const mod = await import("../aicq-server/dist/index.js");
+  const mod = await import("../server/dist/index.js");
   serverInstance = mod.server;
 
   if (!serverInstance.listening) {
@@ -321,7 +321,7 @@ async function testAccountRegistration() {
 
   await test("Password is hashed (not stored plaintext)", async () => {
     // Import the store to verify the stored password is hashed
-    const { store } = await import("../aicq-server/dist/db/memoryStore.js");
+    const { store } = await import("../server/dist/db/memoryStore.js");
     let foundAccount: any = null;
     for (const account of store.accounts.values()) {
       if (account.email === regEmail) {
@@ -585,7 +585,7 @@ async function testAgentLogin() {
 
   await test("Agent login with valid challenge and signature → success", async () => {
     // Import the accountService to request a challenge directly
-    const accountService = await import("../aicq-server/dist/services/accountService.js");
+    const accountService = await import("../server/dist/services/accountService.js");
 
     const agentPublicKey = "agent-pub-key-" + Math.random().toString(36).slice(2, 8);
     const { challenge, challengeId } = accountService.requestAgentChallenge(agentPublicKey, "TestAgent");
@@ -612,7 +612,7 @@ async function testAgentLogin() {
   });
 
   await test("Agent login reuses existing account on second login", async () => {
-    const accountService = await import("../aicq-server/dist/services/accountService.js");
+    const accountService = await import("../server/dist/services/accountService.js");
 
     const agentKey = "reuse-agent-key-" + Math.random().toString(36).slice(2, 8);
 
@@ -642,7 +642,7 @@ async function testAgentLogin() {
   });
 
   await test("Agent login with public key mismatch → 401", async () => {
-    const accountService = await import("../aicq-server/dist/services/accountService.js");
+    const accountService = await import("../server/dist/services/accountService.js");
 
     const correctKey = "correct-key-" + Math.random().toString(36).slice(2, 8);
     const wrongKey = "wrong-key-" + Math.random().toString(36).slice(2, 8);
@@ -759,7 +759,7 @@ async function testVerificationCodeExpiry() {
 
   await test("Verify expired code → error", async () => {
     // We need to directly manipulate the store to expire a code
-    const { store } = await import("../aicq-server/dist/db/memoryStore.js");
+    const { store } = await import("../server/dist/db/memoryStore.js");
     const email = `expire-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
     // Send a code

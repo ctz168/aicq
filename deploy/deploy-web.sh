@@ -51,19 +51,19 @@ fi
 # ─── 1. 安装依赖 ──────────────────────────────────────────────────────
 log_info "步骤 1/5: 安装依赖..."
 
-cd "${REPO_ROOT}/aicq-crypto"
+cd "${REPO_ROOT}/shared/crypto"
 if [ ! -d "node_modules" ] || [ ! -d "dist" ]; then
   npm install 2>&1 | tail -1
   npm run build 2>&1 | tail -1
 else
-  log_ok "aicq-crypto 已就绪"
+  log_ok "shared/crypto 已就绪"
 fi
 
-cd "${REPO_ROOT}/aicq-web"
+cd "${REPO_ROOT}/client/web"
 if [ ! -d "node_modules" ]; then
   npm install 2>&1 | tail -1
 else
-  log_ok "aicq-web 依赖已就绪"
+  log_ok "client/web 依赖已就绪"
 fi
 
 # ─── 2. 类型检查 ──────────────────────────────────────────────────────
@@ -74,13 +74,13 @@ log_ok "类型检查完成"
 # ─── 3. 构建生产版本 ──────────────────────────────────────────────────
 log_info "步骤 3/5: 构建生产版本 (Vite build)..."
 rm -rf dist
-npx vite build "${REPO_ROOT}/aicq-web" 2>&1 | tail -10
+npx vite build "${REPO_ROOT}/client/web" 2>&1 | tail -10
 
-if [ -d "${REPO_ROOT}/aicq-web/dist" ]; then
-  DIST_SIZE=$(du -sh "${REPO_ROOT}/aicq-web/dist" | cut -f1)
+if [ -d "${REPO_ROOT}/client/web/dist" ]; then
+  DIST_SIZE=$(du -sh "${REPO_ROOT}/client/web/dist" | cut -f1)
   log_ok "构建完成 (大小: ${DIST_SIZE})"
-  echo "  产物目录: ${REPO_ROOT}/aicq-web/dist/"
-  ls -lh "${REPO_ROOT}/aicq-web/dist/" 2>/dev/null | tail -n +2
+  echo "  产物目录: ${REPO_ROOT}/client/web/dist/"
+  ls -lh "${REPO_ROOT}/client/web/dist/" 2>/dev/null | tail -n +2
 else
   log_error "构建失败，请检查上方错误信息"
   exit 1
@@ -94,7 +94,7 @@ mkdir -p "${DEPLOY_DIR}"
 rm -rf "${DEPLOY_DIR:?}/*"
 
 # 复制构建产物
-cp -r "${REPO_ROOT}/aicq-web/dist/"* "${DEPLOY_DIR}/"
+cp -r "${REPO_ROOT}/client/web/dist/"* "${DEPLOY_DIR}/"
 
 # 设置权限
 chown -R www-data:www-data "${DEPLOY_DIR}" 2>/dev/null || chmod -R 755 "${DEPLOY_DIR}"
@@ -211,7 +211,7 @@ echo "║    - 拖拽上传                                              ║"
 echo "║    - 6位数临时号码发现                                      ║"
 echo "║                                                          ║"
 echo "║  移动端打包 (可选):                                        ║"
-echo "║    cd ${REPO_ROOT}/aicq-web$(printf '%*s' $((29 - ${#REPO_ROOT}))')║"
+echo "║    cd ${REPO_ROOT}/client/web$(printf '%*s' $((29 - ${#REPO_ROOT}))')║"
 echo "║    npx cap add android && npx cap sync android              ║"
 echo "║    npx cap add ios && npx cap sync ios                      ║"
 echo "╚══════════════════════════════════════════════════════════════╝"

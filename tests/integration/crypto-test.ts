@@ -1,4 +1,4 @@
-import * as crypto from '../../aicq-crypto/dist';
+import * as crypto from '../../shared/crypto/dist';
 
 // Test 1: Generate key pairs
 const signingKeys = crypto.generateSigningKeyPair();
