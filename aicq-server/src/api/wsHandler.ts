@@ -10,6 +10,7 @@ import {
 } from '../services/p2pDiscoveryService';
 import * as groupService from '../services/groupService';
 import { store } from '../db/memoryStore';
+import { v4 as uuidv4 } from 'uuid';
 
 /** Interface for parsed WebSocket messages */
 interface WsMessage {
@@ -169,6 +170,15 @@ function handleMessage(
       }
 
       relaySignal(id, toId, { type: 'message', data: content });
+
+      // 发送推送通知
+      sendPushNotification(toId, {
+        chatId: id,
+        senderId: id,
+        senderName: getSenderName(id),
+        messagePreview: typeof content === 'string' ? content : JSON.stringify(content),
+        isGroup: false,
+      });
       break;
     }
 
@@ -222,6 +232,41 @@ function handleMessage(
           media: message.media,
           fileInfo: message.fileInfo,
         });
+
+        // 存储群消息到历史记录
+        const group = store.groups.get(groupId);
+        const senderMember = group?.members.get(id);
+        const msgRecord = {
+          id: uuidv4(),
+          groupId,
+          fromId: id,
+          senderName: senderMember?.displayName || id.slice(0, 8),
+          type: msgType,
+          content,
+          media: message.media,
+          fileInfo: message.fileInfo,
+          timestamp: Date.now(),
+        };
+
+        if (!store.groupMessages.has(groupId)) {
+          store.groupMessages.set(groupId, []);
+        }
+        store.groupMessages.get(groupId)!.push(msgRecord);
+
+        // 发送推送通知给每个在线的群成员
+        if (group) {
+          for (const [memberId] of group.members) {
+            if (memberId === id) continue;
+            sendPushNotification(memberId, {
+              chatId: groupId,
+              senderId: id,
+              senderName: senderMember?.displayName || id.slice(0, 8),
+              messagePreview: content,
+              isGroup: true,
+            });
+          }
+        }
+
         ws.send(JSON.stringify({ type: 'group_message_ack', groupId, delivered }));
       } catch (err: any) {
         ws.send(JSON.stringify({ type: 'error', error: err.message }));
@@ -248,6 +293,197 @@ function handleMessage(
       } catch (err: any) {
         // 输入指示器失败不返回错误
       }
+      break;
+    }
+
+    // ─── 推送通知相关 ─────────────────────────────────────────
+
+    case 'get_notifications': {
+      // 获取用户的通知列表
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const limit = message.limit || 50;
+      const userNotifications: any[] = [];
+      for (const notification of store.notifications.values()) {
+        if (notification.accountId === id) {
+          userNotifications.push(notification);
+        }
+      }
+      // 按时间倒序排列
+      userNotifications.sort((a, b) => b.createdAt - a.createdAt);
+      ws.send(JSON.stringify({
+        type: 'notifications',
+        data: userNotifications.slice(0, limit),
+        count: userNotifications.length,
+      }));
+      break;
+    }
+
+    case 'mark_notification_read': {
+      // 标记通知为已读
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const notificationId: string = message.notificationId;
+      if (!notificationId) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Missing notificationId' }));
+        return;
+      }
+
+      const notification = store.notifications.get(notificationId);
+      if (notification && notification.accountId === id) {
+        notification.read = true;
+        store.notifications.set(notificationId, notification);
+        ws.send(JSON.stringify({ type: 'mark_notification_read_ack', notificationId, read: true }));
+      } else {
+        ws.send(JSON.stringify({ type: 'error', error: '通知不存在' }));
+      }
+      break;
+    }
+
+    // ─── 群消息历史 ─────────────────────────────────────────────
+
+    case 'get_group_messages': {
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const groupId: string = message.groupId;
+      if (!groupId) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Missing groupId' }));
+        return;
+      }
+
+      const group = store.groups.get(groupId);
+      if (!group || !group.members.has(id)) {
+        ws.send(JSON.stringify({ type: 'error', error: '你不是群成员' }));
+        return;
+      }
+
+      const limit = Math.min(message.limit || 50, 200);
+      const before = message.before || Date.now();
+      const messages = store.groupMessages.get(groupId) || [];
+
+      // 过滤：获取 before 之前的消息，倒序排列
+      const filtered = messages
+        .filter((m) => m.timestamp < before)
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, limit);
+
+      ws.send(JSON.stringify({
+        type: 'group_messages',
+        groupId,
+        messages: filtered,
+        count: filtered.length,
+      }));
+      break;
+    }
+
+    // ─── Sub-Agent 相关 ────────────────────────────────────────
+
+    case 'subagent_start': {
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const { parentMessageId, task, context } = message;
+      if (!parentMessageId || !task) {
+        ws.send(JSON.stringify({ type: 'error', error: '缺少必填字段: parentMessageId, task' }));
+        return;
+      }
+
+      // 动态导入 subAgentService 避免循环依赖
+      import('../services/subAgentService').then((svc) => {
+        try {
+          const session = svc.startSubAgent(parentMessageId, task, context, id);
+          ws.send(JSON.stringify({
+            type: 'subagent_start_ack',
+            data: { id: session.id, status: session.status },
+          }));
+
+          // 模拟流式输出
+          simulateStreaming(ws, session.id, task, id);
+        } catch (err: any) {
+          ws.send(JSON.stringify({ type: 'error', error: err.message }));
+        }
+      }).catch(() => {
+        ws.send(JSON.stringify({ type: 'error', error: '内部错误' }));
+      });
+      break;
+    }
+
+    case 'subagent_input': {
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const subAgentId: string = message.subAgentId;
+      const input: string = message.input;
+      if (!subAgentId || !input) {
+        ws.send(JSON.stringify({ type: 'error', error: '缺少必填字段: subAgentId, input' }));
+        return;
+      }
+
+      import('../services/subAgentService').then((svc) => {
+        try {
+          const session = svc.sendInput(subAgentId, input, id);
+          ws.send(JSON.stringify({
+            type: 'subagent_input_ack',
+            data: { id: session.id, status: session.status, output: session.output },
+          }));
+
+          // 如果恢复运行，继续流式输出
+          if (session.status === 'running') {
+            simulateStreaming(ws, session.id, session.task, id);
+          }
+        } catch (err: any) {
+          ws.send(JSON.stringify({ type: 'error', error: err.message }));
+        }
+      }).catch(() => {
+        ws.send(JSON.stringify({ type: 'error', error: '内部错误' }));
+      });
+      break;
+    }
+
+    case 'subagent_abort': {
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const subAgentId: string = message.subAgentId;
+      if (!subAgentId) {
+        ws.send(JSON.stringify({ type: 'error', error: '缺少必填字段: subAgentId' }));
+        return;
+      }
+
+      import('../services/subAgentService').then((svc) => {
+        try {
+          const session = svc.abortSubAgent(subAgentId, id);
+          ws.send(JSON.stringify({
+            type: 'subagent_abort_ack',
+            data: { id: session.id, status: session.status },
+          }));
+        } catch (err: any) {
+          ws.send(JSON.stringify({ type: 'error', error: err.message }));
+        }
+      }).catch(() => {
+        ws.send(JSON.stringify({ type: 'error', error: '内部错误' }));
+      });
       break;
     }
 
@@ -281,4 +517,146 @@ function broadcastOnlineStatus(nodeId: string, online: boolean): void {
       }
     }
   }
+}
+
+/**
+ * 获取发送者的显示名称
+ */
+function getSenderName(accountId: string): string {
+  const account = store.accounts.get(accountId);
+  if (account?.displayName) return account.displayName;
+  if (account?.agentName) return account.agentName;
+  const node = store.nodes.get(accountId);
+  if (node) return accountId.slice(0, 8);
+  return accountId.slice(0, 8);
+}
+
+/**
+ * 发送推送通知给指定用户
+ */
+function sendPushNotification(
+  accountId: string,
+  data: {
+    chatId: string;
+    senderId: string;
+    senderName: string;
+    messagePreview: string;
+    isGroup: boolean;
+  },
+): void {
+  const notificationId = uuidv4();
+  const notification = {
+    id: notificationId,
+    accountId,
+    chatId: data.chatId,
+    senderId: data.senderId,
+    senderName: data.senderName,
+    messagePreview: data.messagePreview.slice(0, 200),
+    isGroup: data.isGroup,
+    read: false,
+    createdAt: Date.now(),
+  };
+
+  store.notifications.set(notificationId, notification);
+
+  // 通过 WebSocket 发送推送
+  if (isOnline(accountId)) {
+    relaySignal('system', accountId, {
+      type: 'push_message',
+      data: {
+        notificationId,
+        chatId: data.chatId,
+        senderName: data.senderName,
+        messagePreview: data.messagePreview.slice(0, 200),
+        timestamp: Date.now(),
+        isGroup: data.isGroup,
+      },
+    });
+  }
+}
+
+/**
+ * 模拟 Sub-Agent 流式输出
+ */
+const activeStreamTimers = new Map<string, NodeJS.Timeout>();
+
+function simulateStreaming(
+  ws: WebSocket,
+  subAgentId: string,
+  task: string,
+  requesterId: string,
+): void {
+  // 清除之前可能存在的定时器
+  const existingTimer = activeStreamTimers.get(subAgentId);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+    activeStreamTimers.delete(subAgentId);
+  }
+
+  const responses = [
+    `正在处理任务: "${task.slice(0, 50)}..."`,
+    '分析请求内容...',
+    '检索相关信息...',
+    '生成响应中...',
+    '整理输出结果...',
+    '任务处理完成。',
+  ];
+
+  let index = 0;
+  const timer = setInterval(() => {
+    const session = store.subAgents.get(subAgentId);
+    if (!session || session.status !== 'running') {
+      clearInterval(timer);
+      activeStreamTimers.delete(subAgentId);
+      return;
+    }
+
+    if (index < responses.length) {
+      session.output += (session.output ? '\n' : '') + responses[index];
+      session.updatedAt = Date.now();
+      store.subAgents.set(subAgentId, session);
+
+      // 发送流式块
+      try {
+        ws.send(JSON.stringify({
+          type: 'subagent_chunk',
+          data: {
+            id: subAgentId,
+            chunk: responses[index],
+            output: session.output,
+            status: 'running',
+          },
+        }));
+      } catch {
+        clearInterval(timer);
+        activeStreamTimers.delete(subAgentId);
+        return;
+      }
+
+      index++;
+    } else {
+      // 流式完成
+      session.status = 'completed';
+      session.updatedAt = Date.now();
+      store.subAgents.set(subAgentId, session);
+
+      try {
+        ws.send(JSON.stringify({
+          type: 'subagent_completed',
+          data: {
+            id: subAgentId,
+            output: session.output,
+            status: 'completed',
+          },
+        }));
+      } catch {
+        // ignore
+      }
+
+      clearInterval(timer);
+      activeStreamTimers.delete(subAgentId);
+    }
+  }, 800);
+
+  activeStreamTimers.set(subAgentId, timer);
 }

@@ -8,6 +8,9 @@ import {
   VerificationCode,
   Session,
   Group,
+  FriendRequest,
+  PushNotification,
+  SubAgentSession,
 } from '../models/types';
 import { config } from '../config';
 
@@ -38,6 +41,18 @@ export class MemoryStore {
 
   /** Groups keyed by group ID */
   groups = new Map<string, Group>();
+
+  /** Friend requests keyed by request ID */
+  friendRequests = new Map<string, FriendRequest>();
+
+  /** Push notifications keyed by notification ID */
+  notifications = new Map<string, PushNotification>();
+
+  /** Group message history keyed by group ID */
+  groupMessages = new Map<string, any[]>();
+
+  /** Sub-agent sessions keyed by session ID */
+  subAgents = new Map<string, SubAgentSession>();
 
   /**
    * Remove expired temp numbers from the store.
@@ -119,6 +134,22 @@ export class MemoryStore {
     }
     return removed;
   }
+
+  /**
+   * Remove old push notifications (older than 7 days)
+   */
+  cleanupOldNotifications(): number {
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    let removed = 0;
+    for (const [id, notification] of this.notifications) {
+      if (now - notification.createdAt > sevenDays) {
+        this.notifications.delete(id);
+        removed++;
+      }
+    }
+    return removed;
+  }
 }
 
 /** Singleton store instance */
@@ -149,6 +180,7 @@ export function startPeriodicCleanup(): NodeJS.Timeout {
     store.cleanupOldFileTransfers();
     store.cleanupExpiredCodes();
     store.cleanupExpiredSessions();
+    store.cleanupOldNotifications();
   }, 60_000);
 
   // Don't prevent process exit

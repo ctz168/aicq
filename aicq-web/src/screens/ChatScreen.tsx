@@ -4,6 +4,8 @@ import MessageBubble, { DateSeparator } from '../components/MessageBubble';
 import StreamingMessage from '../components/StreamingMessage';
 import StatusBadge from '../components/StatusBadge';
 import FileTransferProgress from '../components/FileTransferProgress';
+import ForwardMessageModal from '../components/ForwardMessageModal';
+import SubAgentPanel from '../components/SubAgentPanel';
 import type { ChatMessage, StreamingState } from '../types';
 
 const ChatScreen: React.FC = () => {
@@ -27,6 +29,8 @@ const ChatScreen: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: ChatMessage } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -75,7 +79,7 @@ const ChatScreen: React.FC = () => {
     }
   }, [friendId, markMessagesRead]);
 
-  // Close attachment menu on click outside
+  // Close menus on click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (attachmentMenuRef.current && !attachmentMenuRef.current.contains(e.target as Node)) {
@@ -88,6 +92,14 @@ const ChatScreen: React.FC = () => {
     }
   }, [showAttachmentMenu]);
 
+  // Close context menu on click anywhere
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [contextMenu]);
+
   const handleSend = useCallback(async () => {
     if (!friendId || !inputText.trim()) return;
     setIsSending(true);
@@ -95,7 +107,6 @@ const ChatScreen: React.FC = () => {
       sendMessage(friendId, inputText.trim());
       setInputText('');
       autoScrollRef.current = true;
-      // Reset textarea height
       if (inputRef.current) {
         inputRef.current.style.height = 'auto';
       }
@@ -122,11 +133,22 @@ const ChatScreen: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
     handleTyping();
-    // Auto resize
     const textarea = e.target;
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
   };
+
+  // Context menu handler for message bubbles
+  const handleMessageContextMenu = useCallback((e: React.MouseEvent, message: ChatMessage) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, message });
+  }, []);
+
+  const handleForward = useCallback((message: ChatMessage) => {
+    setContextMenu(null);
+    setForwardMessage(message);
+  }, []);
 
   // File handling
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,7 +248,6 @@ const ChatScreen: React.FC = () => {
       }
 
       if (msg.type === 'streaming' && msg.streamingActive) {
-        // Show streaming message with live updates
         elements.push(
           <StreamingMessage
             key={`stream-${msg.id}`}
@@ -237,18 +258,22 @@ const ChatScreen: React.FC = () => {
         );
       } else {
         elements.push(
-          <MessageBubble
+          <div
             key={msg.id}
-            message={msg}
-            isOwn={msg.fromId === state.userId}
-            userId={state.userId}
-          />
+            onContextMenu={(e) => handleMessageContextMenu(e, msg)}
+          >
+            <MessageBubble
+              message={msg}
+              isOwn={msg.fromId === state.userId}
+              userId={state.userId}
+            />
+          </div>
         );
       }
     }
 
     return elements;
-  }, [messages, state.userId]);
+  }, [messages, state.userId, handleMessageContextMenu]);
 
   if (!friendId || !friend) {
     return (
@@ -314,6 +339,11 @@ const ChatScreen: React.FC = () => {
             isComplete={false}
             error={streamingState.error}
           />
+        )}
+
+        {/* SubAgent Panel for AI friends */}
+        {isAiFriend && messages.length > 0 && (
+          <SubAgentPanel />
         )}
 
         {/* Typing indicator */}
@@ -453,6 +483,35 @@ const ChatScreen: React.FC = () => {
           onChange={handleVideoSelect}
         />
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <div className="context-menu-item" onClick={() => handleForward(contextMenu.message)}>
+            ↪️ 转发消息
+          </div>
+          <div
+            className="context-menu-item"
+            onClick={() => {
+              navigator.clipboard.writeText(contextMenu.message.content);
+              setContextMenu(null);
+            }}
+          >
+            📋 复制内容
+          </div>
+        </div>
+      )}
+
+      {/* Forward Message Modal */}
+      {forwardMessage && (
+        <ForwardMessageModal
+          message={forwardMessage}
+          onClose={() => setForwardMessage(null)}
+        />
+      )}
     </div>
   );
 };

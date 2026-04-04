@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import type { TabName } from '../types';
 import type { UnreadCounts } from '../types';
+import { NotificationBell } from './NotificationPanel';
 
 interface SidebarProps {
   activeTab: TabName;
@@ -28,6 +29,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, unreadCounts,
         <div className="sidebar-header">
           <h1 className="app-title">AICQ</h1>
           <span className="app-subtitle">加密聊天</span>
+          <div style={{ marginLeft: 'auto' }}>
+            <NotificationBell />
+          </div>
         </div>
         <ul className="sidebar-nav">
           {tabs.map((tab) => {

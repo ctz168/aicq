@@ -258,3 +258,39 @@ export interface GroupMessagePayload {
   media?: any;
   fileInfo?: any;
 }
+
+// ─── Friend Request System ─────────────────────────────────────
+export interface FriendRequest {
+  id: string;
+  fromId: string;
+  toId: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  message?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// ─── Push Notifications ────────────────────────────────────────
+export interface PushNotification {
+  id: string;
+  accountId: string;
+  chatId: string;
+  senderId: string;
+  senderName: string;
+  messagePreview: string;
+  isGroup: boolean;
+  read: boolean;
+  createdAt: number;
+}
+
+// ─── Sub-Agent System ──────────────────────────────────────────
+export interface SubAgentSession {
+  id: string;
+  parentMessageId: string;
+  task: string;
+  context?: string;
+  status: 'running' | 'completed' | 'waiting_human' | 'error';
+  output: string;
+  createdAt: number;
+  updatedAt: number;
+}

@@ -160,6 +160,40 @@ export type ScreenName =
 /** Tab names for bottom navigation. */
 export type TabName = 'chatList' | 'groupList' | 'friends' | 'tempNumber' | 'settings';
 
+/** Friend request information. */
+export interface FriendRequest {
+  id: string;
+  fromId: string;
+  toId: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  message?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Push notification for new messages. */
+export interface PushNotification {
+  id: string;
+  chatId: string;
+  senderName: string;
+  messagePreview: string;
+  timestamp: number;
+  isGroup: boolean;
+  isRead: boolean;
+}
+
+/** Sub-agent parallel dialog session. */
+export interface SubAgentSession {
+  id: string;
+  parentMessageId: string;
+  task: string;
+  context?: string;
+  status: 'running' | 'completed' | 'waiting_human' | 'error';
+  output: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** Unread counts per friend / group. */
 export type UnreadCounts = Record<string, number>;
 

@@ -1,0 +1,146 @@
+import { Router, Request, Response } from 'express';
+import { generalLimiter } from '../middleware/rateLimit';
+import * as friendshipService from '../services/friendshipService';
+import * as friendRequestService from '../services/friendRequestService';
+
+const router = Router();
+
+// ─── 好友列表 ─────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/friends
+ * 获取好友列表
+ */
+router.get('/', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const nodeId = req.query.nodeId as string;
+    if (!nodeId) {
+      res.status(400).json({ error: 'Missing query parameter: nodeId' });
+      return;
+    }
+
+    const friends = friendshipService.getFriends(nodeId);
+    const count = friendshipService.getFriendCount(nodeId);
+    res.json({ friends, count });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 删除好友 ─────────────────────────────────────────────────
+
+/**
+ * DELETE /api/v1/friends/:friendId
+ * 删除好友
+ */
+router.delete('/:friendId', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const nodeId = req.body.nodeId;
+    if (!nodeId) {
+      res.status(400).json({ error: 'Missing required field: nodeId' });
+      return;
+    }
+
+    const removed = friendshipService.removeFriend(nodeId, req.params.friendId);
+    if (!removed) {
+      res.status(404).json({ error: 'Friendship not found' });
+      return;
+    }
+    res.json({ removed: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 获取好友请求 ─────────────────────────────────────────────
+
+/**
+ * GET /api/v1/friends/requests
+ * 获取当前账号的所有好友请求（发送的和接收的）
+ */
+router.get('/requests', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const accountId = req.query.accountId as string;
+    if (!accountId) {
+      res.status(400).json({ error: '缺少查询参数: accountId' });
+      return;
+    }
+
+    const { sent, received } = friendRequestService.getFriendRequests(accountId);
+    res.json({
+      sent,
+      received,
+      sentCount: sent.length,
+      receivedCount: received.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 发送好友请求 ─────────────────────────────────────────────
+
+/**
+ * POST /api/v1/friends/requests/:userId
+ * 向指定用户发送好友请求
+ */
+router.post('/requests/:userId', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const { fromId, message } = req.body;
+    const toId = req.params.userId;
+
+    if (!fromId) {
+      res.status(400).json({ error: '缺少必填字段: fromId' });
+      return;
+    }
+
+    const request = friendRequestService.sendFriendRequest(fromId, toId, message);
+    res.status(201).json(request);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ─── 接受好友请求 ─────────────────────────────────────────────
+
+/**
+ * POST /api/v1/friends/requests/:requestId/accept
+ * 接受好友请求
+ */
+router.post('/requests/:requestId/accept', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const { accountId } = req.body;
+    if (!accountId) {
+      res.status(400).json({ error: '缺少必填字段: accountId' });
+      return;
+    }
+
+    const request = friendRequestService.acceptFriendRequest(req.params.requestId, accountId);
+    res.json({ success: true, request });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ─── 拒绝好友请求 ─────────────────────────────────────────────
+
+/**
+ * POST /api/v1/friends/requests/:requestId/reject
+ * 拒绝好友请求
+ */
+router.post('/requests/:requestId/reject', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const { accountId } = req.body;
+    if (!accountId) {
+      res.status(400).json({ error: '缺少必填字段: accountId' });
+      return;
+    }
+
+    const request = friendRequestService.rejectFriendRequest(req.params.requestId, accountId);
+    res.json({ success: true, request });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+export default router;

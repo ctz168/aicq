@@ -8,6 +8,8 @@ import { startPeriodicCleanup } from './db/memoryStore';
 import apiRoutes from './api/routes';
 import authRoutes from './api/authRoutes';
 import groupRoutes from './api/groupRoutes';
+import friendsRoutes from './api/friendsRoutes';
+import subAgentRoutes from './api/subAgentRoutes';
 import { setupWebSocketHandler } from './api/wsHandler';
 import { generalLimiter } from './middleware/rateLimit';
 
@@ -34,6 +36,8 @@ app.get('/health', (_req, res) => {
 app.use('/api/v1', apiRoutes);
 app.use('/api/v1', authRoutes);
 app.use('/api/v1', groupRoutes);
+app.use('/api/v1/friends', friendsRoutes);
+app.use('/api/v1', subAgentRoutes);
 
 // ─── 404 Handler ──────────────────────────────────────────────────
 app.use((_req, res) => {

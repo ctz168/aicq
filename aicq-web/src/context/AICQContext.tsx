@@ -12,6 +12,9 @@ import type {
   StreamingState,
   GroupInfo,
   GroupMessage,
+  FriendRequest,
+  PushNotification,
+  SubAgentSession,
 } from '../types';
 
 // ─── State ───────────────────────────────────────────────────
@@ -35,6 +38,9 @@ interface AICQState {
   groups: GroupInfo[];
   activeGroupId: string | null;
   groupUnreadCounts: UnreadCounts;
+  friendRequests: FriendRequest[];
+  notifications: PushNotification[];
+  subAgents: SubAgentSession[];
 }
 
 const initialState: AICQState = {
@@ -55,6 +61,9 @@ const initialState: AICQState = {
   groups: [],
   activeGroupId: null,
   groupUnreadCounts: {},
+  friendRequests: [],
+  notifications: [],
+  subAgents: [],
 };
 
 type Action =
@@ -86,7 +95,18 @@ type Action =
   | { type: 'UPDATE_GROUP'; payload: GroupInfo }
   | { type: 'REMOVE_GROUP'; payload: string }
   | { type: 'SET_ACTIVE_GROUP'; payload: string | null }
-  | { type: 'ADD_GROUP_MESSAGE'; payload: { groupId: string; message: GroupMessage } };
+  | { type: 'ADD_GROUP_MESSAGE'; payload: { groupId: string; message: GroupMessage } }
+  | { type: 'SET_FRIEND_REQUESTS'; payload: { sent: FriendRequest[]; received: FriendRequest[] } }
+  | { type: 'ADD_FRIEND_REQUEST'; payload: FriendRequest }
+  | { type: 'UPDATE_FRIEND_REQUEST'; payload: FriendRequest }
+  | { type: 'SET_NOTIFICATIONS'; payload: PushNotification[] }
+  | { type: 'ADD_NOTIFICATION'; payload: PushNotification }
+  | { type: 'MARK_NOTIFICATION_READ'; payload: string }
+  | { type: 'CLEAR_NOTIFICATIONS' }
+  | { type: 'SET_SUB_AGENTS'; payload: SubAgentSession[] }
+  | { type: 'ADD_SUB_AGENT'; payload: SubAgentSession }
+  | { type: 'UPDATE_SUB_AGENT'; payload: SubAgentSession }
+  | { type: 'REMOVE_SUB_AGENT'; payload: string };
 
 function reducer(state: AICQState, action: Action): AICQState {
   switch (action.type) {
@@ -183,6 +203,43 @@ function reducer(state: AICQState, action: Action): AICQState {
       }
       return { ...state, groupUnreadCounts: newGroupCounts };
     }
+    case 'SET_FRIEND_REQUESTS':
+      return { ...state, friendRequests: [...action.payload.sent, ...action.payload.received].sort((a, b) => b.createdAt - a.createdAt) };
+    case 'ADD_FRIEND_REQUEST':
+      return { ...state, friendRequests: [action.payload, ...state.friendRequests] };
+    case 'UPDATE_FRIEND_REQUEST':
+      return {
+        ...state,
+        friendRequests: state.friendRequests.map(r =>
+          r.id === action.payload.id ? action.payload : r
+        ),
+      };
+    case 'SET_NOTIFICATIONS':
+      return { ...state, notifications: action.payload };
+    case 'ADD_NOTIFICATION':
+      return { ...state, notifications: [action.payload, ...state.notifications].slice(0, 50) };
+    case 'MARK_NOTIFICATION_READ':
+      return {
+        ...state,
+        notifications: state.notifications.map(n =>
+          n.id === action.payload ? { ...n, isRead: true } : n
+        ),
+      };
+    case 'CLEAR_NOTIFICATIONS':
+      return { ...state, notifications: state.notifications.map(n => ({ ...n, isRead: true })) };
+    case 'SET_SUB_AGENTS':
+      return { ...state, subAgents: action.payload };
+    case 'ADD_SUB_AGENT':
+      return { ...state, subAgents: [action.payload, ...state.subAgents] };
+    case 'UPDATE_SUB_AGENT':
+      return {
+        ...state,
+        subAgents: state.subAgents.map(s =>
+          s.id === action.payload.id ? action.payload : s
+        ),
+      };
+    case 'REMOVE_SUB_AGENT':
+      return { ...state, subAgents: state.subAgents.filter(s => s.id !== action.payload) };
     default:
       return state;
   }
@@ -224,6 +281,21 @@ interface AICQContextValue {
   updateGroup: (groupId: string, updates: { name?: string; description?: string }) => Promise<void>;
   sendGroupMessage: (groupId: string, text: string) => GroupMessage;
   getGroupMessages: (groupId: string) => GroupMessage[];
+  friendRequests: FriendRequest[];
+  getFriendRequests: () => Promise<void>;
+  sendFriendRequest: (userId: string, message?: string) => Promise<void>;
+  acceptFriendRequest: (requestId: string) => Promise<void>;
+  rejectFriendRequest: (requestId: string) => Promise<void>;
+  broadcastMessage: (recipientIds: string[], message: string) => Promise<{ sent: number; failed: number }>;
+  forwardMessage: (friendId: string, text: string) => ChatMessage;
+  notifications: PushNotification[];
+  addNotification: (notification: PushNotification) => void;
+  clearNotifications: () => void;
+  markNotificationRead: (notificationId: string) => void;
+  subAgents: SubAgentSession[];
+  startSubAgent: (parentMessageId: string, task: string, context?: string) => Promise<SubAgentSession>;
+  sendSubAgentInput: (subAgentId: string, input: string) => Promise<void>;
+  abortSubAgent: (subAgentId: string) => Promise<void>;
 }
 
 const AICQContext = createContext<AICQContextValue | null>(null);
@@ -388,6 +460,87 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'REMOVE_GROUP', payload: groupId });
       });
 
+      client.on('friend_request_accepted', () => {
+        const c = clientRef.current;
+        if (c) {
+          c.getFriendRequests().then(res => {
+            dispatch({ type: 'SET_FRIEND_REQUESTS', payload: res });
+          }).catch(() => {});
+          c.refreshFriends().then(friends => {
+            dispatch({ type: 'SET_FRIENDS', payload: friends });
+          }).catch(() => {});
+        }
+      });
+
+      client.on('friend_request_rejected', () => {
+        const c = clientRef.current;
+        if (c) {
+          c.getFriendRequests().then(res => {
+            dispatch({ type: 'SET_FRIEND_REQUESTS', payload: res });
+          }).catch(() => {});
+        }
+      });
+
+      client.on('push_notification', (data: any) => {
+        const notification: PushNotification = {
+          id: data.notificationId || String(Date.now()),
+          chatId: data.chatId || '',
+          senderName: data.senderName || 'Unknown',
+          messagePreview: data.messagePreview || '',
+          timestamp: data.timestamp || Date.now(),
+          isGroup: data.isGroup || false,
+          isRead: false,
+        };
+        dispatch({ type: 'ADD_NOTIFICATION', payload: notification });
+
+        // Browser notification
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification(`${notification.senderName}${notification.isGroup ? ' (群组)' : ''}`, {
+            body: notification.messagePreview,
+            icon: '/favicon.ico',
+          });
+        }
+      });
+
+      client.on('subagent_chunk', (msg: any) => {
+        const session = msg.data || msg;
+        dispatch({ type: 'UPDATE_SUB_AGENT', payload: {
+          id: session.id,
+          parentMessageId: session.parentMessageId || '',
+          task: session.task || '',
+          status: session.status || 'running',
+          output: (state.subAgents.find(s => s.id === session.id)?.output || '') + (session.chunk || ''),
+          createdAt: session.createdAt || Date.now(),
+          updatedAt: Date.now(),
+        }});
+      });
+
+      client.on('subagent_complete', (msg: any) => {
+        const session = msg.data || msg;
+        dispatch({ type: 'UPDATE_SUB_AGENT', payload: {
+          id: session.id,
+          parentMessageId: session.parentMessageId || '',
+          task: session.task || '',
+          status: 'completed',
+          output: session.output || '',
+          createdAt: session.createdAt || Date.now(),
+          updatedAt: Date.now(),
+        }});
+      });
+
+      client.on('subagent_waiting', (msg: any) => {
+        const session = msg.data || msg;
+        dispatch({ type: 'UPDATE_SUB_AGENT', payload: {
+          id: session.id,
+          parentMessageId: session.parentMessageId || '',
+          task: session.task || '',
+          status: 'waiting_human',
+          output: session.output || '',
+          createdAt: session.createdAt || Date.now(),
+          updatedAt: Date.now(),
+        }});
+      });
+
       const result = await client.initialize();
 
       dispatch({
@@ -418,6 +571,16 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'SET_GROUPS', payload: groups });
       } catch (err) {
         console.warn('[AICQ] Failed to load groups:', err);
+      }
+
+      // Load friend requests
+      try {
+        const reqRes = await client.getFriendRequests();
+        const sent = (reqRes.sent || []).sort((a, b) => b.createdAt - a.createdAt);
+        const received = (reqRes.received || []).sort((a, b) => b.createdAt - a.createdAt);
+        dispatch({ type: 'SET_FRIEND_REQUESTS', payload: { sent, received } });
+      } catch (err) {
+        console.warn('[AICQ] Failed to load friend requests:', err);
       }
 
       const transfers = client.getFileTransfers();
@@ -647,6 +810,85 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     return client.getGroupMessages(groupId);
   }, []);
 
+  const getFriendRequests = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    try {
+      const res = await client.getFriendRequests();
+      dispatch({ type: 'SET_FRIEND_REQUESTS', payload: res });
+    } catch (err) {
+      console.warn('[AICQ] Failed to fetch friend requests:', err);
+    }
+  }, []);
+
+  const sendFriendRequestFn = useCallback(async (userId: string, message?: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    const request = await client.sendFriendRequest(userId, message);
+    dispatch({ type: 'ADD_FRIEND_REQUEST', payload: request });
+  }, []);
+
+  const acceptFriendRequestFn = useCallback(async (requestId: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.acceptFriendRequest(requestId);
+  }, []);
+
+  const rejectFriendRequestFn = useCallback(async (requestId: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.rejectFriendRequest(requestId);
+  }, []);
+
+  const broadcastMessageFn = useCallback(async (recipientIds: string[], message: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    return client.broadcastMessage(recipientIds, message);
+  }, []);
+
+  const forwardMessage = useCallback((friendId: string, text: string): ChatMessage => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    const msg = client.sendMessage(friendId, `[转发] ${text}`);
+    const msgs = messagesRef.current.get(friendId) || [];
+    msgs.push(msg);
+    messagesRef.current.set(friendId, msgs);
+    return msg;
+  }, []);
+
+  const addNotification = useCallback((notification: PushNotification) => {
+    dispatch({ type: 'ADD_NOTIFICATION', payload: notification });
+  }, []);
+
+  const clearNotifications = useCallback(() => {
+    dispatch({ type: 'CLEAR_NOTIFICATIONS' });
+  }, []);
+
+  const markNotificationRead = useCallback((notificationId: string) => {
+    dispatch({ type: 'MARK_NOTIFICATION_READ', payload: notificationId });
+  }, []);
+
+  const startSubAgentFn = useCallback(async (parentMessageId: string, task: string, context?: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    const session = await client.startSubAgent(parentMessageId, task, context);
+    dispatch({ type: 'ADD_SUB_AGENT', payload: session });
+    return session;
+  }, []);
+
+  const sendSubAgentInputFn = useCallback(async (subAgentId: string, input: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.sendSubAgentInput(subAgentId, input);
+  }, []);
+
+  const abortSubAgentFn = useCallback(async (subAgentId: string) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Client not initialized');
+    await client.abortSubAgent(subAgentId);
+    dispatch({ type: 'REMOVE_SUB_AGENT', payload: subAgentId });
+  }, []);
+
   useEffect(() => {
     return () => {
       clientRef.current?.destroy();
@@ -687,6 +929,21 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     updateGroup: updateGroupFn,
     sendGroupMessage,
     getGroupMessages,
+    friendRequests: state.friendRequests,
+    getFriendRequests,
+    sendFriendRequest: sendFriendRequestFn,
+    acceptFriendRequest: acceptFriendRequestFn,
+    rejectFriendRequest: rejectFriendRequestFn,
+    broadcastMessage: broadcastMessageFn,
+    forwardMessage,
+    notifications: state.notifications,
+    addNotification,
+    clearNotifications,
+    markNotificationRead,
+    subAgents: state.subAgents,
+    startSubAgent: startSubAgentFn,
+    sendSubAgentInput: sendSubAgentInputFn,
+    abortSubAgent: abortSubAgentFn,
   };
 
   return <AICQContext.Provider value={value}>{children}</AICQContext.Provider>;

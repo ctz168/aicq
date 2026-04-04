@@ -24,6 +24,8 @@ import type {
   GroupInfo,
   GroupMessage,
   GroupMemberInfo,
+  FriendRequest,
+  SubAgentSession,
 } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -477,6 +479,66 @@ class BrowserAPIClient {
     if (!this.nodeId) throw new Error('Node ID not set');
     await this.request('POST', `/group/${encodeURIComponent(groupId)}/mute`, { accountId: this.nodeId, targetId, muted });
   }
+
+  /* ─── Friend Requests API ────────────────────────────── */
+
+  async getFriendRequests(): Promise<{ sent: FriendRequest[]; received: FriendRequest[] }> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    const res = await this.request<{ sent: FriendRequest[]; received: FriendRequest[] }>('GET', `/friends/requests?accountId=${encodeURIComponent(this.nodeId)}`);
+    return { sent: res.sent || [], received: res.received || [] };
+  }
+
+  async sendFriendRequest(userId: string, message?: string): Promise<FriendRequest> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request('POST', `/friends/requests/${encodeURIComponent(userId)}`, { accountId: this.nodeId, message });
+  }
+
+  async acceptFriendRequest(requestId: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('POST', `/friends/requests/${encodeURIComponent(requestId)}/accept`, { accountId: this.nodeId });
+  }
+
+  async rejectFriendRequest(requestId: string): Promise<void> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    await this.request('POST', `/friends/requests/${encodeURIComponent(requestId)}/reject`, { accountId: this.nodeId });
+  }
+
+  /* ─── Broadcast API ──────────────────────────────────── */
+
+  async broadcastMessage(recipientIds: string[], message: string, encryptedContent?: string): Promise<{ sent: number; failed: number }> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request('POST', '/broadcast', { senderId: this.nodeId, recipientIds, message, encryptedContent });
+  }
+
+  /* ─── SubAgent API ──────────────────────────────────── */
+
+  async startSubAgent(parentMessageId: string, task: string, context?: string): Promise<SubAgentSession> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request('POST', '/subagent/start', { accountId: this.nodeId, parentMessageId, task, context });
+  }
+
+  async sendSubAgentInput(subAgentId: string, input: string): Promise<void> {
+    await this.request('POST', `/subagent/${encodeURIComponent(subAgentId)}/input`, { input });
+  }
+
+  async abortSubAgent(subAgentId: string): Promise<void> {
+    await this.request('POST', `/subagent/${encodeURIComponent(subAgentId)}/abort`);
+  }
+
+  async getSubAgentStatus(subAgentId: string): Promise<SubAgentSession> {
+    return this.request('GET', `/subagent/${encodeURIComponent(subAgentId)}/status`);
+  }
+
+  /* ─── Group Message History API ─────────────────────── */
+
+  async getGroupMessageHistory(groupId: string, limit?: number, before?: number): Promise<GroupMessage[]> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    const params = new URLSearchParams({ accountId: this.nodeId });
+    if (limit) params.set('limit', String(limit));
+    if (before) params.set('before', String(before));
+    const res = await this.request<{ messages: GroupMessage[] }>('GET', `/group/${encodeURIComponent(groupId)}/messages?${params}`);
+    return res.messages;
+  }
 }
 
 // ─── WebSocket Client (browser native) ───────────────────────
@@ -580,6 +642,18 @@ class BrowserWSClient extends SimpleEventEmitter {
         break;
       case 'group_message': this.emit('group_message', msg); break;
       case 'group_typing': this.emit('group_typing', msg); break;
+      case 'push_message':
+        this.emit('push_notification', msg.data);
+        break;
+      case 'subagent_chunk':
+        this.emit('subagent_chunk', msg);
+        break;
+      case 'subagent_complete':
+        this.emit('subagent_complete', msg);
+        break;
+      case 'subagent_waiting':
+        this.emit('subagent_waiting', msg);
+        break;
       case 'error':
         this.emit('error', new Error(msg.error ?? 'Server error'));
         break;
@@ -1457,6 +1531,54 @@ export class WebClient extends SimpleEventEmitter {
 
   getGroupMessages(groupId: string): GroupMessage[] {
     return this.store.getGroupMessages(groupId);
+  }
+
+  /* ─── Friend Requests ────────────────────────────────────── */
+
+  async getFriendRequests(): Promise<{ sent: FriendRequest[]; received: FriendRequest[] }> {
+    return this.api.getFriendRequests();
+  }
+
+  async sendFriendRequest(userId: string, message?: string): Promise<FriendRequest> {
+    return this.api.sendFriendRequest(userId, message);
+  }
+
+  async acceptFriendRequest(requestId: string): Promise<void> {
+    await this.api.acceptFriendRequest(requestId);
+    this.emit('friend_request_accepted', requestId);
+  }
+
+  async rejectFriendRequest(requestId: string): Promise<void> {
+    await this.api.rejectFriendRequest(requestId);
+    this.emit('friend_request_rejected', requestId);
+  }
+
+  /* ─── Broadcast ──────────────────────────────────────────── */
+
+  async broadcastMessage(recipientIds: string[], message: string, encryptedContent?: string): Promise<{ sent: number; failed: number }> {
+    return this.api.broadcastMessage(recipientIds, message, encryptedContent);
+  }
+
+  /* ─── SubAgent ──────────────────────────────────────────── */
+
+  async startSubAgent(parentMessageId: string, task: string, context?: string): Promise<SubAgentSession> {
+    return this.api.startSubAgent(parentMessageId, task, context);
+  }
+
+  async sendSubAgentInput(subAgentId: string, input: string): Promise<void> {
+    await this.api.sendSubAgentInput(subAgentId, input);
+  }
+
+  async abortSubAgent(subAgentId: string): Promise<void> {
+    await this.api.abortSubAgent(subAgentId);
+  }
+
+  async getSubAgentStatus(subAgentId: string): Promise<SubAgentSession> {
+    return this.api.getSubAgentStatus(subAgentId);
+  }
+
+  async getGroupMessageHistory(groupId: string, limit?: number, before?: number): Promise<GroupMessage[]> {
+    return this.api.getGroupMessageHistory(groupId, limit, before);
   }
 
   /* ─── Media Helpers ──────────────────────────────────────── */

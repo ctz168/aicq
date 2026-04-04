@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { generalLimiter } from '../middleware/rateLimit';
 import * as groupService from '../services/groupService';
+import { store } from '../db/memoryStore';
 
 const router = Router();
 
@@ -270,6 +271,54 @@ router.post('/group/:groupId/mute', generalLimiter, (req: Request, res: Response
     res.json({ success: true, member });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ─── 群消息历史 ──────────────────────────────────────────────
+
+/**
+ * GET /api/v1/group/:groupId/messages
+ * 获取群组消息历史（支持分页）
+ */
+router.get('/group/:groupId/messages', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const { groupId } = req.params;
+    const accountId = req.query.accountId as string;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const before = parseInt(req.query.before as string) || Date.now();
+
+    if (!accountId) {
+      res.status(400).json({ error: '缺少查询参数: accountId' });
+      return;
+    }
+
+    const group = groupService.getGroup(groupId);
+    if (!group) {
+      res.status(404).json({ error: '群组不存在' });
+      return;
+    }
+
+    // 检查是否是成员
+    if (!groupService.isMember(groupId, accountId)) {
+      res.status(403).json({ error: '你不是该群成员' });
+      return;
+    }
+
+    const messages = store.groupMessages.get(groupId) || [];
+
+    // 过滤：获取 before 之前的消息，倒序排列
+    const filtered = messages
+      .filter((m) => m.timestamp < before)
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
+
+    res.json({
+      messages: filtered,
+      count: filtered.length,
+      hasMore: messages.filter((m) => m.timestamp < filtered[filtered.length - 1]?.timestamp).length > 0,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { getOrCreateNode } from '../db/memoryStore';
+import { getOrCreateNode, store } from '../db/memoryStore';
 import * as tempNumberService from '../services/tempNumberService';
 import * as handshakeService from '../services/handshakeService';
-import * as friendshipService from '../services/friendshipService';
 import * as fileTransferService from '../services/fileTransferService';
+import { relaySignal } from '../services/p2pDiscoveryService';
 import {
   generalLimiter,
   tempNumberLimiter,
@@ -183,46 +183,70 @@ router.post('/handshake/confirm', handshakeLimiter, (req: Request, res: Response
   }
 });
 
-// ─── Friends ───────────────────────────────────────────────────────
+// ─── Broadcast / Forward Message ─────────────────────────────────
 
 /**
- * GET /api/v1/friends
- * List friends for a node.
+ * POST /api/v1/broadcast
+ * 批量转发消息给多个接收者
  */
-router.get('/friends', generalLimiter, (req: Request, res: Response) => {
+router.post('/broadcast', generalLimiter, (req: Request, res: Response) => {
   try {
-    const nodeId = req.query.nodeId as string;
-    if (!nodeId) {
-      res.status(400).json({ error: 'Missing query parameter: nodeId' });
+    const { senderId, recipientIds, message, encryptedContent } = req.body;
+
+    if (!senderId || !recipientIds || !message) {
+      res.status(400).json({ error: '缺少必填字段: senderId, recipientIds, message' });
       return;
     }
 
-    const friends = friendshipService.getFriends(nodeId);
-    const count = friendshipService.getFriendCount(nodeId);
-    res.json({ friends, count });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * DELETE /api/v1/friends/:friendId
- * Remove a friend.
- */
-router.delete('/friends/:friendId', generalLimiter, (req: Request, res: Response) => {
-  try {
-    const nodeId = req.body.nodeId;
-    if (!nodeId) {
-      res.status(400).json({ error: 'Missing required field: nodeId' });
+    if (!Array.isArray(recipientIds)) {
+      res.status(400).json({ error: 'recipientIds 必须是数组' });
       return;
     }
 
-    const removed = friendshipService.removeFriend(nodeId, req.params.friendId);
-    if (!removed) {
-      res.status(404).json({ error: 'Friendship not found' });
+    if (recipientIds.length > 50) {
+      res.status(400).json({ error: '接收者数量不能超过50个' });
       return;
     }
-    res.json({ removed: true });
+
+    if (recipientIds.length === 0) {
+      res.status(400).json({ error: '接收者列表不能为空' });
+      return;
+    }
+
+    // 验证发送者存在
+    const senderNode = store.nodes.get(senderId);
+    if (!senderNode) {
+      res.status(404).json({ error: '发送者不存在' });
+      return;
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const recipientId of recipientIds) {
+      // 验证发送者和接收者是好友
+      if (!senderNode.friends.has(recipientId)) {
+        failed++;
+        continue;
+      }
+
+      const relayed = relaySignal(senderId, recipientId, {
+        type: 'broadcast_message',
+        data: {
+          message,
+          encryptedContent,
+          timestamp: Date.now(),
+        },
+      });
+
+      if (relayed) {
+        sent++;
+      } else {
+        failed++;
+      }
+    }
+
+    res.json({ sent, failed });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
