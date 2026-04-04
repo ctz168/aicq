@@ -194,6 +194,26 @@ export interface SubAgentSession {
   updatedAt: number;
 }
 
+/** Task item for task planning progress tracking. */
+export interface TaskItem {
+  id: string;
+  title: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Task plan with a list of task items, associated with a chat session. */
+export interface TaskPlan {
+  id: string;
+  friendId: string;
+  title: string;
+  tasks: TaskItem[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** Unread counts per friend / group. */
 export type UnreadCounts = Record<string, number>;
 

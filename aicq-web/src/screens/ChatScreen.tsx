@@ -6,6 +6,7 @@ import StatusBadge from '../components/StatusBadge';
 import FileTransferProgress from '../components/FileTransferProgress';
 import ForwardMessageModal from '../components/ForwardMessageModal';
 import SubAgentPanel from '../components/SubAgentPanel';
+import TaskProgressPanel from '../components/TaskProgressPanel';
 import type { ChatMessage, StreamingState } from '../types';
 
 const ChatScreen: React.FC = () => {
@@ -387,6 +388,9 @@ const ChatScreen: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Task progress panel - above input area */}
+      <TaskProgressPanel friendId={friendId || ''} />
 
       {/* Input area */}
       <div className="chat-input-area">

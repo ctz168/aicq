@@ -15,6 +15,8 @@ import type {
   FriendRequest,
   PushNotification,
   SubAgentSession,
+  TaskPlan,
+  TaskItem,
 } from '../types';
 
 // ─── State ───────────────────────────────────────────────────
@@ -41,6 +43,7 @@ interface AICQState {
   friendRequests: FriendRequest[];
   notifications: PushNotification[];
   subAgents: SubAgentSession[];
+  taskPlans: TaskPlan[];
 }
 
 const initialState: AICQState = {
@@ -64,6 +67,7 @@ const initialState: AICQState = {
   friendRequests: [],
   notifications: [],
   subAgents: [],
+  taskPlans: [],
 };
 
 type Action =
@@ -106,7 +110,12 @@ type Action =
   | { type: 'SET_SUB_AGENTS'; payload: SubAgentSession[] }
   | { type: 'ADD_SUB_AGENT'; payload: SubAgentSession }
   | { type: 'UPDATE_SUB_AGENT'; payload: SubAgentSession }
-  | { type: 'REMOVE_SUB_AGENT'; payload: string };
+  | { type: 'REMOVE_SUB_AGENT'; payload: string }
+  | { type: 'SET_TASK_PLANS'; payload: TaskPlan[] }
+  | { type: 'ADD_TASK_PLAN'; payload: TaskPlan }
+  | { type: 'UPDATE_TASK_PLAN'; payload: TaskPlan }
+  | { type: 'REMOVE_TASK_PLAN'; payload: string }
+  | { type: 'UPDATE_TASK_ITEM'; payload: { planId: string; taskId: string; updates: Partial<TaskItem> } };
 
 function reducer(state: AICQState, action: Action): AICQState {
   switch (action.type) {
@@ -240,6 +249,33 @@ function reducer(state: AICQState, action: Action): AICQState {
       };
     case 'REMOVE_SUB_AGENT':
       return { ...state, subAgents: state.subAgents.filter(s => s.id !== action.payload) };
+    case 'SET_TASK_PLANS':
+      return { ...state, taskPlans: action.payload };
+    case 'ADD_TASK_PLAN':
+      return { ...state, taskPlans: [action.payload, ...state.taskPlans] };
+    case 'UPDATE_TASK_PLAN':
+      return {
+        ...state,
+        taskPlans: state.taskPlans.map(p => p.id === action.payload.id ? action.payload : p),
+      };
+    case 'REMOVE_TASK_PLAN':
+      return { ...state, taskPlans: state.taskPlans.filter(p => p.id !== action.payload) };
+    case 'UPDATE_TASK_ITEM': {
+      const { planId, taskId, updates } = action.payload;
+      return {
+        ...state,
+        taskPlans: state.taskPlans.map(plan => {
+          if (plan.id !== planId) return plan;
+          return {
+            ...plan,
+            tasks: plan.tasks.map(task =>
+              task.id === taskId ? { ...task, ...updates, updatedAt: Date.now() } : task
+            ),
+            updatedAt: Date.now(),
+          };
+        }),
+      };
+    }
     default:
       return state;
   }
@@ -296,6 +332,11 @@ interface AICQContextValue {
   startSubAgent: (parentMessageId: string, task: string, context?: string) => Promise<SubAgentSession>;
   sendSubAgentInput: (subAgentId: string, input: string) => Promise<void>;
   abortSubAgent: (subAgentId: string) => Promise<void>;
+  taskPlans: TaskPlan[];
+  getTaskPlans: (friendId: string) => TaskPlan[];
+  createTaskPlan: (friendId: string, title: string, tasks: Omit<TaskItem, 'id' | 'createdAt' | 'updatedAt'>[]) => TaskPlan;
+  updateTaskItem: (planId: string, taskId: string, updates: Partial<TaskItem>) => void;
+  clearTaskPlan: (planId: string) => void;
 }
 
 const AICQContext = createContext<AICQContextValue | null>(null);
@@ -889,6 +930,37 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'REMOVE_SUB_AGENT', payload: subAgentId });
   }, []);
 
+  const getTaskPlans = useCallback((friendId: string): TaskPlan[] => {
+    return state.taskPlans.filter(p => p.friendId === friendId);
+  }, [state.taskPlans]);
+
+  const createTaskPlan = useCallback((friendId: string, title: string, tasks: Omit<TaskItem, 'id' | 'createdAt' | 'updatedAt'>[]): TaskPlan => {
+    const now = Date.now();
+    const plan: TaskPlan = {
+      id: `plan-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      friendId,
+      title,
+      tasks: tasks.map((t, i) => ({
+        ...t,
+        id: `task-${now}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      createdAt: now,
+      updatedAt: now,
+    };
+    dispatch({ type: 'ADD_TASK_PLAN', payload: plan });
+    return plan;
+  }, []);
+
+  const updateTaskItemFn = useCallback((planId: string, taskId: string, updates: Partial<TaskItem>) => {
+    dispatch({ type: 'UPDATE_TASK_ITEM', payload: { planId, taskId, updates } });
+  }, []);
+
+  const clearTaskPlanFn = useCallback((planId: string) => {
+    dispatch({ type: 'REMOVE_TASK_PLAN', payload: planId });
+  }, []);
+
   useEffect(() => {
     return () => {
       clientRef.current?.destroy();
@@ -944,6 +1016,11 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     startSubAgent: startSubAgentFn,
     sendSubAgentInput: sendSubAgentInputFn,
     abortSubAgent: abortSubAgentFn,
+    taskPlans: state.taskPlans,
+    getTaskPlans,
+    createTaskPlan,
+    updateTaskItem: updateTaskItemFn,
+    clearTaskPlan: clearTaskPlanFn,
   };
 
   return <AICQContext.Provider value={value}>{children}</AICQContext.Provider>;
