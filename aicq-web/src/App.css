@@ -2136,6 +2136,7 @@ html, body, #root {
   .temp-number-display .number { font-size: 36px; }
   .chat-messages { padding: 8px; }
   .attachment-menu { left: -8px; min-width: 180px; }
+  .bot-menu-panel { width: calc(100vw - 32px); left: -12px; max-height: 50vh; }
 }
 
 /* ─── Group Chat Styles ───────────────────────────────────── */

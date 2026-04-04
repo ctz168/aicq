@@ -546,7 +546,18 @@ const ChatScreen: React.FC = () => {
       )}
 
       {/* Input area */}
-      <div className="chat-input-area">
+      <div className="chat-input-area" style={{ position: 'relative' }}>
+        {/* Bot menu panel - at input-area level for proper positioning */}
+        {isAiFriend && showBotMenu && (
+          <BotMenuPanel
+            isOpen={showBotMenu}
+            onClose={() => { setShowBotMenu(false); setBotMenuFilter(''); }}
+            onSelect={handleBotCommandSelect}
+            filterText={botMenuFilter}
+            position="top"
+          />
+        )}
+
         <div className="chat-input-row">
           {/* Bot menu button ("/" trigger) */}
           <div className="chat-input-actions">
@@ -581,17 +592,6 @@ const ChatScreen: React.FC = () => {
                 <line x1="8" y1="12" x2="16" y2="12" />
               </svg>
             </button>
-
-          {/* Bot menu panel */}
-          {isAiFriend && showBotMenu && (
-            <BotMenuPanel
-              isOpen={showBotMenu}
-              onClose={() => { setShowBotMenu(false); setBotMenuFilter(''); }}
-              onSelect={handleBotCommandSelect}
-              filterText={botMenuFilter}
-              position="top"
-            />
-          )}
 
             {/* Attachment dropdown menu */}
             {showAttachmentMenu && (
