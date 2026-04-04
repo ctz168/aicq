@@ -1,197 +1,263 @@
-# AICQ 部署指南 (总览)
+# AICQ 部署指南（总览）
 
-> **AICQ** — 端到端加密聊天工具，支持 AI↔AI、人↔人、人↔AI 通信。
+> **AICQ** — 端到端加密聊天系统，支持 AI↔AI、人↔人、人↔AI 通信。
 >
-> 三个独立模块各有专属部署文档和一键脚本，可分别部署到不同环境。
+> 各模块可独立部署，也可一键全栈部署。本文档为顶层部署总览，各模块详见子文档。
 
 ---
 
-## 项目结构
+## 一、项目结构
 
 ```
 aicq/
-├── server/             # 🔵 服务端 (Express + WebSocket)
-│   └── admin/          #    管理后台 (Next.js)
+├── server/             # 🔵 服务端 (端口 61018)
+│   ├── admin/          #    管理后台 (Next.js, 端口 80)
+│   ├── docker/         #    Docker + Nginx 配置
+│   ├── Dockerfile      #    Docker 构建
+│   └── deploy.sh
 ├── plugin/             # 🟢 OpenClaw AI 插件
-├── client/             # 🟠 客户端
-│   ├── web/            #   Web 客户端 (React + Vite)
-│   ├── cli/            #   CLI 客户端 (Node.js SDK)
-│   ├── desktop/        #   桌面端 (Electron)
-│   └── mobile/         #   移动端 (Capacitor)
+│   └── deploy.sh
+├── client/
+│   ├── web/            # 🟠 Web 客户端 (React + Vite)
+│   │   └── deploy.sh
+│   ├── cli/            #    CLI 客户端 (Node.js SDK)
+│   ├── desktop/        #    桌面端 (Electron)
+│   └── mobile/         #    移动端 (Capacitor)
 ├── shared/crypto/      # ⚙️ 共享加密库 (Ed25519/X25519/AES-256-GCM)
-├── deploy-all.sh       # 全栈一键部署
 ├── scripts/            # 构建和发布脚本
+├── deploy-all.sh       # 全栈一键部署
 └── DEPLOY.md           # 本文件 (总览)
 ```
 
 ---
 
-## 三大模块独立部署文档
+## 二、模块总览
 
-| 模块 | 详细文档 | 一键脚本 | 用途 | 部署难度 |
-|------|---------|---------|------|---------|
-| **Server** | [`server/DEPLOY.md`](server/DEPLOY.md) | [`server/deploy.sh`](server/deploy.sh) | 中继服务器：认证、握手、P2P 信令、文件中继 | ⭐⭐ |
-| **Plugin** | [`plugin/DEPLOY.md`](plugin/DEPLOY.md) | [`plugin/deploy.sh`](plugin/deploy.sh) | OpenClaw 插件：让 AI Agent 参与加密聊天 | ⭐ |
-| **Web Client** | [`client/web/DEPLOY.md`](client/web/DEPLOY.md) | [`client/web/deploy.sh`](client/web/deploy.sh) | 人类聊天 UI：Web/Android/iOS/WebView | ⭐⭐ |
+| 模块 | 说明 | 详细文档 | 一键脚本 | 部署难度 |
+|------|------|---------|---------|---------|
+| **Server** | 中继服务器：认证、握手、P2P 信令、文件中转、管理后台 | [`server/DEPLOY.md`](server/DEPLOY.md) | [`server/deploy.sh`](server/deploy.sh) | ⭐⭐ |
+| **Admin** | 管理后台（Next.js），与服务端一同部署，无需单独部署 | 内置于 Server | — | ⭐ |
+| **Plugin** | OpenClaw 插件：让 AI Agent 参与加密聊天 | [`plugin/DEPLOY.md`](plugin/DEPLOY.md) | [`plugin/deploy.sh`](plugin/deploy.sh) | ⭐ |
+| **Web Client** | 人类聊天 UI，支持 Web/Android/iOS/WebView | [`client/web/DEPLOY.md`](client/web/DEPLOY.md) | [`client/web/deploy.sh`](client/web/deploy.sh) | ⭐⭐ |
 
-> **推荐阅读顺序**: Server → Plugin → Web Client (Server 是基础依赖)
+> **推荐阅读顺序**：Server → Plugin → Web Client（Server 是基础依赖）
 
 ---
 
-## 快速开始
+## 三、快速开始
 
-### 一行命令部署 Server
+### 服务端部署（含 Admin 管理后台）
 
 ```bash
-# 在全新 Ubuntu 服务器上 (需要 root)
 git clone https://github.com/ctz168/aicq.git && cd aicq
 sudo ./server/deploy.sh --domain=aicq.online --ssl-email=your@email.com
 ```
 
-### 一行命令部署 Web Client
+### Web 客户端部署
 
 ```bash
 sudo ./client/web/deploy.sh --domain=aicq.online --deploy-dir=/var/www/aicq
 ```
 
-### 一行命令安装 Plugin
+### Plugin 安装
 
 ```bash
 ./plugin/deploy.sh --install-dir=/opt/openclaw/plugins/aicq-chat --server-url=https://aicq.online
 ```
 
-### 全栈一键部署
+---
+
+## 四、全栈一键部署
+
+`deploy-all.sh` 按顺序执行 Server + Admin + Web Client + Plugin 的完整部署：
 
 ```bash
 sudo ./deploy-all.sh aicq.online
 ```
 
-### Docker 全栈部署
+部署完成后：
+- 管理后台：`https://aicq.online/`
+- API 接口：`https://aicq.online/api/v1/`
+- WebSocket：`wss://aicq.online/ws`
+
+---
+
+## 五、Docker 部署
+
+适用于快速搭建完整环境，一个容器内包含 Server + Admin + Nginx。
 
 ```bash
 git clone https://github.com/ctz168/aicq.git && cd aicq
 docker compose -f server/docker/docker-compose.yml up -d --build
 ```
 
----
+### Docker 内部架构
 
-## 模块一：AICQ Server
+容器启动后，`entrypoint.sh` 按序拉起三个进程：
 
-> 📖 完整文档: [`server/DEPLOY.md`](server/DEPLOY.md)
+1. **Node.js Server** — 监听 `0.0.0.0:61018`（HTTP + WebSocket）
+2. **Next.js Admin** — 监听 `0.0.0.0:80`（独立进程，通过 `AICQ_SERVER_URL` 访问 Server）
+3. **Nginx** — 监听 `0.0.0.0:80/443`，反向代理到上方两个服务
 
-Node.js/Express + WebSocket 中继服务器，负责认证、握手协调、P2P 信令、文件中继。
+### Docker 暴露端口
 
-**技术栈**: TypeScript, Express 4.18, ws 8.16, PM2, Nginx
+| 端口 | 用途 |
+|------|------|
+| `80` | HTTP（自动 301 跳转 HTTPS） |
+| `443` | HTTPS 主入口（Nginx） |
+| `61018` | Server 直连（可选，用于调试） |
 
-**一键部署**:
+### Docker 环境变量
 
-```bash
-sudo ./server/deploy.sh [选项]
-# --domain=DOMAIN          域名 (默认: aicq.online)
-# --port=PORT              端口 (默认: 3000)
-# --max-friends=N          最大好友数 (默认: 200)
-# --ssl-email=EMAIL        Let's Encrypt 邮箱
-# --skip-nginx             跳过 Nginx
-# --source-dir=DIR         使用本地源码
-```
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `NODE_ENV` | `production` | 运行环境 |
+| `PORT` | `61018` | Server 监听端口 |
+| `DOMAIN` | `aicq.online` | 域名 |
+| `AICQ_SERVER_URL` | `http://localhost:61018` | Admin 访问 Server 的内部地址 |
+| `MAX_FRIENDS` | `200` | 每个节点最大好友数 |
+| `TEMP_NUMBER_TTL_HOURS` | `24` | 临时号码有效期（小时） |
+| `JWT_SECRET` | （必须设置） | 生产环境必须显式配置 |
 
----
+### Docker 数据卷
 
-## 模块二：AICQ Plugin
+| 卷名 | 挂载路径 | 说明 |
+|------|---------|------|
+| `aicq-data` | `/app/data` | 持久化数据 |
+| `aicq-ssl` | `/etc/nginx/ssl` | SSL 证书（可替换为 Let's Encrypt） |
 
-> 📖 完整文档: [`plugin/DEPLOY.md`](plugin/DEPLOY.md)
-
-OpenClaw AI Agent 插件，使 AI 能力参与端到端加密聊天。
-
-**技术栈**: TypeScript, OpenClaw Plugin API, @aicq/crypto
-
-**一键安装**:
-
-```bash
-./plugin/deploy.sh [选项]
-# --install-dir=DIR        安装目录 (默认: ./aicq-plugin-dist)
-# --server-url=URL         服务器地址 (默认: https://aicq.online)
-# --agent-id=ID            Agent 标识 (默认: 自动生成)
-# --auto-accept            自动接受好友
-# --source-dir=DIR         使用本地源码
-```
-
-**注册能力**:
-
-| 类型 | 名称 | 说明 |
-|------|------|------|
-| Channel | `encrypted-chat` | 加密 P2P 聊天频道 |
-| Tool | `chat-friend` | 好友管理 |
-| Tool | `chat-send` | 发送加密消息 |
-| Tool | `chat-export-key` | 导出私钥 QR 码 |
-| Hook | `message_sending` | 消息加密拦截 |
-| Hook | `before_tool_call` | 工具权限检查 |
-| Service | `identity-service` | 身份密钥管理 |
+> ⚠️ 默认使用自签名证书。生产环境请将 Let's Encrypt 证书挂载到 `/etc/nginx/ssl/aicq.online.crt` 和 `.key`。
 
 ---
 
-## 模块三：AICQ Web Client
+## 六、部署架构图
 
-> 📖 完整文档: [`client/web/DEPLOY.md`](client/web/DEPLOY.md)
-
-人类用户聊天界面，支持 Web/Android APK/iOS App/WebView 多平台。
-
-**技术栈**: React 18, TypeScript, Vite 5, Capacitor
-
-**一键部署**:
-
-```bash
-sudo ./client/web/deploy.sh [选项]
-# --domain=DOMAIN          域名 (默认: aicq.online)
-# --deploy-dir=DIR         部署目录 (默认: /var/www/aicq)
-# --api-url=URL            后端 API 地址
-# --skip-nginx             跳过 Nginx
 ```
+                    Internet
+                       │
+              ┌────────▼────────┐
+              │   DNS 域名解析    │
+              │  (aicq.online)  │
+              └────────┬────────┘
+                       │
+         ┌─────────────┼─────────────┐
+         │             │             │
+   ┌─────▼─────┐ ┌────▼────┐ ┌─────▼──────┐
+   │  Nginx     │ │ CDN/OSS │ │  Nginx     │
+   │  :443      │ │ (可选)  │ │  :80       │
+   │  反向代理   │ └────┬────┘ │  静态文件  │
+   └──┬──┬──┬──┘      │      └─────┬──────┘
+      │  │  │          │            │
+      │  │  │    ┌─────▼─────┐ ┌────▼──────┐
+      │  │  │    │Web Client │ │Web Client │
+      │  │  │    │(React SPA)│ │(React SPA)│
+      │  │  │    └───────────┘ └───────────┘
+      │  │  │
+      │  │  │    ┌─────────────────────────────────────┐
+      │  │  │    │         Docker 容器内部               │
+      │  │  │    │                                     │
+      │  │  └───►│  Nginx (443/80)                     │
+      │  │       │    ├── /          ──► Admin (:80)   │
+      │  │       │    ├── /api/*     ──► Server (:61018)│
+      │  │       │    ├── /ws        ──► Server (:61018)│
+      │  │       │    └── /health    ──► Server (:61018)│
+      │  │       │                                     │
+      │  │       │  ┌──────────┐    ┌──────────────┐  │
+      │  └───────┼──│ Server   │◄───│ Admin (Next) │  │
+      │          │  │ :61018   │    │ :80          │  │
+      │          │  │ Express  │    │ Standalone   │  │
+      │          │  │ + WebSocket│   └──────────────┘  │
+      │          │  └────┬─────┘                      │
+      │          │       │                            │
+      │          └───────┼────────────────────────────┘
+      │                  │
+┌─────▼──────┐   ┌──────▼───────┐
+│  Plugin     │   │  Client SDK   │
+│ (OpenClaw)  │   │ (TS SDK)      │
+│ AI Agent    │   │ P2P/WebRTC    │
+└─────┬──────┘   └──────┬───────┘
+      │                 │
+      └──── WebSocket ──┘
+```
+
+### Nginx 路由规则
+
+| 路径 | 代理目标 | 说明 |
+|------|---------|------|
+| `/` | `127.0.0.1:80` | Admin 管理后台（Next.js） |
+| `/api/*` | `127.0.0.1:61018` | Server REST API |
+| `/ws` | `127.0.0.1:61018` | Server WebSocket |
+| `/health` | `127.0.0.1:61018` | 健康检查 |
 
 ---
 
-## 部署架构总览
+## 七、依赖关系图
 
 ```
-                          ┌──────────────────────┐
-                          │    aicq.online DNS   │
-                          └──────────┬───────────┘
-                                     │
-                    ┌────────────────┼────────────────┐
-                    │                │                │
-              ┌─────▼─────┐  ┌──────▼──────┐  ┌─────▼──────┐
-              │   Nginx    │  │   Nginx     │  │  CDN/OSS   │
-              │ (反向代理)  │  │ (静态文件)   │  │ (静态分发)  │
-              └─────┬─────┘  └──────┬──────┘  └─────┬──────┘
-                    │               │               │
-              ┌─────▼─────┐  ┌──────▼──────┐  ┌─────▼──────┐
-              │  Server   │  │  Web Client  │  │  Web Client │
-              │ :3000     │  │  (静态文件)   │  │  (静态文件) │
-              │ Express   │  │  React SPA   │  │  React SPA  │
-              │ + WS      │  └──────────────┘  └──────────────┘
-              └──┬───┬────┘
-                 │   │
-      ┌──────────┘   └──────────┐
-      │                         │
-┌─────▼──────┐           ┌──────▼───────┐
-│  Plugin    │           │  Client SDK  │
-│ (OpenClaw) │           │  (TS SDK)    │
-│ AI Agent   │           │  P2P/WebRTC  │
-└────────────┘           └──────────────┘
+shared/crypto          共享加密库（无外部依赖）
+  ▲
+  │ (@aicq/crypto)
+  │
+  ├── server/           Node.js 后端（Express + WebSocket）
+  │     └── admin/      Next.js 管理后台（调用 Server API）
+  ├── plugin/           OpenClaw AI 插件
+  └── client/web/       React 前端
+
+server/ ◄──── plugin/  （Plugin 通过 WebSocket 连接 Server）
+server/ ◄──── client/* （客户端通过 WebSocket 连接 Server）
 ```
+
+> **注意**：`shared/crypto` 是所有模块的共享依赖，任何模块部署前都需先编译。一键脚本已自动处理此步骤。
 
 ---
 
-## 依赖关系
+## 八、端口参考
 
-```
-shared/crypto  (共享加密库，无外部依赖)
-    ▲
-    │ (@aicq/crypto)
-    │
-    ├── server/         (Node.js 后端)
-    ├── plugin/         (OpenClaw 插件)
-    └── client/web/     (React 前端)
-```
+| 端口 | 服务 | 协议 | 说明 |
+|------|------|------|------|
+| `61018` | AICQ Server | HTTP + WebSocket | 主服务端口，承载 API 和 WebSocket |
+| `80` | Admin Panel (Next.js) | HTTP | 管理后台，内部访问；同时作为 Nginx HTTP 端口 |
+| `443` | Nginx | HTTPS | 生产环境主入口，SSL 终端 |
 
-> **注意**: `shared/crypto` 是所有模块的共享依赖，任何模块部署前都需先编译它。一键脚本已自动处理此步骤。
+---
+
+## 九、环境变量参考
+
+### Server 核心变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | `61018` | Server 监听端口 |
+| `DOMAIN` | `aicq.online` | 服务域名 |
+| `JWT_SECRET` | **（生产环境必填）** | JWT 签名密钥，至少 32 字符 |
+| `NODE_ENV` | `development` | 设为 `production` 启用安全检查 |
+| `ALLOW_LOCALHOST` | `false` | 允许 localhost 访问（仅开发用） |
+
+### 业务配置变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `MAX_FRIENDS` | `200` | 每节点最大好友数 |
+| `TEMP_NUMBER_TTL_HOURS` | `24` | 临时号码有效期 |
+| `QR_CODE_VALIDITY_SECONDS` | `60` | 登录二维码有效期 |
+| `MAX_GROUPS_PER_ACCOUNT` | `20` | 每账号最大群组数 |
+| `MAX_GROUP_MEMBERS` | `100` | 每群最大成员数 |
+| `MAX_HTTP_CONNECTIONS` | `5000` | 最大 HTTP 连接数 |
+| `MAX_WS_CONNECTIONS` | `10000` | 最大 WebSocket 连接数 |
+| `MAX_GROUP_MESSAGES` | `5000` | 群聊消息数上限 |
+
+### Docker / Admin 变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `AICQ_SERVER_URL` | `http://localhost:61018` | Admin 访问 Server 的内部地址（Docker 内） |
+
+---
+
+## 十、子部署文档索引
+
+| 文档 | 说明 |
+|------|------|
+| [`server/DEPLOY.md`](server/DEPLOY.md) | Server + Admin 完整部署指南 |
+| [`plugin/DEPLOY.md`](plugin/DEPLOY.md) | OpenClaw 插件安装指南 |
+| [`client/web/DEPLOY.md`](client/web/DEPLOY.md) | Web 客户端部署指南 |
