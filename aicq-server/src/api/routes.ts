@@ -632,7 +632,7 @@ router.post('/agent-execution/abort', generalLimiter, async (req: Request, res: 
           // Send abort notification to requester
           sendDirectMessage(requesterId, abortMessage);
 
-          res.json({ aborted: killResult.killed ?? true, gatewayUrl });
+          res.json({ aborted: (killResult as any).killed ?? true, gatewayUrl });
           return;
         }
       }
