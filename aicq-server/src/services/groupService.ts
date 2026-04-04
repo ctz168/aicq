@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { store } from '../db/memoryStore';
+import { store, getOrCreateNode } from '../db/memoryStore';
 import { config } from '../config';
 import { relaySignal, isOnline } from './p2pDiscoveryService';
-import type { Group, GroupMember, GroupRole, GroupMessagePayload } from '../models/types';
+import type { Group, GroupMember, GroupRole, GroupMessagePayload, Account } from '../models/types';
 
 // ─── 辅助函数 ─────────────────────────────────────────────────
 
@@ -25,6 +25,40 @@ function getDisplayName(accountId: string): string {
   const node = store.nodes.get(accountId);
   if (node) return accountId.slice(0, 8);
   return accountId.slice(0, 8);
+}
+
+/**
+ * Ensure an account exists for the given ID.
+ * If only a node exists (via node registration), auto-provision a lightweight account.
+ * This bridges the gap between node-only registration and account-required services.
+ */
+function ensureAccount(nodeId: string): Account {
+  let account = store.accounts.get(nodeId);
+  if (account) return account;
+
+  // Check if a node exists — if so, auto-create a lightweight account
+  const node = store.nodes.get(nodeId);
+  if (!node) {
+    throw new Error('账号不存在');
+  }
+
+  // Auto-provision a minimal account from the node registration
+  account = {
+    id: nodeId,
+    type: 'ai',
+    agentName: nodeId.slice(0, 12),
+    publicKey: node.publicKey,
+    createdAt: Date.now(),
+    lastLoginAt: Date.now(),
+    status: 'active',
+    friends: Array.from(node.friends),
+    maxFriends: config.maxFriends,
+    friendPermissions: {},
+    visitPermissions: [],
+  };
+  store.accounts.set(nodeId, account);
+  console.log(`[account] Auto-provisioned account for node: ${nodeId}`);
+  return account;
 }
 
 /** 获取账号的群角色（返回 null 表示不是群成员） */
@@ -50,11 +84,8 @@ export function createGroup(
   ownerId: string,
   description?: string,
 ): Group {
-  // 验证 owner 账号存在
-  const account = store.accounts.get(ownerId);
-  if (!account) {
-    throw new Error('账号不存在');
-  }
+  // 验证 owner 账号存在（auto-provision from node if needed）
+  const account = ensureAccount(ownerId);
   if (account.status !== 'active') {
     throw new Error('账号已被禁用');
   }
@@ -149,11 +180,8 @@ export function inviteMember(
     throw new Error('不能邀请自己');
   }
 
-  // 验证目标账号存在
-  const targetAccount = store.accounts.get(targetId);
-  if (!targetAccount) {
-    throw new Error('目标账号不存在');
-  }
+  // 验证目标账号存在（auto-provision from node if needed）
+  const targetAccount = ensureAccount(targetId);
   if (targetAccount.status !== 'active') {
     throw new Error('目标账号已被禁用');
   }

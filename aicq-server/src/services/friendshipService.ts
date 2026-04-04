@@ -82,8 +82,22 @@ export function areFriends(nodeA: string, nodeB: string): boolean {
  */
 export function getFriendPermissions(accountId: string, friendId: string): FriendPermission[] {
   const account = store.accounts.get(accountId);
-  if (!account) return [];
-  if (!account.friends.includes(friendId)) return [];
+  if (!account) {
+    // No account yet (node-only registration) — check node-level friendship
+    const node = store.nodes.get(accountId);
+    if (node && node.friends.has(friendId)) {
+      return ['chat']; // default permission for node-level friends
+    }
+    return [];
+  }
+  if (!account.friends.includes(friendId)) {
+    // Account exists but friend list may be stale — also check node-level
+    const node = store.nodes.get(accountId);
+    if (node && node.friends.has(friendId)) {
+      return ['chat'];
+    }
+    return [];
+  }
   return account.friendPermissions[friendId] || ['chat']; // default: chat only
 }
 
