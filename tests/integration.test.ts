@@ -309,8 +309,10 @@ async function testFullE2EFlow() {
     const { body: aFriends } = await get(baseUrl, `/api/v1/friends?nodeId=${nodeAId}`);
     const { body: bFriends } = await get(baseUrl, `/api/v1/friends?nodeId=${nodeBId}`);
 
-    assert.ok(aFriends.friends.includes(nodeBId), "NodeB should be in NodeA's friends");
-    assert.ok(bFriends.friends.includes(nodeAId), "NodeA should be in NodeB's friends");
+    const aFriendIds = aFriends.friends.map((f: any) => f.id);
+    const bFriendIds = bFriends.friends.map((f: any) => f.id);
+    assert.ok(aFriendIds.includes(nodeBId), "NodeB should be in NodeA's friends");
+    assert.ok(bFriendIds.includes(nodeAId), "NodeA should be in NodeB's friends");
   });
 
   // ── Step 10: Alice encrypts and sends a message ──
@@ -495,8 +497,9 @@ async function testFriendLimitEnforcement() {
 
     const { body } = await get(baseUrl, `/api/v1/friends?nodeId=${nodeX}`);
     assert.equal(body.count, 3, "nodeX should have exactly 3 friends");
+    const bodyFriendIds = body.friends.map((f: any) => f.id);
     for (const fId of friends) {
-      assert.ok(body.friends.includes(fId), `${fId} should be in friends list`);
+      assert.ok(bodyFriendIds.includes(fId), `${fId} should be in friends list`);
     }
   });
 }

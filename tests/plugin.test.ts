@@ -26,19 +26,19 @@ import {
 import type { KeyPair, HandshakeRequest, HandshakeResponse } from "@aicq/crypto";
 
 // ─── Source imports ─────────────────────────────────────────────────
-import { loadConfig } from "../aicq-plugin/src/config.js";
-import { PluginStore } from "../aicq-plugin/src/store.js";
-import { IdentityService } from "../aicq-plugin/src/services/identityService.js";
-import { HandshakeManager } from "../aicq-plugin/src/handshake/handshakeManager.js";
-import { EncryptedChatChannel } from "../aicq-plugin/src/channels/encryptedChat.js";
-import { ChatFriendTool } from "../aicq-plugin/src/tools/chatFriend.js";
-import { ChatSendTool } from "../aicq-plugin/src/tools/chatSend.js";
-import { ChatExportKeyTool } from "../aicq-plugin/src/tools/chatExportKey.js";
-import { MessageSendingHook } from "../aicq-plugin/src/hooks/messageSending.js";
-import { BeforeToolCallHook } from "../aicq-plugin/src/hooks/beforeToolCall.js";
-import { P2PConnectionManager } from "../aicq-plugin/src/p2p/connectionManager.js";
-import { FileTransferManager } from "../aicq-plugin/src/fileTransfer/transferManager.js";
-import type { PluginConfig, FriendRecord, SessionState, Logger } from "../aicq-plugin/src/types.js";
+import { loadConfig } from "../aicq-plugin/dist/config.js";
+import { PluginStore } from "../aicq-plugin/dist/store.js";
+import { IdentityService } from "../aicq-plugin/dist/services/identityService.js";
+import { HandshakeManager } from "../aicq-plugin/dist/handshake/handshakeManager.js";
+import { EncryptedChatChannel } from "../aicq-plugin/dist/channels/encryptedChat.js";
+import { ChatFriendTool } from "../aicq-plugin/dist/tools/chatFriend.js";
+import { ChatSendTool } from "../aicq-plugin/dist/tools/chatSend.js";
+import { ChatExportKeyTool } from "../aicq-plugin/dist/tools/chatExportKey.js";
+import { MessageSendingHook } from "../aicq-plugin/dist/hooks/messageSending.js";
+import { BeforeToolCallHook } from "../aicq-plugin/dist/hooks/beforeToolCall.js";
+import { P2PConnectionManager } from "../aicq-plugin/dist/p2p/connectionManager.js";
+import { FileTransferManager } from "../aicq-plugin/dist/fileTransfer/transferManager.js";
+import type { PluginConfig, FriendRecord, SessionState, Logger } from "../aicq-plugin/dist/types.js";
 
 // ─── Minimal test runner ────────────────────────────────────────────
 
