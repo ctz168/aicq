@@ -9,6 +9,7 @@ import {
   getSignalingChannel,
 } from '../services/p2pDiscoveryService';
 import * as groupService from '../services/groupService';
+import * as friendshipService from '../services/friendshipService';
 import { store } from '../db/memoryStore';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -164,6 +165,12 @@ function handleMessage(
         return;
       }
 
+      // ─── 权限检查：chat 权限 ───
+      if (!friendshipService.hasFriendPermission(toId, id, 'chat')) {
+        ws.send(JSON.stringify({ type: 'error', error: '对方未授予你聊天权限' }));
+        return;
+      }
+
       if (!isOnline(toId)) {
         ws.send(JSON.stringify({ type: 'error', error: 'Target is offline' }));
         return;
@@ -204,7 +211,104 @@ function handleMessage(
         return;
       }
 
+      // ─── 权限检查：发送文件需要 chat 权限 ───
+      if (!friendshipService.hasFriendPermission(toId, id, 'chat')) {
+        ws.send(JSON.stringify({ type: 'error', error: '对方未授予你聊天权限' }));
+        return;
+      }
+
       relaySignal(id, toId, { type: 'file_chunk', data: chunkData });
+      break;
+    }
+
+    // ─── Exec 权限校验的 tool 执行消息 ──────────────────────────
+
+    case 'exec_request': {
+      // AI agent 请求执行操作（需要 exec 权限）
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const toId: string = message.to;
+      if (!toId) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Missing to field' }));
+        return;
+      }
+
+      // 检查是否好友
+      const senderNode = store.nodes.get(id);
+      if (!senderNode?.friends.has(toId)) {
+        ws.send(JSON.stringify({ type: 'error', error: '只能向好友发送执行请求' }));
+        return;
+      }
+
+      // ─── 权限检查：exec 权限 ───
+      if (!friendshipService.hasFriendPermission(toId, id, 'exec')) {
+        ws.send(JSON.stringify({ type: 'error', error: '对方未授予你执行权限（exec）' }));
+        return;
+      }
+
+      // 转发执行请求
+      if (isOnline(toId)) {
+        relaySignal(id, toId, { type: 'exec_request', data: message.data, fromId: id });
+        ws.send(JSON.stringify({ type: 'exec_request_ack', toId, status: 'forwarded' }));
+      } else {
+        ws.send(JSON.stringify({ type: 'error', error: 'Target is offline' }));
+      }
+      break;
+    }
+
+    // ─── 权限变更通知 ──────────────────────────────────────────
+
+    case 'permission_changed': {
+      // 当一方修改了好友权限，通知对方
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const targetId: string = message.friendId;
+      const newPermissions: string[] = message.permissions || [];
+
+      if (!targetId || !Array.isArray(newPermissions)) {
+        ws.send(JSON.stringify({ type: 'error', error: '缺少 friendId 或 permissions' }));
+        return;
+      }
+
+      // 验证确实是好友关系
+      const node = store.nodes.get(id);
+      if (!node?.friends.has(targetId)) {
+        ws.send(JSON.stringify({ type: 'error', error: '只能修改好友的权限' }));
+        return;
+      }
+
+      // 更新权限
+      const validPerms = newPermissions.filter((p) => ['chat', 'exec'].includes(p));
+      const success = friendshipService.setFriendPermissions(id, targetId, validPerms as any);
+
+      if (!success) {
+        ws.send(JSON.stringify({ type: 'error', error: '更新权限失败' }));
+        return;
+      }
+
+      // 通知被修改权限的好友
+      if (isOnline(targetId)) {
+        relaySignal(id, targetId, {
+          type: 'permission_update',
+          fromId: id,
+          permissions: validPerms,
+          timestamp: Date.now(),
+        });
+      }
+
+      ws.send(JSON.stringify({
+        type: 'permission_changed_ack',
+        friendId: targetId,
+        permissions: validPerms,
+      }));
       break;
     }
 

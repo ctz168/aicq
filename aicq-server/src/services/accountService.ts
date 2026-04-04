@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { store } from '../db/memoryStore';
-import { Account, Session, AccountType } from '../models/types';
+import { Account, Session, AccountType, FriendPermission } from '../models/types';
 
 // Simple password hashing using SHA-256 + salt (replace with bcrypt in production)
 async function hashPassword(password: string): Promise<string> {
@@ -91,6 +91,7 @@ export async function registerHuman(
     status: 'active',
     friends: [],
     maxFriends: 200,
+    friendPermissions: {},
     visitPermissions: [],
   };
 
@@ -235,6 +236,7 @@ function createAgentAccount(publicKey: string, agentName: string): Account {
     status: 'active',
     friends: [],
     maxFriends: 200,
+    friendPermissions: {},
     visitPermissions: [],
   };
   store.accounts.set(accountId, account);

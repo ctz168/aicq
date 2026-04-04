@@ -30,6 +30,10 @@ interface SerializedStore {
     addedAt: string;
     lastMessageAt: string;
     sessionKey?: string;
+    permissions?: ('chat' | 'exec')[];
+    friendType?: 'human' | 'ai';
+    aiName?: string;
+    aiAvatar?: string;
   }>;
   sessions: Array<{
     peerId: string;
@@ -95,6 +99,10 @@ export class PluginStore {
         addedAt: f.addedAt.toISOString(),
         lastMessageAt: f.lastMessageAt.toISOString(),
         sessionKey: f.sessionKey ? encodeBuffer(f.sessionKey) : undefined,
+        permissions: f.permissions,
+        friendType: f.friendType,
+        aiName: f.aiName,
+        aiAvatar: f.aiAvatar,
       })),
       sessions: Array.from(this.sessions.entries()).map(([, s]) => ({
         peerId: s.peerId,
@@ -152,6 +160,10 @@ export class PluginStore {
           addedAt: new Date(f.addedAt),
           lastMessageAt: new Date(f.lastMessageAt),
           sessionKey: f.sessionKey ? decodeBuffer(f.sessionKey) : undefined,
+          permissions: f.permissions as ('chat' | 'exec')[] | undefined,
+          friendType: f.friendType as 'human' | 'ai' | undefined,
+          aiName: f.aiName,
+          aiAvatar: f.aiAvatar,
         });
       }
 

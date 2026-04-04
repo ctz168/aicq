@@ -14,6 +14,9 @@ export interface ClientConfig {
   dataDir: string;
 }
 
+/** Friend permission levels */
+export type FriendPermission = 'chat' | 'exec';
+
 /** Information about a friend connection. */
 export interface FriendInfo {
   /** Unique node ID of the friend. */
@@ -28,6 +31,14 @@ export interface FriendInfo {
   lastSeen: string;
   /** Whether the friend is currently online. */
   isOnline: boolean;
+  /** Permissions granted by this user to the friend */
+  permissions?: FriendPermission[];
+  /** Type of friend: human or AI agent */
+  friendType?: 'human' | 'ai';
+  /** AI agent name (for AI friends) */
+  aiName?: string;
+  /** AI agent avatar URL */
+  aiAvatar?: string;
 }
 
 /** Chat message stored in history. */

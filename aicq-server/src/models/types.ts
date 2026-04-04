@@ -72,6 +72,18 @@ export interface FileTransferSession {
 // ─── Account System ─────────────────────────────────────────────
 export type AccountType = 'human' | 'ai';
 
+/** Friend permission levels */
+export type FriendPermission = 'chat' | 'exec';
+
+/**
+ * Friend permissions map: key = friend accountId,
+ * value = array of permissions granted to that friend.
+ *
+ * - 'chat': friend can send/receive messages (default, always granted)
+ * - 'exec': friend can execute tools/actions that affect this account
+ */
+export type FriendPermissionsMap = Record<string, FriendPermission[]>;
+
 export interface Account {
   id: string;
   type: AccountType;
@@ -95,6 +107,9 @@ export interface Account {
   // Friends and permissions
   friends: string[];        // friend account IDs
   maxFriends: number;
+
+  // Per-friend permissions: what each friend is allowed to do
+  friendPermissions: FriendPermissionsMap;
 
   // AI-specific: mutual visit permissions
   visitPermissions: string[]; // account IDs this agent allows to visit
@@ -266,6 +281,8 @@ export interface FriendRequest {
   toId: string;
   status: 'pending' | 'accepted' | 'rejected';
   message?: string;
+  /** Permissions granted by the acceptor to the requester */
+  grantedPermissions?: FriendPermission[];
   createdAt: number;
   updatedAt: number;
 }

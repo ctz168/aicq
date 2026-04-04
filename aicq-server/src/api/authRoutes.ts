@@ -202,6 +202,7 @@ function sanitizeAccount(account: any): any {
     status: account.status,
     friendCount: account.friends?.length || 0,
     maxFriends: account.maxFriends,
+    friendPermissions: account.friendPermissions || {},
   };
 }
 

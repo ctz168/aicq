@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { generalLimiter } from '../middleware/rateLimit';
 import * as friendshipService from '../services/friendshipService';
 import * as friendRequestService from '../services/friendRequestService';
+import type { FriendPermission } from '../models/types';
 
 const router = Router();
 
@@ -9,7 +10,7 @@ const router = Router();
 
 /**
  * GET /api/v1/friends
- * 获取好友列表
+ * 获取好友列表（包含每个好友的权限信息）
  */
 router.get('/', generalLimiter, (req: Request, res: Response) => {
   try {
@@ -21,7 +22,14 @@ router.get('/', generalLimiter, (req: Request, res: Response) => {
 
     const friends = friendshipService.getFriends(nodeId);
     const count = friendshipService.getFriendCount(nodeId);
-    res.json({ friends, count });
+
+    // 附带权限信息
+    const friendsWithPerms = friends.map((friendId) => ({
+      id: friendId,
+      permissions: friendshipService.getFriendPermissions(nodeId, friendId),
+    }));
+
+    res.json({ friends: friendsWithPerms, count });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -47,6 +55,70 @@ router.delete('/:friendId', generalLimiter, (req: Request, res: Response) => {
       return;
     }
     res.json({ removed: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 获取/更新好友权限 ─────────────────────────────────────────
+
+/**
+ * GET /api/v1/friends/:friendId/permissions
+ * 获取对某个好友的授权权限
+ */
+router.get('/:friendId/permissions', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const accountId = req.query.accountId as string;
+    if (!accountId) {
+      res.status(400).json({ error: '缺少查询参数: accountId' });
+      return;
+    }
+
+    const permissions = friendshipService.getFriendPermissions(accountId, req.params.friendId);
+    res.json({ friendId: req.params.friendId, permissions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/v1/friends/:friendId/permissions
+ * 更新对某个好友的授权权限
+ * Body: { accountId, permissions: ('chat' | 'exec')[] }
+ */
+router.put('/:friendId/permissions', generalLimiter, (req: Request, res: Response) => {
+  try {
+    const { accountId, permissions } = req.body;
+    if (!accountId) {
+      res.status(400).json({ error: '缺少必填字段: accountId' });
+      return;
+    }
+    if (!Array.isArray(permissions)) {
+      res.status(400).json({ error: 'permissions 必须是数组' });
+      return;
+    }
+
+    // 验证权限值
+    const validPerms: FriendPermission[] = ['chat', 'exec'];
+    const invalidPerms = permissions.filter((p: string) => !validPerms.includes(p as FriendPermission));
+    if (invalidPerms.length > 0) {
+      res.status(400).json({ error: '无效的权限类型: ' + invalidPerms.join(', ') });
+      return;
+    }
+
+    const success = friendshipService.setFriendPermissions(
+      accountId,
+      req.params.friendId,
+      permissions as FriendPermission[],
+    );
+
+    if (!success) {
+      res.status(400).json({ error: '更新权限失败，可能不是好友关系' });
+      return;
+    }
+
+    const updatedPerms = friendshipService.getFriendPermissions(accountId, req.params.friendId);
+    res.json({ success: true, friendId: req.params.friendId, permissions: updatedPerms });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -101,21 +173,29 @@ router.post('/requests/:userId', generalLimiter, (req: Request, res: Response) =
   }
 });
 
-// ─── 接受好友请求 ─────────────────────────────────────────────
+// ─── 接受好友请求（带权限）───────────────────────────────────────
 
 /**
  * POST /api/v1/friends/requests/:requestId/accept
- * 接受好友请求
+ * 接受好友请求，并指定授权权限
+ * Body: { accountId, permissions?: ('chat' | 'exec')[] }
  */
 router.post('/requests/:requestId/accept', generalLimiter, (req: Request, res: Response) => {
   try {
-    const { accountId } = req.body;
+    const { accountId, permissions } = req.body;
     if (!accountId) {
       res.status(400).json({ error: '缺少必填字段: accountId' });
       return;
     }
 
-    const request = friendRequestService.acceptFriendRequest(req.params.requestId, accountId);
+    // 验证权限参数（可选）
+    let perms: FriendPermission[] | undefined;
+    if (permissions && Array.isArray(permissions)) {
+      const validPerms: FriendPermission[] = ['chat', 'exec'];
+      perms = permissions.filter((p: string) => validPerms.includes(p as FriendPermission)) as FriendPermission[];
+    }
+
+    const request = friendRequestService.acceptFriendRequest(req.params.requestId, accountId, perms);
     res.json({ success: true, request });
   } catch (err: any) {
     res.status(400).json({ error: err.message });

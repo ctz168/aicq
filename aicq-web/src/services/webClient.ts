@@ -522,14 +522,26 @@ class BrowserAPIClient {
     return this.request('POST', `/friends/requests/${encodeURIComponent(userId)}`, { accountId: this.nodeId, message });
   }
 
-  async acceptFriendRequest(requestId: string): Promise<void> {
+  async acceptFriendRequest(requestId: string, permissions?: ('chat' | 'exec')[]): Promise<void> {
     if (!this.nodeId) throw new Error('Node ID not set');
-    await this.request('POST', `/friends/requests/${encodeURIComponent(requestId)}/accept`, { accountId: this.nodeId });
+    await this.request('POST', `/friends/requests/${encodeURIComponent(requestId)}/accept`, { accountId: this.nodeId, permissions });
   }
 
   async rejectFriendRequest(requestId: string): Promise<void> {
     if (!this.nodeId) throw new Error('Node ID not set');
     await this.request('POST', `/friends/requests/${encodeURIComponent(requestId)}/reject`, { accountId: this.nodeId });
+  }
+
+  /* ─── Friend Permissions API ─────────────────────────── */
+
+  async getFriendPermissions(friendId: string): Promise<{ permissions: ('chat' | 'exec')[] }> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request<{ permissions: ('chat' | 'exec')[] }>('GET', `/friends/${encodeURIComponent(friendId)}/permissions?accountId=${encodeURIComponent(this.nodeId)}`);
+  }
+
+  async updateFriendPermissions(friendId: string, permissions: ('chat' | 'exec')[]): Promise<{ permissions: ('chat' | 'exec')[] }> {
+    if (!this.nodeId) throw new Error('Node ID not set');
+    return this.request<{ permissions: ('chat' | 'exec')[] }>('PUT', `/friends/${encodeURIComponent(friendId)}/permissions`, { accountId: this.nodeId, permissions });
   }
 
   /* ─── Broadcast API ──────────────────────────────────── */
@@ -708,6 +720,10 @@ class BrowserWSClient extends SimpleEventEmitter {
         break;
       case 'agent_execution_end':
         this.emit('agent_execution_end', msg);
+        break;
+      // ─── Permission Update (from friend) ──────────────────
+      case 'permission_update':
+        this.emit('permission_update', msg);
         break;
       case 'error':
         this.emit('error', new Error(msg.error ?? 'Server error'));
@@ -1080,6 +1096,21 @@ export class WebClient extends SimpleEventEmitter {
       };
       this.store.addGroupMessage(groupMsg.groupId, groupMsg);
       this.emit('group_message', groupMsg);
+    });
+
+    // ─── Permission update from server/friend ────────────────
+    this.ws.on('permission_update', (msg: any) => {
+      const { fromId, permissions } = msg;
+      if (fromId && permissions) {
+        // Update local friend's permissions
+        const friend = this.store.friends.get(fromId);
+        if (friend) {
+          friend.permissions = permissions;
+          this.store.addFriend(friend);
+          this.store.save();
+        }
+        this.emit('permission_update', { fromId, permissions });
+      }
     });
   }
 

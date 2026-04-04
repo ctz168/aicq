@@ -20,6 +20,12 @@ export interface FriendRecord {
   addedAt: Date;
   lastMessageAt: Date;
   sessionKey?: Uint8Array;
+  /** Permissions granted by this friend to the agent */
+  permissions?: ('chat' | 'exec')[];
+  /** Human-readable name for the friend */
+  friendType?: 'human' | 'ai';
+  aiName?: string;
+  aiAvatar?: string;
 }
 
 /** An established session with a peer. */

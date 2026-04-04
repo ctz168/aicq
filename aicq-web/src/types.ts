@@ -14,7 +14,12 @@ export interface FriendInfo {
   friendType?: 'human' | 'ai';
   aiName?: string;
   aiAvatar?: string;
+  /** Permissions granted by the current user to this friend */
+  permissions?: FriendPermission[];
 }
+
+/** Friend permission levels */
+export type FriendPermission = 'chat' | 'exec';
 
 /** Chat message stored in history. */
 export interface ChatMessage {
@@ -167,6 +172,8 @@ export interface FriendRequest {
   toId: string;
   status: 'pending' | 'accepted' | 'rejected';
   message?: string;
+  /** Permissions granted when accepting the request */
+  grantedPermissions?: FriendPermission[];
   createdAt: number;
   updatedAt: number;
 }

@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { store } from '../db/memoryStore';
 import * as friendshipService from './friendshipService';
-import type { FriendRequest } from '../models/types';
+import type { FriendRequest, FriendPermission } from '../models/types';
 
 /**
  * 发送好友请求
@@ -100,10 +100,12 @@ export function getFriendRequests(accountId: string): {
  * - 只能接收者是 toId
  * - 请求必须是 pending 状态
  * - 建立双向好友关系
+ * - 根据接受者指定的权限进行授权
  */
 export function acceptFriendRequest(
   requestId: string,
   accountId: string,
+  permissions?: FriendPermission[],
 ): FriendRequest {
   const request = store.friendRequests.get(requestId);
   if (!request) {
@@ -127,11 +129,26 @@ export function acceptFriendRequest(
     throw new Error('添加好友失败，可能是好友数量已达上限');
   }
 
+  // 设置权限：接受者(toId)授予发送者(fromId)的权限
+  const defaultPerms: FriendPermission[] = ['chat'];
+  const grantedPerms: FriendPermission[] = permissions && permissions.length > 0 ? permissions : defaultPerms;
+  // 确保 chat 权限始终存在
+  const finalPerms: FriendPermission[] = grantedPerms.includes('chat')
+    ? grantedPerms
+    : (['chat', ...grantedPerms] as FriendPermission[]);
+
+  request.grantedPermissions = finalPerms;
   request.status = 'accepted';
   request.updatedAt = Date.now();
   store.friendRequests.set(requestId, request);
 
-  console.log(`[friend-request] ${accountId} 接受了 ${request.fromId} 的好友请求 (${requestId})`);
+  // 在 Account 层面也记录权限
+  friendshipService.setFriendPermissions(accountId, request.fromId, finalPerms);
+
+  // 初始化对方对己方的默认权限（chat only）
+  friendshipService.initDefaultPermissions(request.fromId, accountId);
+
+  console.log(`[friend-request] ${accountId} 接受了 ${request.fromId} 的好友请求 (${requestId})，权限: ${finalPerms.join(', ')}`);
   return request;
 }
 
