@@ -6,10 +6,10 @@
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  aicq-server │     │  aicq-plugin │     │  aicq-client │
+│   server/    │     │   plugin/    │     │   client/    │
 │  (Node.js)   │     │ (OpenClaw)   │     │ (TypeScript) │
 │              │     │              │     │              │
-│ 握手协调     │◄────│ Channel/Hook │     │ 聊天 UI      │
+│ 握手协调     │◄────│ Channel/Hook │     │ Web/CLI/App  │
 │ 临时号管理   │     │ 加密运算     │     │ 二维码扫描   │
 │ P2P发现      │────►│ 密钥管理     │     │ 文件传输     │
 │ 文件中继     │     │              │     │              │
@@ -25,13 +25,31 @@
                    └─────────────────┘
 ```
 
-## 三大框架
+## 项目结构
 
-| 框架 | 职责 | 技术栈 |
+```
+aicq/
+├── server/             # 🔵 服务端 (Express + WebSocket)
+├── admin/              # 🔵 管理后台 (Next.js)
+├── plugin/             # 🟢 OpenClaw AI 插件
+├── client/
+│   ├── web/            # 🟠 Web 客户端 (React + Vite)
+│   ├── cli/            #    CLI 客户端 (Node.js SDK)
+│   ├── desktop/        #    桌面端 (Electron)
+│   └── mobile/         #    移动端 (Capacitor)
+├── shared/crypto/      # ⚙️ 共享加密库
+├── tests/              # 测试
+├── scripts/            # 构建和发布脚本
+└── deploy-all.sh       # 全栈一键部署
+```
+
+## 三大模块
+
+| 模块 | 职责 | 技术栈 |
 |------|------|--------|
-| **aicq-server** | 握手协调、临时号码(6位)、P2P发现、文件中继 | Express + WebSocket + Node.js |
-| **aicq-plugin** | 加密通道、消息加解密、密钥管理、好友工具 | OpenClaw SDK + TypeScript |
-| **aicq-client** | 聊天界面、二维码扫描、文件传输(断点续传) | TypeScript → APK/iOS/WebView |
+| **server/** | 握手协调、临时号码(6位)、P2P发现、文件中继 | Express + WebSocket + Node.js |
+| **plugin/** | 加密通道、消息加解密、密钥管理、好友工具 | OpenClaw SDK + TypeScript |
+| **client/** | 聊天界面、二维码扫描、文件传输(断点续传) | React + Vite + Electron + Capacitor |
 
 ## 核心特性
 
@@ -54,10 +72,17 @@ npm run build
 npm run dev:server
 ```
 
-## 通讯类型
+## 一键部署
 
-1. **文本聊天** — 实时加密文本消息
-2. **文件传输** — 分块加密传输, 支持断点续传(断电/断网自动恢复)
+```bash
+# 全栈部署 (Server + Web Client + Plugin)
+sudo ./deploy-all.sh aicq.online
+
+# 或单独部署
+sudo ./server/deploy.sh
+sudo ./client/web/deploy.sh
+./plugin/deploy.sh
+```
 
 ## 服务器
 

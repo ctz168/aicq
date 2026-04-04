@@ -37,7 +37,7 @@ COPY --from=builder /app/client/web/dist/ web/dist/
 
 # Copy config
 COPY server/.env.example server/.env
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY server/docker/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Install nginx
 RUN apk add --no-cache nginx
@@ -50,7 +50,7 @@ ENV PORT=3000
 EXPOSE 80 443 3000
 
 # Copy entrypoint
-COPY docker/entrypoint.sh /entrypoint.sh
+COPY server/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

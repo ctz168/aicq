@@ -22,15 +22,15 @@ echo ""
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo -e "${GREEN}[1/3]${NC} 部署 AICQ Server..."
-bash "${SCRIPT_DIR}/deploy-server.sh" "${DOMAIN}"
+bash "${SCRIPT_DIR}/server/deploy.sh" "${DOMAIN}"
 
 echo ""
 echo -e "${GREEN}[2/3]${NC} 部署 AICQ Web Client..."
-bash "${SCRIPT_DIR}/deploy-web.sh" "${DOMAIN}" "/var/www/aicq"
+bash "${SCRIPT_DIR}/client/web/deploy.sh" "${DOMAIN}" "/var/www/aicq"
 
 echo ""
 echo -e "${GREEN}[3/3]${NC} 安装 AICQ Plugin (本地)..."
-bash "${SCRIPT_DIR}/deploy-plugin.sh" "/opt/aicq-plugin" "https://${DOMAIN}"
+bash "${SCRIPT_DIR}/plugin/deploy.sh" "/opt/aicq-plugin" "https://${DOMAIN}"
 
 echo ""
 echo -e "${GREEN}全部部署完成!${NC} 访问 https://${DOMAIN} 开始使用"

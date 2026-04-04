@@ -32,19 +32,22 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: aicq-web/package-lock.json
+          cache-dependency-path: client/web/package-lock.json
+
+      - name: Install shared crypto
+        run: cd shared/crypto && npm ci && npm run build
 
       - name: Install dependencies
-        run: cd aicq-web && npm ci
+        run: cd client/web && npm ci
 
       - name: Build
-        run: cd aicq-web && npm run build
+        run: cd client/web && npm run build
 
       - name: Archive web dist
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: aicq-web/dist/
+          path: client/web/dist/
           retention-days: 7
 
   # ---------------------------------------------------------------------------
@@ -72,19 +75,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: aicq-web/dist/
+          path: client/web/dist/
 
       - name: Install mobile dependencies
-        run: cd aicq-mobile && npm ci
+        run: cd client/mobile && npm ci
 
       - name: Sync Capacitor
-        run: cd aicq-mobile && npx cap sync android
+        run: cd client/mobile && npx cap sync android
 
       - name: Build Debug APK
-        run: cd aicq-mobile/android && chmod +x ./gradlew && ./gradlew assembleDebug --no-daemon
+        run: cd client/mobile/android && chmod +x ./gradlew && ./gradlew assembleDebug --no-daemon
 
       - name: Build Release APK (unsigned)
-        run: cd aicq-mobile/android && ./gradlew assembleRelease --no-daemon || echo "Release build failed (may need signing)"
+        run: cd client/mobile/android && ./gradlew assembleRelease --no-daemon || echo "Release build failed (may need signing)"
         continue-on-error: true
 
       - name: Sign Release APK (if keystore available)
@@ -95,9 +98,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          echo "${KEYSTORE_BASE64}" | base64 -d > aicq-mobile/android/aicq-release.keystore
-          cd aicq-mobile/android
-          # Zipalign and sign the release APK
+          echo "${KEYSTORE_BASE64}" | base64 -d > client/mobile/android/aicq-release.keystore
+          cd client/mobile/android
           ${ANDROID_HOME}/build-tools/34.0.0/zipalign -v -p 4 \
             app/build/outputs/apk/release/app-release-unsigned.apk \
             app/build/outputs/apk/release/app-release-aligned.apk
@@ -113,8 +115,8 @@ jobs:
         with:
           name: android-apks
           path: |
-            aicq-mobile/android/app/build/outputs/apk/debug/*.apk
-            aicq-mobile/android/app/build/outputs/apk/release/*.apk
+            client/mobile/android/app/build/outputs/apk/debug/*.apk
+            client/mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 7
 
   # ---------------------------------------------------------------------------
@@ -135,13 +137,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: aicq-web/dist/
+          path: client/web/dist/
 
       - name: Install Electron dependencies
-        run: cd aicq-app && npm ci
+        run: cd client/desktop && npm ci
 
       - name: Build Linux AppImage
-        run: cd aicq-app && npx electron-builder --linux --appimage
+        run: cd client/desktop && npx electron-builder --linux --appimage
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -168,13 +170,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: aicq-web/dist/
+          path: client/web/dist/
 
       - name: Install Electron dependencies
-        run: cd aicq-app && npm ci
+        run: cd client/desktop && npm ci
 
       - name: Build Windows (NSIS + portable ZIP)
-        run: cd aicq-app && npx electron-builder --win --x64
+        run: cd client/desktop && npx electron-builder --win --x64
 
       - name: Create Windows portable ZIP
         run: |
@@ -210,13 +212,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: aicq-web/dist/
+          path: client/web/dist/
 
       - name: Install Electron dependencies
-        run: cd aicq-app && npm ci
+        run: cd client/desktop && npm ci
 
       - name: Build macOS DMG
-        run: cd aicq-app && npx electron-builder --mac --dmg
+        run: cd client/desktop && npx electron-builder --mac --dmg
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -237,7 +239,7 @@ jobs:
       - build-linux
       - build-windows
       - build-macos
-    if: always()  # Run even if some builds fail (e.g. macOS signing)
+    if: always()
     steps:
       - uses: actions/checkout@v4
 
