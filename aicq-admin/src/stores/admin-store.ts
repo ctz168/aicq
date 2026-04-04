@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type AdminView = 'dashboard' | 'nodes' | 'accounts' | 'config' | 'blacklist'
+export type AdminView = 'dashboard' | 'nodes' | 'accounts' | 'config' | 'service' | 'blacklist'
 
 interface AdminState {
   token: string | null

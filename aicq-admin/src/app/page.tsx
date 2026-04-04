@@ -13,6 +13,7 @@ import { DashboardView } from '@/components/admin/dashboard'
 import { NodesView } from '@/components/admin/nodes-view'
 import { AccountsView } from '@/components/admin/accounts-view'
 import { ConfigView } from '@/components/admin/config-view'
+import { ServiceView } from '@/components/admin/service-view'
 import { BlacklistView } from '@/components/admin/blacklist-view'
 
 function ViewContent() {
@@ -26,6 +27,8 @@ function ViewContent() {
       return <AccountsView />
     case 'config':
       return <ConfigView />
+    case 'service':
+      return <ServiceView />
     case 'blacklist':
       return <BlacklistView />
     default:

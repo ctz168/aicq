@@ -590,3 +590,70 @@ export function removeFromBlacklist(accountId: string): boolean {
 export function isBlacklisted(accountId: string): boolean {
   return blacklist.has(accountId);
 }
+
+// ─── Service Management ──────────────────────────────────────────
+
+// Track server start time
+const serverStartTime = Date.now();
+
+export function getServiceStatus(): {
+  status: 'running';
+  uptime: number;
+  uptimeFormatted: string;
+  port: number;
+  domain: string;
+  nodeEnv: string;
+  memoryUsage: {
+    rss: number;
+    heapUsed: number;
+    heapTotal: number;
+    external: number;
+  };
+  startedAt: number;
+} {
+  const uptime = process.uptime();
+  const mem = process.memoryUsage();
+
+  // Format uptime as Xd Xh Xm Xs
+  const days = Math.floor(uptime / 86400);
+  const hours = Math.floor((uptime % 86400) / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const seconds = Math.floor(uptime % 60);
+  let uptimeFormatted = '';
+  if (days > 0) uptimeFormatted += `${days}天 `;
+  if (hours > 0) uptimeFormatted += `${hours}小时 `;
+  if (minutes > 0) uptimeFormatted += `${minutes}分钟 `;
+  uptimeFormatted += `${seconds}秒`;
+
+  return {
+    status: 'running',
+    uptime,
+    uptimeFormatted: uptimeFormatted.trim(),
+    port: config.port,
+    domain: config.domain,
+    nodeEnv: process.env.NODE_ENV || 'development',
+    memoryUsage: {
+      rss: mem.rss,
+      heapUsed: mem.heapUsed,
+      heapTotal: mem.heapTotal,
+      external: mem.external,
+    },
+    startedAt: serverStartTime,
+  };
+}
+
+export function stopServer(): void {
+  console.log('[admin] Server stop requested by admin');
+  // Use SIGTERM for graceful shutdown
+  setTimeout(() => {
+    process.kill(process.pid, 'SIGTERM');
+  }, 500);
+}
+
+export function restartServer(): void {
+  console.log('[admin] Server restart requested by admin');
+  // Use SIGTERM for graceful shutdown; a process manager (PM2/systemd) should auto-restart
+  setTimeout(() => {
+    process.kill(process.pid, 'SIGTERM');
+  }, 500);
+}

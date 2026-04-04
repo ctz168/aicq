@@ -18,8 +18,8 @@ interface ConfigField {
 }
 
 const configFields: ConfigField[] = [
-  { key: 'port', label: '服务端口', description: '服务器监听端口' },
-  { key: 'maxFriends', label: '好友上限', description: '每个账号的最大好友数量' },
+  { key: 'port', label: '服务端口', description: '服务器监听端口（客户端、服务器、AI插件统一端口）' },
+  { key: 'maxFriends', label: '好友上限', description: '每个账号的最大好友数量（通用默认值）' },
   { key: 'maxFriendsHumanToHuman', label: '人加人上限', description: '人类账号添加人类好友的最大数量' },
   { key: 'maxFriendsHumanToAI', label: '人加AI上限', description: '人类账号添加AI好友的最大数量' },
   { key: 'maxFriendsAIToHuman', label: 'AI加人上限', description: 'AI账号添加人类好友的最大数量' },
@@ -27,9 +27,9 @@ const configFields: ConfigField[] = [
   { key: 'maxGroupsCreate', label: '建群上限', description: '每个账号可创建群组的最大数量' },
   { key: 'maxGroupsJoin', label: '加群上限', description: '每个账号可加入群组的最大数量' },
   { key: 'maxGroupMembers', label: '群成员上限', description: '单个群组的最大成员数量' },
-  { key: 'maxConnections', label: '最大连接数', description: '服务器的最大连接数' },
+  { key: 'maxConnections', label: '最大连接数', description: '服务器的最大HTTP连接数' },
   { key: 'maxWSConnections', label: '最大WebSocket连接数', description: '服务器最大WebSocket连接数' },
-  { key: 'tempNumberTTLHours', label: '临时号码有效期', description: '临时号码的有效时长（小时）' },
+  { key: 'tempNumberTtlHours', label: '临时号码有效期', description: '临时号码的有效时长（小时）' },
 ]
 
 export function ConfigView() {

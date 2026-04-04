@@ -17,6 +17,9 @@ import {
   getBlacklist,
   addToBlacklist,
   removeFromBlacklist,
+  getServiceStatus,
+  stopServer,
+  restartServer,
 } from '../services/adminService';
 
 const router = Router();
@@ -271,6 +274,38 @@ router.delete('/admin/blacklist/:id', authenticateAdmin, (req: Request, res: Res
     const message = err instanceof Error ? err.message : '从黑名单移除失败';
     const status = message.includes('不在') ? 404 : 500;
     res.status(status).json({ error: message });
+  }
+});
+
+// ─── Service Management (auth required) ─────────────────────────
+// 服务状态/停止/重启
+
+router.get('/admin/service/status', authenticateAdmin, (_req: Request, res: Response) => {
+  try {
+    const status = getServiceStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: '获取服务状态失败' });
+  }
+});
+
+router.post('/admin/service/stop', authenticateAdmin, (_req: Request, res: Response) => {
+  try {
+    res.json({ success: true, message: '服务正在关闭...' });
+    // Send response before stopping
+    stopServer();
+  } catch (err) {
+    res.status(500).json({ error: '停止服务失败' });
+  }
+});
+
+router.post('/admin/service/restart', authenticateAdmin, (_req: Request, res: Response) => {
+  try {
+    res.json({ success: true, message: '服务正在重启...' });
+    // Send response before restarting
+    restartServer();
+  } catch (err) {
+    res.status(500).json({ error: '重启服务失败' });
   }
 });
 

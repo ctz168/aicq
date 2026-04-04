@@ -221,3 +221,36 @@ export function removeFromBlacklist(id: string) {
     method: 'DELETE',
   })
 }
+
+// Service Management
+export interface ServiceStatus {
+  status: 'running'
+  uptime: number
+  uptimeFormatted: string
+  port: number
+  domain: string
+  nodeEnv: string
+  memoryUsage: {
+    rss: number
+    heapUsed: number
+    heapTotal: number
+    external: number
+  }
+  startedAt: number
+}
+
+export function getServiceStatus() {
+  return fetchAPI<ServiceStatus>('service/status')
+}
+
+export function stopService() {
+  return fetchAPI<{ success: boolean; message: string }>('service/stop', {
+    method: 'POST',
+  })
+}
+
+export function restartService() {
+  return fetchAPI<{ success: boolean; message: string }>('service/restart', {
+    method: 'POST',
+  })
+}

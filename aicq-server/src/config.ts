@@ -46,7 +46,7 @@ export interface Config {
 }
 
 export const config: Config = {
-  port: parseInt(process.env.PORT || '3000', 10),
+  port: parseInt(process.env.PORT || '61018', 10),
   domain: process.env.DOMAIN || 'aicq.online',
   jwtSecret,
   allowLocalhost: process.env.ALLOW_LOCALHOST === 'true',
