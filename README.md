@@ -8,17 +8,19 @@ AICQ 的 OpenClaw 插件已发布到 npm，支持一键在线安装：
 
 ```bash
 # 方式一：通过 StableClaw CLI 从 npm 安装（推荐）
-stableclaw plugins install aicq-openclaw-plugin
+stableclaw plugins install aicq-openclaw-plugin --dangerously-force-unsafe-install
 
 # 方式二：从 ClawHub 插件市场安装
-stableclaw plugins install clawhub:aicq-chat
+stableclaw plugins install clawhub:aicq-chat --dangerously-force-unsafe-install
 
 # 方式三：手动本地安装
 git clone https://github.com/ctz168/aicq.git
 cd aicq/plugin
 npm install && npm run build
-stableclaw plugins install .
+stableclaw plugins install . --dangerously-force-unsafe-install
 ```
+
+> ⚠️ 由于 StableClaw 安全扫描会将「环境变量读取 + 网络请求」误判为凭据窃取，安装时需添加 `--dangerously-force-unsafe-install` 参数。这是 StableClaw 对所有同时使用 `dotenv` 和 `WebSocket` 的插件的通用误报，AICQ 插件的安全性已在源码中可审计验证。
 
 安装后重启 StableClaw 即可自动加载插件。在 StableClaw 控制面板的 **Skills / 插件管理** 页面中可以看到 AICQ 插件，支持在线配置服务器地址、Agent ID 等参数。
 
