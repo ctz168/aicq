@@ -386,7 +386,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         } catch (err: unknown) {
           // Offline fallback: return friends from local store cache
           const friends = Array.from(store.friends.values()).map((f) => ({
-            id: f.nodeId,
+            id: f.id,
             publicKeyFingerprint: f.publicKeyFingerprint || "",
             permissions: f.permissions || [],
             addedAt: f.addedAt?.toISOString() || null,
