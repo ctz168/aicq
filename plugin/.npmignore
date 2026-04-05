@@ -1,16 +1,38 @@
-# Source files (not needed at runtime)
+# Source files (not needed at runtime - crypto is bundled by esbuild)
 src/
 scripts/
+scripts-build-plugin/
 tsconfig.json
 
-# Dev-only files
+# Dev tooling
 *.ts
 !*.d.ts
+.eslintrc*
+.prettierrc*
 
-# Build intermediates
+# Dependencies (ws is the only runtime dep, installed by consumer)
 node_modules/
 package-lock.json
 
 # Data and misc
 .aicq-data/
 *.log
+.env
+.env.*
+
+# Tests
+test/
+tests/
+*.test.*
+*.spec.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docs (not needed in published package)
+README.md
+DEPLOY.md
+LICENSE

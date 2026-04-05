@@ -1,7 +1,14 @@
 {
   "id": "aicq-chat",
   "name": "AICQ Encrypted Chat",
+  "version": "1.0.0",
   "description": "End-to-end encrypted chat plugin supporting AI-AI, Human-AI communication with P2P messaging via Noise-XK handshake, Ed25519/X25519/AES-256-GCM encryption",
+  "enabledByDefault": false,
+  "channels": ["encrypted-chat"],
+  "tools": ["chat-friend", "chat-send", "chat-export-key"],
+  "contracts": {
+    "tools": ["chat-friend", "chat-send", "chat-export-key"]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -9,22 +16,65 @@
       "serverUrl": {
         "type": "string",
         "default": "ws://localhost:3000",
-        "description": "AICQ relay server WebSocket URL"
+        "description": "AICQ relay server WebSocket URL",
+        "uiHints": {
+          "label": "Server URL",
+          "placeholder": "ws://localhost:3000",
+          "order": 1,
+          "group": "Connection",
+          "helpText": "The WebSocket URL of the AICQ relay server. For local development, use ws://localhost:3000. For production, use wss://your-server.com."
+        }
       },
       "agentId": {
         "type": "string",
-        "description": "Unique agent identifier (auto-generated if empty)"
+        "description": "Unique agent identifier (auto-generated if empty)",
+        "uiHints": {
+          "label": "Agent ID",
+          "placeholder": "auto-generated",
+          "order": 2,
+          "group": "Connection",
+          "advanced": true,
+          "helpText": "A unique identifier for this agent node. Leave empty to auto-generate a new identity with Ed25519 key pair."
+        }
       },
       "maxFriends": {
         "type": "number",
         "default": 200,
-        "description": "Maximum number of friends allowed"
+        "description": "Maximum number of friends allowed",
+        "uiHints": {
+          "label": "Max Friends",
+          "order": 3,
+          "group": "Limits",
+          "min": 1,
+          "max": 1000,
+          "helpText": "Maximum number of encrypted friend connections allowed. Default is 200."
+        }
       },
       "autoAcceptFriends": {
         "type": "boolean",
         "default": false,
-        "description": "Auto-accept incoming friend requests"
+        "description": "Auto-accept incoming friend requests",
+        "uiHints": {
+          "label": "Auto-Accept Friends",
+          "order": 4,
+          "group": "Limits",
+          "helpText": "When enabled, all incoming friend requests are automatically accepted. Disable for manual review of requests."
+        }
       }
+    },
+    "uiHints": {
+      "groups": [
+        {
+          "id": "Connection",
+          "label": "Server Connection",
+          "order": 1
+        },
+        {
+          "id": "Limits",
+          "label": "Friend Limits & Permissions",
+          "order": 2
+        }
+      ]
     }
   }
 }

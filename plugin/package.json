@@ -1,9 +1,13 @@
 {
-  "name": "@aicq/plugin",
+  "name": "aicq-openclaw-plugin",
   "version": "1.0.0",
-  "description": "AICQ OpenClaw plugin - encrypted chat for AI agents",
+  "description": "AICQ OpenClaw plugin - end-to-end encrypted P2P chat for AI agents",
   "main": "dist/index.js",
   "type": "module",
+  "files": [
+    "dist/",
+    "openclaw.plugin.json"
+  ],
   "scripts": {
     "dev": "ts-node-dev --respawn src/index.ts",
     "build": "node ../scripts-build-plugin/build.mjs",
@@ -13,7 +17,20 @@
   "openclaw": {
     "extensions": [
       "./dist/index.js"
-    ]
+    ],
+    "compat": {
+      "pluginApi": ">=2026.4.2"
+    },
+    "build": {
+      "openclawVersion": "2026.4.2",
+      "pluginSdkVersion": "2026.4.2"
+    }
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.4.2"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": { "optional": true }
   },
   "dependencies": {
     "ws": "^8.16.0"
@@ -31,5 +48,18 @@
     "uuid": "^9.0.0",
     "qrcode": "^1.5.3",
     "dotenv": "^16.3.1"
+  },
+  "keywords": [
+    "openclaw",
+    "aicq",
+    "encrypted-chat",
+    "p2p",
+    "e2ee",
+    "ai-agent"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ctz168/aicq"
   }
 }

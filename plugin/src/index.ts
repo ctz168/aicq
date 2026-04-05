@@ -24,6 +24,8 @@ import { ChatExportKeyTool } from "./tools/chatExportKey.js";
 import { BeforeToolCallHook } from "./hooks/beforeToolCall.js";
 import { MessageSendingHook } from "./hooks/messageSending.js";
 import type { Logger } from "./types.js";
+import { getManagementHTML } from "./ui/management-page.js";
+import { createManagementHandler } from "./ui/management-routes.js";
 
 // JSON Schema definitions for tools
 const CHAT_FRIEND_PARAMS = {
@@ -328,8 +330,351 @@ const plugin = definePluginEntry({
       });
     }
 
+    // ── Register Gateway Methods (Management UI) ──────────────
+    if (api.registerGatewayMethod) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gwParams = (p: any): any => p || {};
+
+      // 1. aicq.status — Overall plugin status
+      api.registerGatewayMethod("aicq.status", async (params: unknown) => {
+        try {
+          return {
+            connected: serverClient.isConnected(),
+            agentId: aicqAgentId,
+            fingerprint: identityService.getPublicKeyFingerprint(),
+            friendCount: store.getFriendCount(),
+            sessionCount: store.sessions.size,
+            serverUrl,
+          };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.status error: " + (err?.message || String(err)));
+          return { error: "Failed to get status: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 2. aicq.friends.list — List all friends with details
+      api.registerGatewayMethod("aicq.friends.list", async (params: unknown) => {
+        try {
+          const resp = await fetch(serverUrl + "/api/v1/friends?nodeId=" + aicqAgentId);
+          if (!resp.ok) return { error: "Server error: " + await resp.text() };
+          const data = await resp.json() as Record<string, unknown>;
+          const friends = (data.friends || []) as Array<Record<string, unknown>>;
+          // Enrich with local store data (permissions, aiName, friendType)
+          const enriched = friends.map((f) => {
+            const localFriend = store.getFriend(f.nodeId as string);
+            return {
+              id: f.nodeId,
+              publicKeyFingerprint: f.publicKeyFingerprint || (localFriend?.publicKeyFingerprint || ""),
+              permissions: f.permissions || localFriend?.permissions || [],
+              addedAt: f.addedAt || localFriend?.addedAt?.toISOString() || null,
+              lastMessageAt: f.lastMessageAt || localFriend?.lastMessageAt?.toISOString() || null,
+              friendType: f.friendType || localFriend?.friendType || null,
+              aiName: f.aiName || localFriend?.aiName || null,
+            };
+          });
+          return { friends: enriched };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.friends.list error: " + (err?.message || String(err)));
+          return { error: "Failed to list friends: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 3. aicq.friends.add — Add a friend
+      api.registerGatewayMethod("aicq.friends.add", async (params: unknown) => {
+        try {
+          const p = gwParams(params);
+          const target = p.target as string;
+          if (!target) return { success: false, message: "Missing target parameter (temp number or friend ID)" };
+
+          // Resolve temp number if it's a 6-digit number
+          const isTempNumber = /^\d{6}$/.test(target);
+          let friendId = target;
+
+          if (isTempNumber) {
+            const resolveResp = await fetch(serverUrl + "/api/v1/temp-number/" + target);
+            if (!resolveResp.ok) return { success: false, message: "Temp number not found or expired" };
+            const resolveData = await resolveResp.json() as Record<string, unknown>;
+            friendId = resolveData.nodeId as string;
+          }
+
+          // Initiate handshake
+          const hsResp = await fetch(serverUrl + "/api/v1/handshake/initiate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ requesterId: aicqAgentId, targetTempNumber: target }),
+          });
+          if (!hsResp.ok) return { success: false, message: "Handshake failed: " + await hsResp.text() };
+          const hsData = await hsResp.json() as Record<string, unknown>;
+
+          logger.info("[Gateway] Friend request sent to " + friendId);
+          return {
+            success: true,
+            message: "Friend request sent to " + friendId,
+            sessionId: hsData.sessionId,
+            targetNodeId: friendId,
+          };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.friends.add error: " + (err?.message || String(err)));
+          return { success: false, message: "Failed to add friend: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 4. aicq.friends.remove — Remove a friend
+      api.registerGatewayMethod("aicq.friends.remove", async (params: unknown) => {
+        try {
+          const p = gwParams(params);
+          const friendId = p.friendId as string;
+          if (!friendId) return { success: false, message: "Missing friendId parameter" };
+
+          const rmResp = await fetch(serverUrl + "/api/v1/friends/" + friendId, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nodeId: aicqAgentId }),
+          });
+          if (!rmResp.ok) return { success: false, message: "Failed to remove friend: " + await rmResp.text() };
+
+          // Also remove from local store
+          store.removeFriend(friendId);
+
+          logger.info("[Gateway] Friend " + friendId + " removed");
+          return { success: true, message: "Friend " + friendId + " removed" };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.friends.remove error: " + (err?.message || String(err)));
+          return { success: false, message: "Failed to remove friend: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 5. aicq.friends.permissions — Get friend permissions
+      api.registerGatewayMethod("aicq.friends.permissions", async (params: unknown) => {
+        try {
+          const p = gwParams(params);
+          const friendId = p.friendId as string;
+          if (!friendId) return { error: "Missing friendId parameter" };
+
+          const resp = await fetch(serverUrl + "/api/v1/friends/" + friendId + "/permissions?nodeId=" + aicqAgentId);
+          if (!resp.ok) return { error: "Server error: " + await resp.text() };
+          const data = await resp.json() as Record<string, unknown>;
+
+          return { permissions: data.permissions || [] };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.friends.permissions error: " + (err?.message || String(err)));
+          return { error: "Failed to get permissions: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 6. aicq.friends.setPermissions — Update friend permissions
+      api.registerGatewayMethod("aicq.friends.setPermissions", async (params: unknown) => {
+        try {
+          const p = gwParams(params);
+          const friendId = p.friendId as string;
+          const permissions = p.permissions as ('chat' | 'exec')[];
+          if (!friendId) return { success: false, message: "Missing friendId parameter" };
+          if (!permissions || !Array.isArray(permissions)) {
+            return { success: false, message: "Missing or invalid permissions array" };
+          }
+
+          const resp = await fetch(serverUrl + "/api/v1/friends/" + friendId + "/permissions", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nodeId: aicqAgentId, permissions }),
+          });
+          if (!resp.ok) return { success: false, message: "Failed to update permissions: " + await resp.text() };
+
+          // Update local store
+          const localFriend = store.getFriend(friendId);
+          if (localFriend) {
+            localFriend.permissions = permissions;
+            store.save();
+          }
+
+          logger.info("[Gateway] Permissions updated for friend " + friendId);
+          return { success: true, message: "Permissions updated for friend " + friendId };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.friends.setPermissions error: " + (err?.message || String(err)));
+          return { success: false, message: "Failed to set permissions: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 7. aicq.friends.requests — List pending friend requests
+      api.registerGatewayMethod("aicq.friends.requests", async (params: unknown) => {
+        try {
+          const resp = await fetch(serverUrl + "/api/v1/friends/requests?nodeId=" + aicqAgentId);
+          if (!resp.ok) return { error: "Server error: " + await resp.text() };
+          const data = await resp.json() as Record<string, unknown>;
+
+          return { requests: data.requests || [] };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.friends.requests error: " + (err?.message || String(err)));
+          return { error: "Failed to list requests: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 8. aicq.friends.acceptRequest — Accept a friend request
+      api.registerGatewayMethod("aicq.friends.acceptRequest", async (params: unknown) => {
+        try {
+          const p = gwParams(params);
+          const requestId = p.requestId as string;
+          if (!requestId) return { success: false, message: "Missing requestId parameter" };
+
+          const body: Record<string, unknown> = {};
+          if (p.permissions && Array.isArray(p.permissions)) {
+            body.permissions = p.permissions;
+          }
+
+          const resp = await fetch(serverUrl + "/api/v1/friends/requests/" + requestId + "/accept", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!resp.ok) return { success: false, message: "Failed to accept request: " + await resp.text() };
+
+          logger.info("[Gateway] Friend request " + requestId + " accepted");
+          return { success: true, message: "Friend request accepted" };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.friends.acceptRequest error: " + (err?.message || String(err)));
+          return { success: false, message: "Failed to accept request: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 9. aicq.friends.rejectRequest — Reject a friend request
+      api.registerGatewayMethod("aicq.friends.rejectRequest", async (params: unknown) => {
+        try {
+          const p = gwParams(params);
+          const requestId = p.requestId as string;
+          if (!requestId) return { success: false, message: "Missing requestId parameter" };
+
+          const resp = await fetch(serverUrl + "/api/v1/friends/requests/" + requestId + "/reject", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (!resp.ok) return { success: false, message: "Failed to reject request: " + await resp.text() };
+
+          logger.info("[Gateway] Friend request " + requestId + " rejected");
+          return { success: true, message: "Friend request rejected" };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.friends.rejectRequest error: " + (err?.message || String(err)));
+          return { success: false, message: "Failed to reject request: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 10. aicq.sessions.list — List active encrypted sessions
+      api.registerGatewayMethod("aicq.sessions.list", async (params: unknown) => {
+        try {
+          const sessions = Array.from(store.sessions.values()).map((s) => ({
+            peerId: s.peerId,
+            createdAt: s.createdAt.toISOString(),
+            messageCount: s.messageCount,
+          }));
+          return { sessions };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.sessions.list error: " + (err?.message || String(err)));
+          return { error: "Failed to list sessions: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 11. aicq.identity.info — Get AICQ agent identity info
+      api.registerGatewayMethod("aicq.identity.info", async (params: unknown) => {
+        try {
+          return {
+            agentId: aicqAgentId,
+            publicKeyFingerprint: identityService.getPublicKeyFingerprint(),
+            connected: serverClient.isConnected(),
+            serverUrl,
+          };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.identity.info error: " + (err?.message || String(err)));
+          return { error: "Failed to get identity info: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 12. aicq.agent.create — Create a new agent identity
+      api.registerGatewayMethod("aicq.agent.create", async (params: unknown) => {
+        try {
+          const p = gwParams(params);
+          const newAgentId = p.agentId as string | undefined;
+
+          // Create new Ed25519 keys using IdentityService
+          const newIdentityService = new IdentityService(store, logger);
+          if (newAgentId) {
+            newIdentityService.initialize(newAgentId);
+          } else {
+            newIdentityService.initialize();
+          }
+
+          const newId = newIdentityService.getAgentId();
+          const newFingerprint = newIdentityService.getPublicKeyFingerprint();
+
+          logger.info("[Gateway] New agent identity created: " + newId);
+          return {
+            agentId: newId,
+            publicKeyFingerprint: newFingerprint,
+          };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.agent.create error: " + (err?.message || String(err)));
+          return { error: "Failed to create agent: " + (err?.message || String(err)) };
+        }
+      });
+
+      // 13. aicq.agent.delete — Delete an agent identity
+      api.registerGatewayMethod("aicq.agent.delete", async (params: unknown) => {
+        try {
+          const p = gwParams(params);
+          const targetAgentId = p.agentId as string;
+          if (!targetAgentId) return { success: false, message: "Missing agentId parameter" };
+
+          if (targetAgentId !== aicqAgentId) {
+            return { success: false, message: "Can only delete the current agent identity" };
+          }
+
+          // Clear local identity data
+          identityService.cleanup();
+          chatChannel.cleanup();
+          serverClient.disconnectWebSocket();
+
+          // Clear store data
+          store.friends.clear();
+          store.sessions.clear();
+          store.pendingHandshakes.clear();
+          store.pendingRequests = [];
+          store.tempNumbers = [];
+          store.save();
+
+          logger.info("[Gateway] Agent identity deleted: " + targetAgentId);
+          return { success: true, message: "Agent identity deleted. Restart the plugin to create a new identity." };
+        } catch (err: any) {
+          logger.error("[Gateway] aicq.agent.delete error: " + (err?.message || String(err)));
+          return { success: false, message: "Failed to delete agent: " + (err?.message || String(err)) };
+        }
+      });
+
+      logger.info("[Init] Registered 13 gateway methods for management UI");
+    }
+
+    // ── Register HTTP Routes (Management UI) ──────────────
+    if (api.registerHttpRoute) {
+      const managementHtml = getManagementHTML();
+      const managementHandler = createManagementHandler({
+        store,
+        identityService,
+        serverClient,
+        serverUrl,
+        aicqAgentId,
+        logger,
+        html: managementHtml,
+      });
+      api.registerHttpRoute({
+        path: "/aicq-chat",
+        auth: "gateway",
+        match: "prefix",
+        handler: managementHandler,
+      });
+      logger.info("[Init] Management UI registered at /plugins/aicq-chat/");
+    }
+
     logger.info("═══════════════════════════════════════════════");
     logger.info("  AICQ Plugin activated successfully!");
+    logger.info("  Management UI: /plugins/aicq-chat/");
     logger.info("═══════════════════════════════════════════════");
   },
 });

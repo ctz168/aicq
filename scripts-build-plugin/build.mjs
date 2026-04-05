@@ -18,9 +18,28 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(import.meta.dirname, "..", "plugin");
 const DIST = path.join(ROOT, "dist");
+const MONO_ROOT = path.resolve(import.meta.dirname, "..");
 
-// Resolve binaries from local node_modules
-const tscBin = path.join(ROOT, "node_modules", ".bin", "tsc");
+// Resolve binaries — try local first, then monorepo root (hoisted deps)
+function resolveBin(name) {
+  const local = path.join(ROOT, "node_modules", ".bin", name);
+  if (fs.existsSync(local)) return local;
+  const hoisted = path.join(MONO_ROOT, "node_modules", ".bin", name);
+  if (fs.existsSync(hoisted)) return hoisted;
+  return name; // fallback to PATH
+}
+function resolveModule(pkg, subpath) {
+  // Try local, then monorepo root
+  for (const base of [ROOT, MONO_ROOT]) {
+    const candidate = path.join(base, "node_modules", ...pkg.split("/"), ...(subpath || []));
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  // Last resort: use require.resolve from ROOT
+  try { return require.resolve(path.join(pkg, ...(subpath || []).join("/"))); } catch { /* ignore */ }
+  return path.join(ROOT, "node_modules", ...pkg.split("/"), ...(subpath || []));
+}
+
+const tscBin = resolveBin("tsc");
 
 // Step 1: TypeScript compile
 console.log("[1/3] Compiling TypeScript...");
@@ -28,7 +47,8 @@ execSync(`"${tscBin}"`, { cwd: ROOT, stdio: "pipe" });
 
 // Step 2: esbuild bundle (use API directly from node_modules)
 console.log("[2/3] Bundling with esbuild...");
-const { buildSync } = await import(path.join(ROOT, "node_modules", "esbuild", "lib", "main.js"));
+const esbuildEntry = resolveModule("esbuild", ["lib", "main.js"]);
+const { buildSync } = await import(esbuildEntry);
 buildSync({
   entryPoints: [path.join(DIST, "index.js")],
   bundle: true,
