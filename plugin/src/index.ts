@@ -7,6 +7,7 @@
  */
 
 import * as path from "path";
+import * as http from "http";
 import * as dotenv from "dotenv";
 dotenv.config();
 
@@ -651,30 +652,59 @@ const plugin = definePluginEntry({
       logger.info("[Init] Registered 13 gateway methods for management UI");
     }
 
-    // ── Register HTTP Routes (Management UI) ──────────────
-    if (api.registerHttpRoute) {
-      const managementHtml = getManagementHTML();
-      const managementHandler = createManagementHandler({
-        store,
-        identityService,
-        serverClient,
-        serverUrl,
-        aicqAgentId,
-        logger,
-        html: managementHtml,
+    // ── Start Standalone HTTP Server for Management UI ──────────────
+    const managementHtml = getManagementHTML();
+    const managementHandler = createManagementHandler({
+      store,
+      identityService,
+      serverClient,
+      serverUrl,
+      aicqAgentId,
+      logger,
+      html: managementHtml,
+    });
+
+    const mgmtPort = parseInt(process.env.AICQ_MGMT_PORT || "8099", 10);
+    const mgmtServer = http.createServer((req, res) => {
+      managementHandler(req, res).catch((err) => {
+        logger.error("[HTTP] Management server error: " + (err instanceof Error ? err.message : err));
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "text/plain" });
+        }
+        res.end("Internal Server Error");
       });
+    });
+
+    mgmtServer.listen(mgmtPort, "127.0.0.1", () => {
+      logger.info("[Init] Management UI HTTP server running at http://127.0.0.1:" + mgmtPort + "/");
+    });
+
+    mgmtServer.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") {
+        logger.warn("[Init] Management UI port " + mgmtPort + " already in use, trying " + (mgmtPort + 1));
+        mgmtServer.close();
+        mgmtServer.listen(mgmtPort + 1, "127.0.0.1", () => {
+          logger.info("[Init] Management UI HTTP server running at http://127.0.0.1:" + (mgmtPort + 1) + "/");
+        });
+      } else {
+        logger.error("[Init] Management UI HTTP server error: " + err.message);
+      }
+    });
+
+    // Also register via gateway route if available (for future compatibility)
+    if (api.registerHttpRoute) {
       api.registerHttpRoute({
         path: "/aicq-chat",
         auth: "gateway",
         match: "prefix",
         handler: managementHandler,
       });
-      logger.info("[Init] Management UI registered at /plugins/aicq-chat/");
+      logger.info("[Init] Management UI also registered via gateway at /plugins/aicq-chat/");
     }
 
     logger.info("═══════════════════════════════════════════════");
     logger.info("  AICQ Plugin activated successfully!");
-    logger.info("  Management UI: /plugins/aicq-chat/");
+    logger.info("  Management UI: http://127.0.0.1:" + mgmtPort + "/");
     logger.info("═══════════════════════════════════════════════");
   },
 });

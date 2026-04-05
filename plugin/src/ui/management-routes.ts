@@ -252,9 +252,10 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
 
   return async (req: Req, res: Res) => {
     const subPath = parseSubPath(req.url || "/", "/aicq-chat");
+    const rawPath = req.url || "/";
 
-    // ── Serve HTML page ──
-    if (subPath === "/" || subPath === "/ui" || subPath === "") {
+    // ── Serve HTML page (root or /ui) ──
+    if (subPath === "/" || subPath === "/ui" || subPath === "" || rawPath === "/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(html);
       return;
