@@ -124,6 +124,22 @@ export interface TempNumberRecord {
   expiresAt: Date;
 }
 
+/** Queued offline message for later delivery. */
+export interface OfflineMessage {
+  id: string;
+  targetId: string;
+  encryptedData: string; // base64-encoded wire-format message
+  timestamp: number;
+  retryCount: number;
+  maxRetries: number;
+}
+
+/** Network connectivity state. */
+export type ConnectionState = 'online' | 'offline' | 'reconnecting';
+
+/** Callback for connection state changes. */
+export type ConnectionStateCallback = (state: ConnectionState, previousState: ConnectionState) => void;
+
 /** OpenClaw plugin API surface (simplified). */
 export interface OpenClawAPI {
   registerChannel(name: string, handler: ChannelHandler): void;

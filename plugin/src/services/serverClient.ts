@@ -1,10 +1,16 @@
 /**
  * Server Client — handles REST API calls and WebSocket communication
  * with the AICQ relay server.
+ *
+ * Features:
+ *   - Exponential backoff reconnection (1s → 2s → 4s → ... → 60s max)
+ *   - Connection state tracking (online/offline/reconnecting)
+ *   - Offline message flush on reconnection
+ *   - Configurable timeouts
  */
 
 import WebSocket from "ws";
-import type { Logger, FriendInfo, FileTransferSession } from "../types.js";
+import type { Logger, FriendInfo, FileTransferSession, ConnectionState, ConnectionStateCallback } from "../types.js";
 import type { PluginStore } from "../store.js";
 
 /** REST API response wrapper. */
@@ -14,23 +20,101 @@ interface ApiResponse<T = unknown> {
   error?: string;
 }
 
+/** Configuration for the ServerClient. */
+export interface ServerClientConfig {
+  /** Initial reconnect delay in ms (default: 1000). */
+  initialReconnectDelay?: number;
+  /** Maximum reconnect delay in ms (default: 60000). */
+  maxReconnectDelay?: number;
+  /** Multiplier for exponential backoff (default: 2). */
+  reconnectBackoffFactor?: number;
+  /** WebSocket heartbeat interval in ms (default: 30000). */
+  heartbeatIntervalMs?: number;
+  /** HTTP request timeout in ms (default: 30000). */
+  requestTimeoutMs?: number;
+}
+
+const DEFAULT_CONFIG: Required<ServerClientConfig> = {
+  initialReconnectDelay: 1000,
+  maxReconnectDelay: 60000,
+  reconnectBackoffFactor: 2,
+  heartbeatIntervalMs: 30000,
+  requestTimeoutMs: 30000,
+};
+
 export class ServerClient {
   private serverUrl: string;
   private store: PluginStore;
   private logger: Logger;
+  private config: Required<ServerClientConfig>;
 
   private ws: WebSocket | null = null;
   private wsReconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private wsConnected = false;
 
+  /** Current connection state. */
+  private connectionState: ConnectionState = "offline";
+
+  /** Reconnect state for exponential backoff. */
+  private reconnectDelay: number = DEFAULT_CONFIG.initialReconnectDelay;
+  private reconnectAttempts: number = 0;
+
+  /** Callbacks for connection state changes. */
+  private stateChangeCallbacks: ConnectionStateCallback[] = [];
+
   /** WebSocket message callbacks by type. */
   private wsHandlers: Map<string, Array<(data: unknown) => void>> = new Map();
 
-  constructor(serverUrl: string, store: PluginStore, logger: Logger) {
+  constructor(serverUrl: string, store: PluginStore, logger: Logger, config?: ServerClientConfig) {
     this.serverUrl = serverUrl;
     this.store = store;
     this.logger = logger;
+    this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  // ----------------------------------------------------------------
+  //  Connection state management
+  // ----------------------------------------------------------------
+
+  /**
+   * Get the current connection state.
+   */
+  getConnectionState(): ConnectionState {
+    return this.connectionState;
+  }
+
+  /**
+   * Register a callback for connection state changes.
+   */
+  onConnectionStateChange(callback: ConnectionStateCallback): void {
+    this.stateChangeCallbacks.push(callback);
+  }
+
+  /**
+   * Remove a connection state callback.
+   */
+  offConnectionStateChange(callback: ConnectionStateCallback): void {
+    this.stateChangeCallbacks = this.stateChangeCallbacks.filter((cb) => cb !== callback);
+  }
+
+  /**
+   * Update connection state and notify listeners.
+   */
+  private setConnectionState(newState: ConnectionState): void {
+    const previousState = this.connectionState;
+    if (previousState === newState) return;
+
+    this.connectionState = newState;
+    this.logger.info(`[Server] Connection state: ${previousState} → ${newState}`);
+
+    for (const callback of this.stateChangeCallbacks) {
+      try {
+        callback(newState, previousState);
+      } catch (err) {
+        this.logger.error("[Server] Connection state callback error:", err);
+      }
+    }
   }
 
   // ----------------------------------------------------------------
@@ -41,22 +125,54 @@ export class ServerClient {
    * Connect to the server via WebSocket and start heartbeat.
    */
   connectWebSocket(): void {
-    // Build WebSocket URL with explicit port 443
-    const baseUrl = this.serverUrl.replace(/^http/, "ws");
-    const url = new URL(baseUrl + "/ws");
-    url.port = "443";
-    url.protocol = "wss:";
-    const wsUrl = url.toString();
-    this.logger.info("[Server] Connecting WebSocket to " + wsUrl);
+    // Prevent duplicate connections
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      this.logger.debug("[Server] WebSocket already connecting/connected");
+      return;
+    }
 
-    this.ws = new WebSocket(wsUrl);
+    // Build WebSocket URL
+    let wsUrl: string;
+    try {
+      const baseUrl = this.serverUrl.replace(/^http/, "ws");
+      const url = new URL(baseUrl + "/ws");
+      url.port = "443";
+      url.protocol = "wss:";
+      wsUrl = url.toString();
+    } catch {
+      // Fallback for simple URL strings
+      wsUrl = this.serverUrl.replace(/^https?/, "wss") + "/ws";
+    }
+
+    this.logger.info("[Server] Connecting WebSocket to " + wsUrl);
+    this.setConnectionState("reconnecting");
+
+    try {
+      this.ws = new WebSocket(wsUrl);
+    } catch (err) {
+      this.logger.error("[Server] Failed to create WebSocket:", err);
+      this.setConnectionState("offline");
+      this.scheduleReconnect();
+      return;
+    }
+
+    // Connection timeout
+    const connectTimeout = setTimeout(() => {
+      if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+        this.logger.warn("[Server] WebSocket connection timeout");
+        this.ws.terminate();
+      }
+    }, this.config.requestTimeoutMs);
 
     this.ws.on("open", () => {
+      clearTimeout(connectTimeout);
       this.wsConnected = true;
+      this.reconnectDelay = this.config.initialReconnectDelay;
+      this.reconnectAttempts = 0;
+      this.setConnectionState("online");
       this.logger.info("[Server] WebSocket connected");
 
-      // Authenticate with the server using 'online' message type + nodeId
-      // The server expects type: "online" with nodeId field for WS registration
+      // Authenticate with the server
       this.wsSend({
         type: "online",
         nodeId: this.store.agentId,
@@ -77,31 +193,32 @@ export class ServerClient {
     });
 
     this.ws.on("close", (code, reason) => {
+      clearTimeout(connectTimeout);
       this.wsConnected = false;
       this.logger.info("[Server] WebSocket closed:", code, reason.toString());
       this.stopHeartbeat();
+      this.setConnectionState("offline");
       this.scheduleReconnect();
     });
 
     this.ws.on("error", (err) => {
+      clearTimeout(connectTimeout);
       this.logger.error("[Server] WebSocket error:", err.message);
     });
   }
 
   /**
-   * Disconnect the WebSocket.
+   * Disconnect the WebSocket and stop reconnection.
    */
   disconnectWebSocket(): void {
     this.stopHeartbeat();
-    if (this.wsReconnectTimer) {
-      clearTimeout(this.wsReconnectTimer);
-      this.wsReconnectTimer = null;
-    }
+    this.cancelReconnect();
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
     this.wsConnected = false;
+    this.setConnectionState("offline");
   }
 
   /**
@@ -122,13 +239,67 @@ export class ServerClient {
 
   /**
    * Send a JSON message over the WebSocket.
+   * Returns true if the message was sent, false if offline.
    */
-  wsSend(data: unknown): void {
+  wsSend(data: unknown): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
-    } else {
-      this.logger.warn("[Server] Cannot send — WebSocket not open");
+      return true;
     }
+    this.logger.warn("[Server] Cannot send — WebSocket not open");
+    return false;
+  }
+
+  // ----------------------------------------------------------------
+  //  Exponential backoff reconnection
+  // ----------------------------------------------------------------
+
+  /**
+   * Schedule a reconnection attempt with exponential backoff.
+   *
+   * Delay formula: min(initialDelay * backoffFactor^attempts, maxDelay)
+   * With jitter: delay * (0.75 + Math.random() * 0.5) to avoid thundering herd
+   */
+  private scheduleReconnect(): void {
+    if (this.wsReconnectTimer) return;
+
+    // Add jitter to prevent thundering herd
+    const jitter = 0.75 + Math.random() * 0.5;
+    const delay = Math.min(
+      this.reconnectDelay * jitter,
+      this.config.maxReconnectDelay,
+    );
+
+    this.reconnectAttempts++;
+    this.logger.info(
+      `[Server] Reconnecting in ${Math.round(delay)}ms (attempt #${this.reconnectAttempts})`,
+    );
+
+    this.setConnectionState("reconnecting");
+
+    this.wsReconnectTimer = setTimeout(() => {
+      this.wsReconnectTimer = null;
+      this.logger.info("[Server] Attempting WebSocket reconnect...");
+      this.connectWebSocket();
+    }, delay);
+
+    // Increase delay for next attempt
+    this.reconnectDelay = Math.min(
+      this.reconnectDelay * this.config.reconnectBackoffFactor,
+      this.config.maxReconnectDelay,
+    );
+  }
+
+  /**
+   * Cancel a pending reconnection.
+   */
+  private cancelReconnect(): void {
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+    this.reconnectDelay = this.config.initialReconnectDelay;
+    this.reconnectAttempts = 0;
   }
 
   // ----------------------------------------------------------------
@@ -268,9 +439,10 @@ export class ServerClient {
 
   /**
    * Send a relay message via the server (WebSocket fallback for P2P).
+   * Returns true if sent, false if offline.
    */
-  sendRelayMessage(targetId: string, payload: unknown): void {
-    this.wsSend({
+  sendRelayMessage(targetId: string, payload: unknown): boolean {
+    return this.wsSend({
       type: "relay",
       targetId,
       payload,
@@ -285,11 +457,17 @@ export class ServerClient {
   private async fetchPost<T>(path: string, body: unknown): Promise<T | null> {
     const url = this.serverUrl + path;
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+
       const resp = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (!resp.ok) {
         const text = await resp.text();
@@ -299,7 +477,11 @@ export class ServerClient {
 
       return await resp.json() as T;
     } catch (err) {
-      this.logger.error(`[Server] API request failed for ${path}:`, err);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        this.logger.error(`[Server] API request timeout for ${path}`);
+      } else {
+        this.logger.error(`[Server] API request failed for ${path}:`, err);
+      }
       return null;
     }
   }
@@ -307,7 +489,12 @@ export class ServerClient {
   private async fetchGet<T>(path: string): Promise<T | null> {
     const url = this.serverUrl + path;
     try {
-      const resp = await fetch(url);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+
       if (!resp.ok) {
         const text = await resp.text();
         this.logger.error(`[Server] API error ${resp.status} on ${path}: ${text}`);
@@ -315,7 +502,11 @@ export class ServerClient {
       }
       return await resp.json() as T;
     } catch (err) {
-      this.logger.error(`[Server] GET request failed for ${path}:`, err);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        this.logger.error(`[Server] GET request timeout for ${path}`);
+      } else {
+        this.logger.error(`[Server] GET request failed for ${path}:`, err);
+      }
       return null;
     }
   }
@@ -323,11 +514,16 @@ export class ServerClient {
   private async del(path: string, body?: unknown): Promise<boolean> {
     const url = this.serverUrl + path;
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+
       const resp = await fetch(url, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       return resp.ok;
     } catch (err) {
       this.logger.error(`[Server] DELETE request failed for ${path}:`, err);
@@ -338,11 +534,16 @@ export class ServerClient {
   private async post(path: string, body: unknown): Promise<boolean> {
     const url = this.serverUrl + path;
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+
       const resp = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       return resp.ok;
     } catch (err) {
       this.logger.error(`[Server] API request failed for ${path}:`, err);
@@ -365,9 +566,10 @@ export class ServerClient {
   }
 
   private startHeartbeat(): void {
+    this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
       this.wsSend({ type: "ping", agentId: this.store.agentId, timestamp: Date.now() });
-    }, 30_000);
+    }, this.config.heartbeatIntervalMs);
   }
 
   private stopHeartbeat(): void {
@@ -375,14 +577,5 @@ export class ServerClient {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
-  }
-
-  private scheduleReconnect(): void {
-    if (this.wsReconnectTimer) return;
-    this.wsReconnectTimer = setTimeout(() => {
-      this.wsReconnectTimer = null;
-      this.logger.info("[Server] Attempting WebSocket reconnect...");
-      this.connectWebSocket();
-    }, 5_000);
   }
 }

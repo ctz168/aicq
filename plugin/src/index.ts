@@ -161,10 +161,17 @@ const plugin = definePluginEntry({
     const serverUrl = config.serverUrl;
     const aicqAgentId = identityService.getAgentId();
 
-    // WebSocket to AICQ server
+    // WebSocket to AICQ server — with exponential backoff reconnection
     try { serverClient.connectWebSocket(); } catch (e) {
       logger.warn("[Init] WS connect failed: " + (e instanceof Error ? e.message : e));
     }
+
+    // Listen for connection state changes
+    serverClient.onConnectionStateChange((newState, prevState) => {
+      logger.info("[Init] Connection state changed: " + prevState + " → " + newState);
+    });
+
+    // Handle relay messages (encrypted chat data from server)
     serverClient.onWsMessage("relay", (data: unknown) => {
       const msg = data as Record<string, unknown>;
       if (!msg?.payload) return;
@@ -175,10 +182,16 @@ const plugin = definePluginEntry({
         } catch (_e) { /* ignore decode/decrypt errors */ }
       }
     });
+
+    // Periodic cleanup tasks
     setInterval(() => {
-      if (!serverClient.isConnected()) { try { serverClient.connectWebSocket(); } catch (_e) { /* ignore */ } }
+      store.cleanupExpiredTempNumbers();
+      store.cleanupExpiredOfflineMessages();
     }, 60_000);
-    setInterval(() => store.cleanupExpiredTempNumbers(), 60_000);
+
+    // Note: Reconnection is handled internally by ServerClient with exponential backoff.
+    // No need for a separate reconnect interval — ServerClient will auto-reconnect
+    // with delays: 1s → 2s → 4s → 8s → 16s → 32s → 60s (max)
 
     // ── Register Tool: chat-friend ─────────────────────────────────
     api.registerTool({
@@ -337,15 +350,17 @@ const plugin = definePluginEntry({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gwParams = (p: any): any => p || {};
 
-      // 1. aicq.status — Overall plugin status
+      // 1. aicq.status — Overall plugin status (includes offline info)
       api.registerGatewayMethod("aicq.status", async (params: unknown) => {
         try {
           return {
             connected: serverClient.isConnected(),
+            connectionState: serverClient.getConnectionState(),
             agentId: aicqAgentId,
             fingerprint: identityService.getPublicKeyFingerprint(),
             friendCount: store.getFriendCount(),
             sessionCount: store.sessions.size,
+            offlineMessageCount: store.getOfflineMessageCount(),
             serverUrl,
           };
         } catch (err: any) {

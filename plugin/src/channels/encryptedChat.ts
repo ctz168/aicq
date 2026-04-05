@@ -2,9 +2,11 @@
  * Encrypted Chat Channel — handles incoming/outgoing encrypted messages
  * on the "encrypted-chat" channel.
  *
- * Decrypts incoming wire-format messages, verifies signatures, and emits
- * plaintext to the agent's conversation engine.  Encrypts outgoing messages
- * using the session key and signs them with the identity key.
+ * Features:
+ *   - Offline message queue: messages are cached when offline and sent
+ *     automatically when the connection is restored
+ *   - Decrypts incoming wire-format messages, verifies signatures
+ *   - Encrypts outgoing messages using session key + Ed25519 signing
  */
 
 import * as fs from "fs";
@@ -15,7 +17,7 @@ import {
   encodeBase64,
   nacl,
 } from "@aicq/crypto";
-import type { Logger, FileChunkBuffer, OpenClawAPI } from "../types.js";
+import type { Logger, FileChunkBuffer, OpenClawAPI, OfflineMessage } from "../types.js";
 import type { PluginStore } from "../store.js";
 import type { HandshakeManager } from "../handshake/handshakeManager.js";
 import type { P2PConnectionManager } from "../p2p/connectionManager.js";
@@ -46,6 +48,9 @@ export class EncryptedChatChannel {
   /** Active file chunk receive buffers keyed by sessionId. */
   private fileChunkBuffers: Map<string, FileChunkBuffer> = new Map();
 
+  /** Whether we're currently flushing offline messages. */
+  private flushingOffline = false;
+
   constructor(
     store: PluginStore,
     handshakeManager: HandshakeManager,
@@ -60,6 +65,13 @@ export class EncryptedChatChannel {
     this.serverClient = serverClient;
     this.logger = logger;
     this.dataDir = dataDir;
+
+    // Listen for connection state changes to flush offline messages
+    this.serverClient.onConnectionStateChange((newState, _prevState) => {
+      if (newState === "online") {
+        this.onReconnected();
+      }
+    });
   }
 
   /**
@@ -67,6 +79,18 @@ export class EncryptedChatChannel {
    */
   setAPI(api: OpenClawAPI): void {
     this.api = api;
+  }
+
+  /**
+   * Called when the WebSocket connection is re-established.
+   * Flushes all queued offline messages.
+   */
+  private onReconnected(): void {
+    const pendingCount = this.store.getOfflineMessageCount();
+    if (pendingCount > 0) {
+      this.logger.info(`[Chat] Back online — flushing ${pendingCount} queued offline messages`);
+      this.flushOfflineMessages();
+    }
   }
 
   /**
@@ -118,7 +142,7 @@ export class EncryptedChatChannel {
 
     // Update last message timestamp
     friend.lastMessageAt = new Date();
-    this.store.save();
+    this.store.markDirty();
   }
 
   /**
@@ -127,7 +151,9 @@ export class EncryptedChatChannel {
    * Encrypts with the session key, signs with the Ed25519 identity key,
    * and sends via P2P if available, falling back to WebSocket relay.
    *
-   * @returns true if the message was sent successfully
+   * When offline, the message is queued for later delivery.
+   *
+   * @returns true if the message was sent or queued successfully
    */
   send(toId: string, plaintext: string): boolean {
     const friend = this.store.getFriend(toId);
@@ -156,17 +182,34 @@ export class EncryptedChatChannel {
     );
 
     const buf = Buffer.from(wireData);
+    const encodedData = encodeBase64(wireData);
 
-    // Try P2P first, fall back to WebSocket relay
-    if (this.p2pManager.isConnected(toId) && this.p2pManager.send(toId, buf)) {
-      this.logger.debug("[Chat] Sent message via P2P to " + toId);
+    // Check if we're online
+    const isOnline = this.serverClient.isConnected();
+
+    if (isOnline) {
+      // Try P2P first, fall back to WebSocket relay
+      if (this.p2pManager.isConnected(toId) && this.p2pManager.send(toId, buf)) {
+        this.logger.debug("[Chat] Sent message via P2P to " + toId);
+      } else {
+        // WebSocket fallback
+        const sent = this.serverClient.sendRelayMessage(toId, {
+          channel: "encrypted-chat",
+          data: encodedData,
+        });
+
+        if (!sent) {
+          // WS send failed — queue for offline delivery
+          this.logger.warn("[Chat] WebSocket send failed — queuing message for offline delivery");
+          this.store.enqueueOfflineMessage(toId, encodedData);
+        } else {
+          this.logger.debug("[Chat] Sent message via relay to " + toId);
+        }
+      }
     } else {
-      // WebSocket fallback
-      this.serverClient.sendRelayMessage(toId, {
-        channel: "encrypted-chat",
-        data: encodeBase64(wireData),
-      });
-      this.logger.debug("[Chat] Sent message via relay to " + toId);
+      // Offline — queue the message
+      this.logger.info("[Chat] Offline — message queued for delivery to " + toId);
+      this.store.enqueueOfflineMessage(toId, encodedData);
     }
 
     // Update session message count
@@ -177,10 +220,88 @@ export class EncryptedChatChannel {
       if (session.messageCount % 100 === 0 || Date.now() - session.createdAt.getTime() > 3_600_000) {
         this.handshakeManager.rotateSessionKey(toId);
       }
-      this.store.save();
+      this.store.markDirty();
     }
 
     return true;
+  }
+
+  /**
+   * Flush all queued offline messages.
+   * Called automatically when connection is re-established.
+   */
+  flushOfflineMessages(): void {
+    if (this.flushingOffline) return;
+    this.flushingOffline = true;
+
+    const flushNext = (): void => {
+      const msg = this.store.dequeueOfflineMessage();
+      if (!msg) {
+        this.flushingOffline = false;
+        const remaining = this.store.getOfflineMessageCount();
+        if (remaining === 0) {
+          this.logger.info("[Chat] All offline messages flushed");
+        }
+        return;
+      }
+
+      // Check if still connected
+      if (!this.serverClient.isConnected()) {
+        // Re-queue and stop flushing
+        this.store.offlineMessages.unshift(msg);
+        this.flushingOffline = false;
+        this.logger.warn("[Chat] Connection lost during offline flush");
+        return;
+      }
+
+      // Check if we still have a session key
+      const friend = this.store.getFriend(msg.targetId);
+      let sessionKey = this.handshakeManager.getSessionKey(msg.targetId);
+      if (!sessionKey && friend?.sessionKey) {
+        sessionKey = friend.sessionKey;
+      }
+
+      if (!sessionKey) {
+        // No session key — skip this message
+        this.logger.warn("[Chat] Skipping offline message to " + msg.targetId + " (no session key)");
+        this.store.markDirty();
+        setImmediate(flushNext);
+        return;
+      }
+
+      // Send via relay
+      const sent = this.serverClient.sendRelayMessage(msg.targetId, {
+        channel: "encrypted-chat",
+        data: msg.encryptedData,
+      });
+
+      if (sent) {
+        this.logger.debug("[Chat] Flushed offline message to " + msg.targetId);
+      } else {
+        this.logger.warn("[Chat] Failed to flush offline message to " + msg.targetId);
+        // Re-queue with incremented retry count
+        msg.retryCount++;
+        if (msg.retryCount < msg.maxRetries) {
+          this.store.offlineMessages.unshift(msg);
+        } else {
+          this.logger.error("[Chat] Dropped offline message to " + msg.targetId + " (max retries exceeded)");
+        }
+      }
+
+      this.store.markDirty();
+
+      // Process next message asynchronously to avoid blocking
+      setImmediate(flushNext);
+    };
+
+    flushNext();
+  }
+
+  /**
+   * Get the count of pending offline messages.
+   */
+  getPendingOfflineCount(): number {
+    return this.store.getOfflineMessageCount();
   }
 
   /**
@@ -299,5 +420,6 @@ export class EncryptedChatChannel {
    */
   cleanup(): void {
     this.fileChunkBuffers.clear();
+    this.flushingOffline = false;
   }
 }

@@ -2,7 +2,8 @@
  * In-memory state store for the AICQ plugin.
  *
  * Manages identity keys, friends, sessions, temp numbers, pending requests,
- * and handshake state.  Optionally persists to a JSON file.
+ * handshake state, and offline message queue. Persists to a JSON file with
+ * atomic writes and debounced saving for reliability and performance.
  *
  * Secret key fields (identitySecretKey, exchangeSecretKey) are encrypted
  * at rest using AES-256-GCM with a machine-derived encryption key.
@@ -11,6 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
+import { v4 as uuidv4 } from "uuid";
 import type { KeyPair } from "@aicq/crypto";
 import type {
   FriendRecord,
@@ -18,6 +20,7 @@ import type {
   HandshakeState,
   PendingFriendRequest,
   TempNumberRecord,
+  OfflineMessage,
 } from "./types.js";
 
 /** Serialized form of the store for JSON persistence. */
@@ -50,6 +53,14 @@ interface SerializedStore {
   }>;
   tempNumbers: Array<{ number: string; expiresAt: string }>;
   pendingRequests: Array<{ requesterId: string; tempNumber: string; timestamp: string }>;
+  offlineMessages: Array<{
+    id: string;
+    targetId: string;
+    encryptedData: string;
+    timestamp: number;
+    retryCount: number;
+    maxRetries: number;
+  }>;
 }
 
 function encodeBuffer(buf: Uint8Array): string {
@@ -72,7 +83,7 @@ function deriveEncryptionKey(nodeId: string, salt: Uint8Array): Uint8Array {
 
 /**
  * Encrypt a Uint8Array using AES-256-GCM.
- * Returns a base64 string of: salt(16) || iv(12) || ciphertext || authTag(16).
+ * Returns a base64 string of: iv(12) || ciphertext || authTag(16).
  */
 function aes256GcmEncrypt(plaintext: Uint8Array, key: Uint8Array): string {
   const iv = crypto.randomBytes(12);
@@ -84,7 +95,7 @@ function aes256GcmEncrypt(plaintext: Uint8Array, key: Uint8Array): string {
   ]);
   const authTag = cipher.getAuthTag();
 
-  // Pack: salt is not needed per-field (key already derived), iv + ciphertext + tag
+  // Pack: iv + ciphertext + tag
   const packed = Buffer.concat([iv, encrypted, authTag]);
   return packed.toString("base64");
 }
@@ -125,9 +136,17 @@ export class PluginStore {
   pendingRequests: PendingFriendRequest[] = [];
   pendingHandshakes: Map<string, HandshakeState> = new Map();
 
+  /** Offline message queue — messages waiting to be sent when back online. */
+  offlineMessages: OfflineMessage[] = [];
+
   private dataDir: string = "";
   private storePath: string = "";
   private encryptionSalt: Uint8Array = crypto.randomBytes(16);
+
+  /** Debounce timer for save operations. */
+  private saveTimer: NodeJS.Timeout | null = null;
+  private saveDebounceMs: number = 1000; // 1 second debounce
+  private dirty: boolean = false;
 
   /**
    * Set the data directory for persistence.
@@ -150,12 +169,41 @@ export class PluginStore {
   }
 
   /**
-   * Save the current state to disk.
-   *
-   * Secret keys are encrypted at rest using AES-256-GCM with a key
-   * derived from the node ID and a stored random salt.
+   * Mark the store as dirty and schedule a debounced save.
+   * For operations that need immediate persistence (e.g., new keys), use saveNow().
    */
-  save(): void {
+  markDirty(): void {
+    this.dirty = true;
+    if (!this.saveTimer) {
+      this.saveTimer = setTimeout(() => {
+        this.saveTimer = null;
+        this.flushSave();
+      }, this.saveDebounceMs);
+    }
+  }
+
+  /**
+   * Save the current state to disk immediately (atomic write).
+   *
+   * Uses write-to-temp + rename for crash safety. Secret keys are encrypted
+   * at rest using AES-256-GCM with a key derived from the node ID and salt.
+   */
+  saveNow(): void {
+    // Cancel any pending debounced save
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.flushSave();
+  }
+
+  /**
+   * Internal save implementation — writes atomically via temp file + rename.
+   */
+  private flushSave(): void {
+    if (!this.dirty && this.saveTimer === null) return;
+    this.dirty = false;
+
     if (!this.storePath) return;
 
     const encKey = this.getEncryptionKey();
@@ -198,25 +246,48 @@ export class PluginStore {
         tempNumber: p.tempNumber,
         timestamp: p.timestamp.toISOString(),
       })),
+      offlineMessages: this.offlineMessages,
     };
 
+    // Atomic write: write to temp file, then rename
     try {
-      fs.writeFileSync(this.storePath, JSON.stringify(serialized, null, 2), "utf-8");
+      const tmpPath = this.storePath + ".tmp";
+      const jsonStr = JSON.stringify(serialized, null, 2);
+      fs.writeFileSync(tmpPath, jsonStr, "utf-8");
+      fs.renameSync(tmpPath, this.storePath);
     } catch (err) {
       console.error("[PluginStore] Failed to save state:", err);
     }
   }
 
   /**
+   * @deprecated Use markDirty() or saveNow() for better performance.
+   * Kept for backward compatibility — performs immediate save.
+   */
+  save(): void {
+    this.saveNow();
+  }
+
+  /**
    * Load state from disk, if available.
    *
    * Decrypts secret keys using AES-256-GCM with the stored salt and
-   * node ID.  Falls back to plaintext if the data was stored before
+   * node ID. Falls back to plaintext if the data was stored before
    * encryption was added (backward compatibility).
    */
   load(): boolean {
     if (!this.storePath || !fs.existsSync(this.storePath)) {
       return false;
+    }
+
+    // Try to load from temp file if main file was corrupted (crash recovery)
+    const tmpPath = this.storePath + ".tmp";
+    if (!fs.existsSync(this.storePath) && fs.existsSync(tmpPath)) {
+      try {
+        fs.renameSync(tmpPath, this.storePath);
+      } catch {
+        // If rename fails, try reading from temp directly
+      }
     }
 
     try {
@@ -296,19 +367,112 @@ export class PluginStore {
         timestamp: new Date(p.timestamp),
       }));
 
+      // Load offline message queue
+      this.offlineMessages = (data.offlineMessages || []).map((m) => ({
+        id: m.id,
+        targetId: m.targetId,
+        encryptedData: m.encryptedData,
+        timestamp: m.timestamp,
+        retryCount: m.retryCount || 0,
+        maxRetries: m.maxRetries || 10,
+      }));
+
+      // Clean up temp file if load succeeded
+      if (fs.existsSync(tmpPath)) {
+        try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+      }
+
       return true;
     } catch (err) {
       console.error("[PluginStore] Failed to load state:", err);
+      // Try to recover from temp file
+      if (fs.existsSync(tmpPath)) {
+        console.info("[PluginStore] Attempting recovery from temp file...");
+        try {
+          fs.renameSync(tmpPath, this.storePath);
+          return this.load(); // Retry loading
+        } catch {
+          console.error("[PluginStore] Recovery from temp file failed");
+        }
+      }
       return false;
     }
   }
+
+  // ----------------------------------------------------------------
+  //  Offline message queue
+  // ----------------------------------------------------------------
+
+  /**
+   * Add a message to the offline queue for later delivery.
+   */
+  enqueueOfflineMessage(targetId: string, encryptedData: string): OfflineMessage {
+    const msg: OfflineMessage = {
+      id: uuidv4(),
+      targetId,
+      encryptedData,
+      timestamp: Date.now(),
+      retryCount: 0,
+      maxRetries: 10,
+    };
+    this.offlineMessages.push(msg);
+    this.markDirty();
+    return msg;
+  }
+
+  /**
+   * Dequeue the next pending offline message.
+   */
+  dequeueOfflineMessage(): OfflineMessage | undefined {
+    return this.offlineMessages.shift();
+  }
+
+  /**
+   * Get the number of pending offline messages.
+   */
+  getOfflineMessageCount(): number {
+    return this.offlineMessages.length;
+  }
+
+  /**
+   * Peek at the offline message queue without removing.
+   */
+  peekOfflineMessages(): OfflineMessage[] {
+    return [...this.offlineMessages];
+  }
+
+  /**
+   * Clear all pending offline messages.
+   */
+  clearOfflineMessages(): void {
+    this.offlineMessages = [];
+    this.markDirty();
+  }
+
+  /**
+   * Remove expired offline messages (older than 24 hours).
+   */
+  cleanupExpiredOfflineMessages(): number {
+    const now = Date.now();
+    const threshold = 24 * 60 * 60 * 1000; // 24 hours
+    const before = this.offlineMessages.length;
+    this.offlineMessages = this.offlineMessages.filter((m) => now - m.timestamp < threshold);
+    if (this.offlineMessages.length !== before) {
+      this.markDirty();
+    }
+    return before - this.offlineMessages.length;
+  }
+
+  // ----------------------------------------------------------------
+  //  Friend management
+  // ----------------------------------------------------------------
 
   /**
    * Add a friend record.
    */
   addFriend(friend: FriendRecord): void {
     this.friends.set(friend.id, friend);
-    this.save();
+    this.markDirty();
   }
 
   /**
@@ -318,7 +482,7 @@ export class PluginStore {
     const removed = this.friends.delete(friendId);
     if (removed) {
       this.sessions.delete(friendId);
-      this.save();
+      this.markDirty();
     }
     return removed;
   }
@@ -337,6 +501,10 @@ export class PluginStore {
     return this.friends.size;
   }
 
+  // ----------------------------------------------------------------
+  //  Session management
+  // ----------------------------------------------------------------
+
   /**
    * Set a session for a peer.
    */
@@ -347,7 +515,7 @@ export class PluginStore {
     if (friend) {
       friend.sessionKey = session.sessionKey;
     }
-    this.save();
+    this.saveNow(); // Sessions are critical — save immediately
   }
 
   /**
@@ -364,12 +532,16 @@ export class PluginStore {
     return this.sessions.delete(peerId);
   }
 
+  // ----------------------------------------------------------------
+  //  Temp number management
+  // ----------------------------------------------------------------
+
   /**
    * Add a temp number record.
    */
   addTempNumber(number: string, expiresAt: Date): void {
     this.tempNumbers.push({ number, expiresAt });
-    this.save();
+    this.markDirty();
   }
 
   /**
@@ -379,7 +551,7 @@ export class PluginStore {
     const idx = this.tempNumbers.findIndex((t) => t.number === number);
     if (idx !== -1) {
       this.tempNumbers.splice(idx, 1);
-      this.save();
+      this.markDirty();
       return true;
     }
     return false;
@@ -393,16 +565,20 @@ export class PluginStore {
     const before = this.tempNumbers.length;
     this.tempNumbers = this.tempNumbers.filter((t) => t.expiresAt > now);
     if (this.tempNumbers.length !== before) {
-      this.save();
+      this.markDirty();
     }
   }
+
+  // ----------------------------------------------------------------
+  //  Pending friend requests
+  // ----------------------------------------------------------------
 
   /**
    * Add a pending friend request.
    */
   addPendingRequest(request: PendingFriendRequest): void {
     this.pendingRequests.push(request);
-    this.save();
+    this.markDirty();
   }
 
   /**
@@ -412,11 +588,15 @@ export class PluginStore {
     const idx = this.pendingRequests.findIndex((p) => p.requesterId === requesterId);
     if (idx !== -1) {
       this.pendingRequests.splice(idx, 1);
-      this.save();
+      this.markDirty();
       return true;
     }
     return false;
   }
+
+  // ----------------------------------------------------------------
+  //  Handshake state
+  // ----------------------------------------------------------------
 
   /**
    * Set a pending handshake state.
