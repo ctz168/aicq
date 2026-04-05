@@ -111,9 +111,13 @@ const MODEL_PROVIDERS = [
 function findOpenClawConfig(): string | null {
   const candidates = [
     path.join(process.cwd(), "openclaw.json"),
+    path.join(process.cwd(), "stableclaw.json"),
     path.join(os.homedir(), ".config", "openclaw", "openclaw.json"),
+    path.join(os.homedir(), ".config", "stableclaw", "stableclaw.json"),
     path.join(os.homedir(), ".openclaw", "openclaw.json"),
+    path.join(os.homedir(), ".stableclaw", "stableclaw.json"),
     path.join(os.homedir(), "openclaw.json"),
+    path.join(os.homedir(), "stableclaw.json"),
   ];
   for (const p of candidates) {
     try {
