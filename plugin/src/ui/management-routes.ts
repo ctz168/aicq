@@ -42,6 +42,16 @@ const MODEL_PROVIDERS = [
   { id: "mistral", name: "Mistral AI", description: "Mistral Large, Medium, Small, Codestral", apiKeyHint: "(your key)", modelHint: "mistral-large-latest", baseUrlHint: "https://api.mistral.ai/v1", configKey: "mistral" },
   { id: "together", name: "Together AI", description: "Open-source models with fast inference", apiKeyHint: "...", modelHint: "meta-llama/Llama-3-70b-chat-hf", baseUrlHint: "https://api.together.xyz/v1", configKey: "together" },
   { id: "fireworks", name: "Fireworks AI", description: "Fast open-source model serving", apiKeyHint: "...", modelHint: "accounts/fireworks/models/llama-v3-70b-instruct", baseUrlHint: "https://api.fireworks.ai/inference/v1", configKey: "fireworks" },
+  // Chinese / local providers
+  { id: "modelscope", name: "ModelScope (魔搭)", description: "ZhipuAI GLM-5, Kimi-K2.5, MiniMax, Step models", apiKeyHint: "ms-...", modelHint: "Qwen/Qwen3-235B-A22B", baseUrlHint: "https://api-inference.modelscope.cn/v1", configKey: "modelscope" },
+  { id: "zhipu", name: "Zhipu AI (智谱)", description: "GLM-5, GLM-4, CogView, CogVideoX", apiKeyHint: "...", modelHint: "glm-5", baseUrlHint: "https://open.bigmodel.cn/api/paas/v4", configKey: "zhipu" },
+  { id: "qwen", name: "Alibaba Qwen (通义千问)", description: "Qwen3-235B, Qwen3-32B, Qwen-VL", apiKeyHint: "sk-...", modelHint: "qwen3-235b-a22b", baseUrlHint: "https://dashscope.aliyuncs.com/compatible-mode/v1", configKey: "qwen" },
+  { id: "doubao", name: "ByteDance Doubao (豆包)", description: "Doubao Pro, Doubao Lite — ByteDance LLMs", apiKeyHint: "...", modelHint: "doubao-pro-32k", baseUrlHint: "https://ark.cn-beijing.volces.com/api/v3", configKey: "doubao" },
+  { id: "moonshot", name: "Moonshot/Kimi (月之暗面)", description: "Kimi-K2.5, Moonshot-v1 — strong Chinese reasoning", apiKeyHint: "sk-...", modelHint: "moonshot-v1-128k", baseUrlHint: "https://api.moonshot.cn/v1", configKey: "moonshot" },
+  { id: "minimax", name: "MiniMax", description: "MiniMax-M2.5, abab — multimodal AI", apiKeyHint: "...", modelHint: "MiniMax-M2.5", baseUrlHint: "https://api.minimax.chat/v1", configKey: "minimax" },
+  { id: "stepfun", name: "StepFun (阶跃星辰)", description: "Step-3.5, Step-2 — reasoning models", apiKeyHint: "...", modelHint: "step-3.5-flash", baseUrlHint: "https://api.stepfun.com/v1", configKey: "stepfun" },
+  { id: "baidu", name: "Baidu Wenxin (百度文心)", description: "ERNIE 4.0, ERNIE 3.5 — Baidu LLMs", apiKeyHint: "...", modelHint: "ernie-4.0-8k", baseUrlHint: "https://aip.baidubce.com/rpc/2.0/ai_custom", configKey: "baidu" },
+  { id: "spark", name: "iFlytek Spark (讯飞星火)", description: "Spark 4.0 Ultra, Spark 3.5 — iFlytek LLMs", apiKeyHint: "...", modelHint: "spark-4.0-ultra", baseUrlHint: "https://spark-api-open.xf-yun.com/v1", configKey: "spark" },
 ];
 
 /**
@@ -102,7 +112,8 @@ function writeConfig(config: Record<string, unknown>): boolean {
  * Handles multiple possible structures:
  * - config.agents (array)
  * - config.agent (single object)
- * - config.agents.entries (array)
+ * - config.models.providers.<id>.models[] (model entries treated as agents)
+ * - fallback: any top-level entries that look like agents
  */
 function extractAgentsFromConfig(config: Record<string, unknown>): Array<Record<string, unknown>> {
   const agents: Array<Record<string, unknown>> = [];
@@ -123,6 +134,42 @@ function extractAgentsFromConfig(config: Record<string, unknown>): Array<Record<
     agents.unshift(agentVal as Record<string, unknown>);
   }
 
+  // Extract from models.providers.<providerId>.models[] structure
+  // This handles configs like: { "models": { "providers": { "modelscope": { "models": [...] } } } }
+  const modelsSection = config.models as Record<string, unknown> | undefined;
+  const defaultModel = (modelsSection?.defaultModel as string) || "";
+  if (modelsSection && typeof modelsSection === "object") {
+    const providersSection = modelsSection.providers as Record<string, unknown> | undefined;
+    if (providersSection && typeof providersSection === "object") {
+      for (const [providerId, providerConfig] of Object.entries(providersSection)) {
+        if (typeof providerConfig !== "object" || providerConfig === null) continue;
+        const pc = providerConfig as Record<string, unknown>;
+        const modelsArr = pc.models;
+        if (Array.isArray(modelsArr)) {
+          for (let mi = 0; mi < modelsArr.length; mi++) {
+            const m = modelsArr[mi];
+            if (typeof m === "object" && m !== null) {
+              const mObj = m as Record<string, unknown>;
+              // Each model entry becomes an "agent"
+              const agentEntry: Record<string, unknown> = {
+                _source: "provider-model",
+                _providerId: providerId,
+                _modelIndex: mi,
+                _configPath: "models.providers." + providerId + ".models." + mi,
+                name: mObj.name || mObj.id || providerId + "/" + mi,
+                model: mObj.id || "",
+                provider: providerId,
+                enabled: true,
+                isDefault: defaultModel === (mObj.id as string),
+              };
+              agents.push(agentEntry);
+            }
+          }
+        }
+      }
+    }
+  }
+
   // If no agents found via specific keys, look for any top-level entries that look like agents
   if (agents.length === 0) {
     for (const [key, val] of Object.entries(config)) {
@@ -140,7 +187,8 @@ function extractAgentsFromConfig(config: Record<string, unknown>): Array<Record<
 
 /**
  * Get model provider config status.
- * Checks multiple locations: config.providers.<id>, config.<id>, config.model.providers.<id>
+ * Checks multiple locations: config.providers.<id>, config.<id>, config.models.providers.<id>
+ * Handles both single-model (provider.model) and multi-model (provider.models[]) structures.
  */
 function getModelProviders(config: Record<string, unknown>) {
   // Try multiple locations for providers
@@ -149,12 +197,34 @@ function getModelProviders(config: Record<string, unknown>) {
     const model = config.model as Record<string, unknown> | undefined;
     if (model?.providers) providersSection = model.providers as Record<string, unknown>;
   }
+  // Also try config.models.providers (new structure)
+  if (!providersSection || typeof providersSection !== "object") {
+    const models = config.models as Record<string, unknown> | undefined;
+    if (models?.providers) providersSection = models.providers as Record<string, unknown>;
+  }
+
+  // Read defaultModel from config.models.defaultModel
+  const modelsSection = config.models as Record<string, unknown> | undefined;
+  const defaultModel = (modelsSection?.defaultModel as string) || "";
 
   const providers = MODEL_PROVIDERS.map((p) => {
     const pc = (providersSection?.[p.configKey] ?? config[p.configKey]) as Record<string, unknown> | undefined;
     const apiKey = (pc?.apiKey as string) || "";
-    const modelId = (pc?.model as string) || (pc?.defaultModel as string) || "";
+    const singleModelId = (pc?.model as string) || (pc?.defaultModel as string) || "";
     const baseUrl = (pc?.baseUrl as string) || (pc?.baseURL as string) || "";
+
+    // Handle multi-model array: provider.models[]
+    let modelsList: Array<Record<string, unknown>> = [];
+    const modelsArr = pc?.models;
+    if (Array.isArray(modelsArr)) {
+      modelsList = modelsArr.filter((m) => typeof m === "object" && m !== null).map((m) => m as Record<string, unknown>);
+    }
+
+    // If multi-model, use defaultModel as the primary modelId
+    let modelId = singleModelId;
+    if (modelsList.length > 0 && !modelId) {
+      modelId = defaultModel || modelsList[0]?.id as string || "";
+    }
 
     return {
       ...p,
@@ -163,6 +233,8 @@ function getModelProviders(config: Record<string, unknown>) {
       apiKeyHasValue: Boolean(apiKey),
       modelId,
       baseUrl,
+      models: modelsList,
+      modelCount: modelsList.length,
     };
   });
 
@@ -170,17 +242,37 @@ function getModelProviders(config: Record<string, unknown>) {
   for (const p of MODEL_PROVIDERS) {
     const pc = (providersSection?.[p.configKey] ?? config[p.configKey]) as Record<string, unknown> | undefined;
     if (pc?.apiKey) {
-      currentModels.push({
-        provider: p.name,
-        providerId: p.id,
-        modelId: (pc.model as string) || (pc.defaultModel as string) || p.modelHint,
-        hasApiKey: true,
-        baseUrl: (pc.baseUrl as string) || (pc.baseURL as string) || p.baseUrlHint,
-      });
+      // Handle multi-model: list all models under this provider
+      const modelsArr = pc.models;
+      if (Array.isArray(modelsArr) && modelsArr.length > 0) {
+        for (const m of modelsArr) {
+          if (typeof m === "object" && m !== null) {
+            const mObj = m as Record<string, unknown>;
+            currentModels.push({
+              provider: p.name,
+              providerId: p.id,
+              modelId: (mObj.id as string) || "",
+              modelName: (mObj.name as string) || "",
+              hasApiKey: true,
+              baseUrl: (pc.baseUrl as string) || (pc.baseURL as string) || p.baseUrlHint,
+              isDefault: defaultModel === (mObj.id as string),
+            });
+          }
+        }
+      } else {
+        currentModels.push({
+          provider: p.name,
+          providerId: p.id,
+          modelId: (pc.model as string) || (pc.defaultModel as string) || p.modelHint,
+          hasApiKey: true,
+          baseUrl: (pc.baseUrl as string) || (pc.baseURL as string) || p.baseUrlHint,
+          isDefault: false,
+        });
+      }
     }
   }
 
-  return { providers, currentModels };
+  return { providers, currentModels, defaultModel };
 }
 
 /**
@@ -330,16 +422,40 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         });
       }
 
-      // ── DELETE /api/agents/:index ──
+      // ── DELETE /api/agents/:identifier (supports index or provider-model path) ──
       if (apiPath.startsWith("/agents/") && method === "DELETE") {
-        const idxStr = decodeURIComponent(apiPath.slice("/agents/".length));
-        const idx = parseInt(idxStr, 10);
-        if (isNaN(idx) || idx < 0) return json(res, { success: false, message: "Invalid agent index" }, 400);
+        const identifier = decodeURIComponent(apiPath.slice("/agents/".length));
 
         const result = readConfig();
         if (!result) return json(res, { success: false, message: "No config file found" }, 400);
 
         const config = result.config;
+
+        // Support provider-model path format: e.g. "provider:modelscope:2"
+        const providerModelMatch = identifier.match(/^provider:([^:]+):(\d+)$/);
+        if (providerModelMatch) {
+          const providerId = providerModelMatch[1];
+          const modelIdx = parseInt(providerModelMatch[2], 10);
+          const modelsSection = config.models as Record<string, unknown> | undefined;
+          const providersObj = modelsSection?.providers as Record<string, unknown> | undefined;
+          const provConfig = providersObj?.[providerId] as Record<string, unknown> | undefined;
+          const modelsArr = provConfig?.models as Array<unknown> | undefined;
+          if (!modelsArr || modelIdx >= modelsArr.length) {
+            return json(res, { success: false, message: "Provider model index out of range" }, 400);
+          }
+          modelsArr.splice(modelIdx, 1);
+          const written = writeConfig(config);
+          if (written) {
+            logger.info("[API] Provider model deleted: " + providerId + ".models[" + modelIdx + "]");
+            return json(res, { success: true, message: "Model removed from " + providerId });
+          }
+          return json(res, { success: false, message: "Failed to write config" }, 500);
+        }
+
+        // Fallback: numeric index for config.agents array
+        const idx = parseInt(identifier, 10);
+        if (isNaN(idx) || idx < 0) return json(res, { success: false, message: "Invalid agent identifier" }, 400);
+
         let agentsArr: Array<unknown> | undefined;
 
         if (Array.isArray(config.agents)) {
@@ -558,8 +674,40 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
       // ── GET /api/models ──
       if (apiPath === "/models" && method === "GET") {
         const result = readConfig();
-        if (!result) return json(res, { providers: MODEL_PROVIDERS, currentModels: [], error: "No config file found" });
+        if (!result) return json(res, { providers: MODEL_PROVIDERS, currentModels: [], defaultModel: "", error: "No config file found" });
         return json(res, getModelProviders(result.config));
+      }
+
+      // ── GET /api/models/default ──
+      if (apiPath === "/models/default" && method === "GET") {
+        const result = readConfig();
+        if (!result) return json(res, { defaultModel: "", error: "No config file found" });
+        const modelsSection = result.config.models as Record<string, unknown> | undefined;
+        const defaultModel = (modelsSection?.defaultModel as string) || "";
+
+        // Find which provider/model entry the default refers to
+        let defaultProvider = "";
+        let defaultModelName = "";
+        if (defaultModel && modelsSection?.providers) {
+          const providersObj = modelsSection.providers as Record<string, unknown>;
+          for (const [provId, provConfig] of Object.entries(providersObj)) {
+            const pc = provConfig as Record<string, unknown>;
+            if (Array.isArray(pc.models)) {
+              const found = (pc.models as Array<Record<string, unknown>>).find((m) => m.id === defaultModel);
+              if (found) {
+                defaultProvider = provId;
+                defaultModelName = found.name || found.id || "";
+                break;
+              }
+            }
+          }
+        }
+
+        return json(res, {
+          defaultModel,
+          defaultProvider,
+          defaultModelName,
+        });
       }
 
       // ── PUT /api/models/:providerId ──
@@ -999,11 +1147,9 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         return json(res, { success: true, message: "Agent added", index: (config.agents as unknown[]).length - 1 });
       }
 
-      // ── PUT /api/agents/:index ──
+      // ── PUT /api/agents/:identifier (supports index or provider:model format) ──
       if (apiPath.startsWith("/agents/") && method === "PUT") {
-        const idxStr = decodeURIComponent(apiPath.slice("/agents/".length));
-        const idx = parseInt(idxStr, 10);
-        if (isNaN(idx) || idx < 0) return json(res, { success: false, message: "Invalid agent index" }, 400);
+        const identifier = decodeURIComponent(apiPath.slice("/agents/".length));
         const body = await readBody(req);
         const updates = body.agent as Record<string, unknown> | undefined;
         if (!updates || typeof updates !== "object") {
@@ -1012,11 +1158,44 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         const result = readConfig();
         if (!result) return json(res, { success: false, message: "No config file found" }, 400);
         const config = result.config;
-        let agentsArr: Array<Record<string, unknown>>;
+
+        // Support provider-model path format: e.g. "provider:modelscope:2"
+        const providerModelMatch = identifier.match(/^provider:([^:]+):(\d+)$/);
+        if (providerModelMatch) {
+          const providerId = providerModelMatch[1];
+          const modelIdx = parseInt(providerModelMatch[2], 10);
+          const modelsSection = config.models as Record<string, unknown> | undefined;
+          const providersObj = modelsSection?.providers as Record<string, unknown> | undefined;
+          const provConfig = providersObj?.[providerId] as Record<string, unknown> | undefined;
+          const modelsArr = provConfig?.models as Array<Record<string, unknown>> | undefined;
+          if (!modelsArr || modelIdx >= modelsArr.length) {
+            return json(res, { success: false, message: "Provider model index out of range" }, 400);
+          }
+          // Merge updates into the model entry
+          const modelEntry = modelsArr[modelIdx];
+          if (updates.name) modelEntry.name = updates.name;
+          if (updates.id) modelEntry.id = updates.id;
+          if (updates.provider) modelEntry.provider = updates.provider;
+          // Copy any other fields
+          for (const [k, v] of Object.entries(updates)) {
+            if (!["name", "id", "provider", "_source", "_providerId", "_modelIndex", "_configPath", "isDefault"].includes(k)) {
+              modelEntry[k] = v;
+            }
+          }
+          const written = writeConfig(config);
+          if (!written) return json(res, { success: false, message: "Failed to write config" }, 500);
+          logger.info("[API] Provider model updated: " + providerId + ".models[" + modelIdx + "]");
+          return json(res, { success: true, message: "Model updated in " + providerId });
+        }
+
+        // Fallback: numeric index for config.agents array
+        const idx = parseInt(identifier, 10);
+        if (isNaN(idx) || idx < 0) return json(res, { success: false, message: "Invalid agent identifier" }, 400);
+
         if (!Array.isArray(config.agents)) {
           return json(res, { success: false, message: "No agents array in config" }, 400);
         }
-        agentsArr = config.agents as Array<Record<string, unknown>>;
+        const agentsArr = config.agents as Array<Record<string, unknown>>;
         if (idx >= agentsArr.length) {
           return json(res, { success: false, message: "Agent index out of range" }, 400);
         }

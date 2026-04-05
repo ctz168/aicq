@@ -374,6 +374,13 @@ const _T = {
   confirm_delete_agent: { zh: '确定要删除这个智能体吗？', en: 'Are you sure you want to delete this agent?' },
   agent_deleted: { zh: '智能体已删除', en: 'Agent deleted' },
   delete_failed: { zh: '删除失败', en: 'Delete failed' },
+  default_model_badge: { zh: '默认', en: 'Default' },
+  provider_model: { zh: '来自模型提供商', en: 'From model provider' },
+  default_model_label: { zh: '默认模型', en: 'Default Model' },
+  set_as_default: { zh: '设为默认', en: 'Set as default' },
+  models_under_provider: { zh: '个模型', en: 'models' },
+  model_id_label: { zh: '模型ID', en: 'Model ID' },
+  model_name_label: { zh: '模型名称', en: 'Model Name' },
   add_new_agent: { zh: '➕ 添加新智能体', en: '➕ Add New Agent' },
   edit_agent: { zh: '✏️ 编辑智能体', en: '✏️ Edit Agent' },
   agent_name_required: { zh: '请输入智能体名称', en: 'Agent name is required' },
@@ -430,6 +437,9 @@ const _T = {
   not_set: { zh: '未设置', en: 'Not set' },
   key_set: { zh: '● 已设置密钥', en: '● Key set' },
   active_model_configs: { zh: '当前模型配置', en: 'Active Model Configurations' },
+  default_model_global: { zh: '全局默认模型', en: 'Global Default Model' },
+  model_count: { zh: '模型数量', en: 'Model Count' },
+  multi_model: { zh: '多模型', en: 'Multi-model' },
   base_url: { zh: '基础地址', en: 'Base URL' },
   configure_providers_desc: { zh: '为智能体配置LLM提供商。点击提供商卡片设置或更新API密钥、模型和基础地址。更改将直接保存到配置文件。', en: 'Configure LLM providers for your agents. Click a provider card to set or update the API key, model, and base URL. Changes are saved directly to your config file.' },
   current_key: { zh: '当前：', en: 'Current: ' },
@@ -815,13 +825,16 @@ async function loadAgents() {
 
   let rows = '';
   agents.forEach((a, i) => {
+    const isProviderModel = a._source === 'provider-model';
     const modelBadge = a.model ? '<span class="badge badge-accent">' + escHtml(a.model) + '</span>' : '<span class="badge badge-ghost">' + t('default_model') + '</span>';
-    const providerBadge = a.provider ? '<span class="tag">' + escHtml(a.provider) + '</span>' : '';
+    const providerName = isProviderModel ? escHtml(capitalizeProvider(a.provider || '')) : escHtml(a.provider || '');
+    const providerBadge = providerName ? '<span class="tag">' + providerName + (a.isDefault ? ' ⭐' : '') + '</span>' : '';
     const statusBadge = a.enabled !== false ? '<span class="badge badge-ok">' + t('active') + '</span>' : '<span class="badge badge-warn">' + t('disabled') + '</span>';
+    const defaultBadge = a.isDefault ? ' <span class="badge badge-warn" style="font-size:10px">' + t('default_model_badge') + '</span>' : '';
 
     rows += \\\`<tr>
-      <td>\${statusBadge}</td>
-      <td><div style="font-weight:600">\${escHtml(a.name || a.id || 'Agent ' + (i + 1))}</div><div class="mono" style="font-size:11px;color:var(--text3)">\${escHtml(a.id || '—')}</div></td>
+      <td>\${statusBadge}\${defaultBadge}</td>
+      <td><div style="font-weight:600">\${escHtml(a.name || 'Agent ' + (i + 1))}</div><div class="mono" style="font-size:11px;color:var(--text3)">\${isProviderModel ? escHtml(a._configPath || '') : escHtml(a.id || '—')}</div></td>
       <td>\${modelBadge}</td>
       <td>\${providerBadge}</td>
       <td>\${escHtml(a.systemPrompt ? a.systemPrompt.substring(0, 60) + '...' : '—')}</td>
@@ -853,12 +866,23 @@ async function loadAgents() {
     <div class="card" style="padding:0;overflow:hidden">
       <div style="overflow-x:auto">
         <table>
-          <thead><tr><th style="width:60px">\${t('status')}</th><th>\${t('agent')}</th><th>\${t('model')}</th><th>\${t('provider')}</th><th>\${t('system_prompt')}</th><th style="width:90px">\${t('actions')}</th></tr></thead>
+          <thead><tr><th style="width:80px">\${t('status')}</th><th>\${t('agent')}</th><th>\${t('model')}</th><th>\${t('provider')}</th><th>\${t('system_prompt')}</th><th style="width:90px">\${t('actions')}</th></tr></thead>
           <tbody id="agent-table-body">\${rows}</tbody>
         </table>
       </div>
     </div>
   \\\`);
+}
+
+function capitalizeProvider(id) {
+  const names = {
+    modelscope: 'ModelScope', zhipu: 'Zhipu AI', qwen: 'Qwen', doubao: 'Doubao',
+    moonshot: 'Moonshot', minimax: 'MiniMax', stepfun: 'StepFun', baidu: 'Baidu',
+    spark: 'Spark', deepseek: 'DeepSeek', openai: 'OpenAI', anthropic: 'Anthropic',
+    google: 'Google AI', groq: 'Groq', ollama: 'Ollama', openrouter: 'OpenRouter',
+    mistral: 'Mistral AI', together: 'Together AI', fireworks: 'Fireworks AI',
+  };
+  return names[id] || (id ? id.charAt(0).toUpperCase() + id.slice(1) : '—');
 }
 
 function filterAgentTable() {
@@ -885,16 +909,27 @@ function viewAgent(index) {
 }
 
 async function deleteAgent(index) {
+  const agents = window._lastAgentsData?.agents || [];
+  const a = agents[index];
+  if (!a) return;
   if (!confirm(t('confirm_delete_agent'))) return;
-  const r = await api('/agents/' + index, { method: 'DELETE' });
+  let identifier;
+  if (a._source === 'provider-model') {
+    identifier = 'provider:' + (a._providerId || '') + ':' + (a._modelIndex || 0);
+  } else {
+    identifier = index;
+  }
+  const r = await api('/agents/' + encodeURIComponent(identifier), { method: 'DELETE' });
   if (r.success) { toast(t('agent_deleted'), 'ok'); loadAgents(); }
   else { toast(r.message || r.error || t('delete_failed'), 'err'); }
 }
 
 let _editAgentIndex = null;
+let _editAgentIsProviderModel = false;
 
 function showAddAgentModal() {
   _editAgentIndex = null;
+  _editAgentIsProviderModel = false;
   $('#agent-form-title').textContent = t('add_new_agent');
   $('#agent-form-name').value = '';
   $('#agent-form-id').value = '';
@@ -915,9 +950,10 @@ function showEditAgentModal(index) {
   const a = agents[index];
   if (!a) return;
   _editAgentIndex = index;
+  _editAgentIsProviderModel = a._source === 'provider-model';
   $('#agent-form-title').textContent = t('edit_agent');
   $('#agent-form-name').value = a.name || '';
-  $('#agent-form-id').value = a.id || '';
+  $('#agent-form-id').value = a._source === 'provider-model' ? (a._configPath || '') : (a.id || '');
   $('#agent-form-model').value = a.model || '';
   $('#agent-form-provider').value = a.provider || '';
   $('#agent-form-prompt').value = a.systemPrompt || '';
@@ -926,6 +962,13 @@ function showEditAgentModal(index) {
   $('#agent-form-max-tokens').value = a.maxTokens ?? 4096;
   $('#agent-form-top-p').value = a.topP ?? 1;
   $('#agent-form-tools').value = Array.isArray(a.tools) ? a.tools.join(', ') : (a.tools || '');
+  if (a._source === 'provider-model') {
+    $('#agent-form-id').readOnly = true;
+    $('#agent-form-id').title = a._configPath || '';
+  } else {
+    $('#agent-form-id').readOnly = false;
+    $('#agent-form-id').title = '';
+  }
   showModal('modal-add-agent');
 }
 
@@ -952,8 +995,14 @@ async function saveAgent() {
 
   let r;
   if (_editAgentIndex !== null) {
-    // Edit existing
-    r = await api('/agents/' + _editAgentIndex, { method: 'PUT', body: JSON.stringify({ agent }) });
+    let identifier;
+    if (_editAgentIsProviderModel) {
+      const a = (window._lastAgentsData?.agents || [])[_editAgentIndex];
+      identifier = 'provider:' + (a?._providerId || '') + ':' + (a?._modelIndex || 0);
+    } else {
+      identifier = _editAgentIndex;
+    }
+    r = await api('/agents/' + encodeURIComponent(identifier), { method: 'PUT', body: JSON.stringify({ agent }) });
   } else {
     // Add new
     r = await api('/agents', { method: 'POST', body: JSON.stringify({ agent }) });
@@ -1166,18 +1215,58 @@ async function loadModels() {
   renderModels(data);
 }
 
+function getProviderIcon(id) {
+  const icons = {
+    openai: '🟢', anthropic: '🟠', google: '🔵', ollama: '🟣', deepseek: '🔷',
+    groq: '⚡', openrouter: '🌐', mistral: '🌀', together: '🔮', fireworks: '🎆',
+    modelscope: '🏗️', zhipu: '🧠', qwen: '☁️', doubao: '🫘', moonshot: '🌙',
+    minimax: '🔷', stepfun: '📈', baidu: '🔍', spark: '✨',
+  };
+  return icons[id] || '⚪';
+}
+
 function renderModels(data) {
   const el = $('#models-content');
   const providers = data.providers || [];
   const configured = providers.filter(p => p.configured).length;
+  const defaultModel = data.defaultModel || '';
+
+  // Default model banner
+  let defaultBanner = '';
+  if (defaultModel) {
+    defaultBanner = \\\`
+      <div class="card" style="border-color:var(--warn);background:var(--warn-bg)">
+        <div class="card-header">
+          <div class="card-title" style="color:#d97706">⭐ \${t('default_model_global')}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="badge badge-warn" style="font-size:13px;padding:4px 14px">\${escHtml(defaultModel)}</span>
+        </div>
+      </div>\\\`;
+  }
 
   let cards = '';
   providers.forEach(p => {
-    const icon = p.id === 'openai' ? '🟢' : p.id === 'anthropic' ? '🟠' : p.id === 'google' ? '🔵' : p.id === 'ollama' ? '🟣' : p.id === 'deepseek' ? '🔷' : p.id === 'groq' ? '⚡' : p.id === 'openrouter' ? '🌐' : '⚪';
+    const icon = getProviderIcon(p.id);
     const statusBadge = p.configured
       ? '<span class="badge badge-ok">' + t('key_set') + '</span>'
       : '<span class="badge badge-ghost">' + t('not_set') + '</span>';
-    const currentModel = p.modelId ? '<span class="prov-model">' + escHtml(p.modelId) + '</span>' : '';
+
+    // Show multi-model info
+    let modelInfo = '';
+    if (p.configured && p.modelCount > 0) {
+      modelInfo = '<span class="prov-model">' + t('multi_model') + ': ' + p.modelCount + ' ' + t('models_under_provider') + '</span>';
+      const shownModels = (p.models || []).slice(0, 3);
+      shownModels.forEach(m => {
+        const isDef = defaultModel === (m.id || '');
+        modelInfo += '<span class="prov-model" style="margin-left:4px">' + escHtml(m.name || m.id || '') + (isDef ? ' ⭐' : '') + '</span>';
+      });
+      if (p.modelCount > 3) {
+        modelInfo += '<span class="prov-model" style="color:var(--text3);margin-left:4px">+' + (p.modelCount - 3) + ' more</span>';
+      }
+    } else if (p.modelId) {
+      modelInfo = '<span class="prov-model">' + escHtml(p.modelId) + '</span>';
+    }
 
     cards += \\\`
       <div class="provider-card" onclick="showModelConfigModal('\${escHtml(p.id)}')">
@@ -1186,7 +1275,7 @@ function renderModels(data) {
           \${statusBadge}
         </div>
         <div class="prov-desc">\${escHtml(p.description)}</div>
-        \${currentModel}
+        \${modelInfo}
         <div class="prov-actions">
           <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showModelConfigModal('\${escHtml(p.id)}')">\${t('configure')}</button>
         </div>
@@ -1197,9 +1286,11 @@ function renderModels(data) {
   if (data.currentModels && data.currentModels.length) {
     let rows = '';
     data.currentModels.forEach(m => {
+      const defaultTag = m.isDefault ? ' <span class="badge badge-warn" style="font-size:10px">⭐ ' + t('default_model_badge') + '</span>' : '';
       rows += \\\`<tr>
         <td style="font-weight:500">\${escHtml(m.provider)}</td>
-        <td class="mono">\${escHtml(m.modelId)}</td>
+        <td class="mono">\${escHtml(m.modelId)}\${defaultTag}</td>
+        <td>\${escHtml(m.modelName || '')}</td>
         <td><span class="badge badge-ok">' + t('key_set') + '</span></td>
         <td class="mono" style="font-size:11px">\${escHtml(m.baseUrl || t('default_model'))}</td>
         <td>
@@ -1214,13 +1305,14 @@ function renderModels(data) {
       <div class="card" style="margin-top:20px">
         <div class="card-header"><div class="card-title">📊 \${t('active_model_configs')}</div></div>
         <div style="overflow-x:auto"><table>
-          <thead><tr><th>\${t('provider')}</th><th>\${t('model')}</th><th>API Key</th><th>\${t('base_url')}</th><th>\${t('actions')}</th></tr></thead>
+          <thead><tr><th>\${t('provider')}</th><th>\${t('model')}</th><th>\${t('model_name_label')}</th><th>API Key</th><th>\${t('base_url')}</th><th>\${t('actions')}</th></tr></thead>
           <tbody>\${rows}</tbody>
         </table></div>
       </div>\\\`;
   }
 
   html(el, \\\`
+    \${defaultBanner}
     <div class="stats-grid" style="margin-bottom:24px">
       <div class="stat-card">
         <div class="stat-icon" style="background:var(--accent-bg)">🧠</div>
@@ -1228,6 +1320,7 @@ function renderModels(data) {
         <div class="stat-value">\${configured} / \${providers.length}</div>
         <div class="stat-sub">\${t('providers_with_keys')}</div>
       </div>
+      \${defaultModel ? '<div class="stat-card"><div class="stat-icon" style="background:var(--warn-bg)">⭐</div><div class="stat-label">' + t('default_model_label') + '</div><div class="stat-value mono" style="font-size:13px">' + escHtml(defaultModel) + '</div></div>' : ''}
     </div>
     <p class="section-desc">\${t('configure_providers_desc')}</p>
     <div class="provider-grid">\${cards}</div>
@@ -1241,7 +1334,7 @@ function showModelConfigModal(id) {
   if (!p) { toast(t('provider_not_found'), 'err'); return; }
   _editProviderId = id;
   $('#model-name').textContent = p.name;
-  $('#model-icon').textContent = p.id === 'openai' ? '🟢' : p.id === 'anthropic' ? '🟠' : '🟢';
+  $('#model-icon').textContent = getProviderIcon(p.id);
   $('#model-api-key').value = '';
   $('#model-api-key').placeholder = p.apiKeyHint || t('enter_api_key');
   $('#model-model-id').value = p.modelId || '';
@@ -1249,6 +1342,29 @@ function showModelConfigModal(id) {
   $('#model-base-url').value = p.baseUrl || '';
   $('#model-base-url').placeholder = p.baseUrlHint || t('default_url');
   $('#model-current-key').textContent = p.apiKeyHasValue ? t('current_key') + p.apiKey : t('no_api_key');
+  // Show multi-model list if available
+  const modelsListEl = document.getElementById('model-multi-list');
+  if (modelsListEl) {
+    if (p.models && p.models.length > 0) {
+      const defaultModel = _modelProviders?.defaultModel || '';
+      let html = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600">' + t('model_count') + ': ' + p.models.length + '</div>';
+      html += '<div style="max-height:160px;overflow-y:auto">';
+      p.models.forEach(m => {
+        const isDef = defaultModel === (m.id || '');
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;border-bottom:1px solid var(--border)">' +
+          '<span class="mono" style="flex:1">' + escHtml(m.name || m.id || '') + '</span>' +
+          '<span class="mono" style="color:var(--text3);font-size:11px">' + escHtml(m.id || '') + '</span>' +
+          (isDef ? '<span class="badge badge-warn" style="font-size:10px">⭐</span>' : '') +
+          '</div>';
+      });
+      html += '</div>';
+      modelsListEl.innerHTML = html;
+      modelsListEl.style.display = '';
+    } else {
+      modelsListEl.innerHTML = '';
+      modelsListEl.style.display = 'none';
+    }
+  }
   showModal('modal-model-config');
 }
 async function saveModelConfig() {
@@ -2080,6 +2196,7 @@ const HTML = `<!DOCTYPE html>
       <div class="input-prefix"><span class="prefix">🌐</span><input id="model-base-url" type="text" placeholder="https://..."></div>
       <div class="hint">Custom endpoint URL. Only needed for proxies or self-hosted models.</div>
     </div>
+    <div id="model-multi-list" style="display:none;margin-top:12px"></div>
     <div class="form-actions">
       <button class="btn btn-default" onclick="hideModal('modal-model-config')">Cancel</button>
       <button class="btn btn-primary" onclick="saveModelConfig()">💾 Save Configuration</button>
