@@ -254,3 +254,93 @@ export function restartService() {
     method: 'POST',
   })
 }
+
+// ClickHouse Database Management
+export interface CHStatus {
+  connected: boolean
+  url: string
+  database: string
+  user: string
+  version: string
+  latencyMs: number
+  totalRows: number
+  totalBytes: string
+  totalBytesRaw: number
+}
+
+export function getDatabaseStatus() {
+  return fetchAPI<CHStatus>('database/status')
+}
+
+export interface CHTableInfo {
+  name: string
+  engine: string
+  rows: number
+  bytes: string
+  bytesRaw: number
+  parts: number
+  createdAt: string
+}
+
+export function getDatabaseTables() {
+  return fetchAPI<{ tables: CHTableInfo[] }>('database/tables')
+}
+
+export interface CHColumnInfo {
+  name: string
+  type: string
+  defaultKind: string
+  defaultExpression: string
+  comment: string
+  isInPartitionKey: boolean
+  isInSortingKey: boolean
+  isInPrimaryKey: boolean
+}
+
+export interface CHTableDetail extends CHTableInfo {
+  columns: CHColumnInfo[]
+  sampleData: Record<string, any>[]
+  sampleDataCount: number
+}
+
+export function getTableDetail(name: string) {
+  return fetchAPI<CHTableDetail>(`database/tables/${encodeURIComponent(name)}`)
+}
+
+export interface CHQueryResult {
+  columns: string[]
+  rows: Record<string, any>[]
+  rowCount: number
+  queryTimeMs: number
+  error?: string
+}
+
+export function executeQuery(query: string) {
+  return fetchAPI<CHQueryResult>('database/query', {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  })
+}
+
+export interface CHOptimizeResult {
+  tables: { name: string; success: boolean; error?: string }[]
+  totalMs: number
+}
+
+export function optimizeDatabase() {
+  return fetchAPI<CHOptimizeResult>('database/optimize', {
+    method: 'POST',
+  })
+}
+
+export interface CHCleanupResult {
+  deletedRows: number
+  tables: { name: string; deletedRows: number }[]
+  totalMs: number
+}
+
+export function cleanupDatabase() {
+  return fetchAPI<CHCleanupResult>('database/cleanup', {
+    method: 'POST',
+  })
+}

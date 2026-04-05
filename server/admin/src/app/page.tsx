@@ -15,6 +15,7 @@ import { AccountsView } from '@/components/admin/accounts-view'
 import { ConfigView } from '@/components/admin/config-view'
 import { ServiceView } from '@/components/admin/service-view'
 import { BlacklistView } from '@/components/admin/blacklist-view'
+import { DatabaseView } from '@/components/admin/database-view'
 
 function ViewContent() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -29,6 +30,8 @@ function ViewContent() {
       return <ConfigView />
     case 'service':
       return <ServiceView />
+    case 'database':
+      return <DatabaseView />
     case 'blacklist':
       return <BlacklistView />
     default:

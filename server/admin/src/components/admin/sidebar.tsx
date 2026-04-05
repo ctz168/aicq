@@ -11,6 +11,7 @@ import {
   Settings,
   Ban,
   Activity,
+  Database,
   LogOut,
 } from 'lucide-react'
 import { useAdminStore, type AdminView } from '@/stores/admin-store'
@@ -21,6 +22,7 @@ const navItems: { view: AdminView; label: string; icon: React.ElementType }[] = 
   { view: 'accounts', label: '账号管理', icon: Users },
   { view: 'config', label: '配置管理', icon: Settings },
   { view: 'service', label: '服务管理', icon: Activity },
+  { view: 'database', label: '数据库', icon: Database },
   { view: 'blacklist', label: '黑名单', icon: Ban },
 ]
 

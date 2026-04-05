@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { store } from '../db/memoryStore';
 import { config } from '../config';
+import { getClickHouseClient, closeClickHouse as chClose } from '../db/clickhouse';
 import { verifyJWT, generateToken } from './accountService';
 import type { Account, FriendPermission } from '../models/types';
 
@@ -656,4 +657,411 @@ export function restartServer(): void {
   setTimeout(() => {
     process.kill(process.pid, 'SIGTERM');
   }, 500);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ClickHouse Database Management
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ClickHouseStatus {
+  connected: boolean;
+  url: string;
+  database: string;
+  user: string;
+  version: string;
+  latencyMs: number;
+  totalRows: number;
+  totalBytes: string;
+  totalBytesRaw: number;
+}
+
+export async function getClickHouseStatus(): Promise<ClickHouseStatus> {
+  const startTime = Date.now();
+  try {
+    const ch = await getClickHouseClient();
+
+    // Test connection with a simple query
+    const versionRows = await ch.query({
+      query: 'SELECT version()',
+      format: 'JSONEachRow',
+    });
+    let version = '';
+    for await (const row of versionRows.stream()) {
+      version = (row as any).version() || (row as any).version || 'unknown';
+    }
+
+    // Get database size
+    const sizeRows = await ch.query({
+      query: `SELECT
+        formatReadableSize(sum(bytes_on_disk)) as totalBytes,
+        sum(rows) as totalRows,
+        sum(bytes_on_disk) as totalBytesRaw
+      FROM system.parts
+      WHERE database = '{db:String}' AND active`,
+      format: 'JSONEachRow',
+      query_params: { db: config.clickhouseDatabase },
+    });
+    let totalRows = 0;
+    let totalBytes = '0 B';
+    let totalBytesRaw = 0;
+    for await (const row of sizeRows.stream()) {
+      totalRows = Number((row as any).totalRows) || 0;
+      totalBytes = (row as any).totalBytes || '0 B';
+      totalBytesRaw = Number((row as any).totalBytesRaw) || 0;
+    }
+
+    return {
+      connected: true,
+      url: config.clickhouseUrl,
+      database: config.clickhouseDatabase,
+      user: config.clickhouseUser,
+      version: String(version),
+      latencyMs: Date.now() - startTime,
+      totalRows,
+      totalBytes: String(totalBytes),
+      totalBytesRaw,
+    };
+  } catch (err) {
+    return {
+      connected: false,
+      url: config.clickhouseUrl,
+      database: config.clickhouseDatabase,
+      user: config.clickhouseUser,
+      version: '',
+      latencyMs: Date.now() - startTime,
+      totalRows: 0,
+      totalBytes: '0 B',
+      totalBytesRaw: 0,
+    };
+  }
+}
+
+export interface TableInfo {
+  name: string;
+  engine: string;
+  rows: number;
+  bytes: string;
+  bytesRaw: number;
+  parts: number;
+  createdAt: string;
+}
+
+export interface TableDetail extends TableInfo {
+  columns: ColumnInfo[];
+  sampleData: Record<string, any>[];
+  sampleDataCount: number;
+}
+
+export interface ColumnInfo {
+  name: string;
+  type: string;
+  defaultKind: string;
+  defaultExpression: string;
+  comment: string;
+  isInPartitionKey: boolean;
+  isInSortingKey: boolean;
+  isInPrimaryKey: boolean;
+}
+
+export async function getClickHouseTables(): Promise<TableInfo[]> {
+  const ch = await getClickHouseClient();
+
+  const rows = await ch.query({
+    query: `SELECT
+      table as name,
+      engine,
+      sum(rows) as rows,
+      formatReadableSize(sum(bytes_on_disk)) as bytes,
+      sum(bytes_on_disk) as bytesRaw,
+      uniqExact(partition) as parts,
+      min(metadata_modification_time) as created_at
+    FROM system.parts
+    WHERE database = '{db:String}' AND active
+    GROUP BY table, engine
+    ORDER BY bytesRaw DESC`,
+    format: 'JSONEachRow',
+    query_params: { db: config.clickhouseDatabase },
+  });
+
+  const tables: TableInfo[] = [];
+  for await (const row of rows.stream()) {
+    const r = row as any;
+    tables.push({
+      name: r.name,
+      engine: r.engine,
+      rows: Number(r.rows) || 0,
+      bytes: r.bytes || '0 B',
+      bytesRaw: Number(r.bytesRaw) || 0,
+      parts: Number(r.parts) || 0,
+      createdAt: r.created_at || '',
+    });
+  }
+
+  return tables;
+}
+
+export async function getClickHouseTableDetail(tableName: string): Promise<TableDetail | null> {
+  const ch = await getClickHouseClient();
+
+  // Sanitize table name to prevent SQL injection
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) {
+    throw new Error('无效的表名');
+  }
+
+  // Check table exists
+  const existsRows = await ch.query({
+    query: `SELECT count() as cnt FROM system.tables WHERE database = '{db:String}' AND name = '{table:String}'`,
+    format: 'JSONEachRow',
+    query_params: { db: config.clickhouseDatabase, table: tableName },
+  });
+  let exists = false;
+  for await (const row of existsRows.stream()) {
+    exists = Number((row as any).cnt) > 0;
+  }
+  if (!exists) return null;
+
+  // Get table info
+  const infoRows = await ch.query({
+    query: `SELECT
+      table as name,
+      engine,
+      sum(rows) as rows,
+      formatReadableSize(sum(bytes_on_disk)) as bytes,
+      sum(bytes_on_disk) as bytesRaw,
+      uniqExact(partition) as parts,
+      min(metadata_modification_time) as created_at
+    FROM system.parts
+    WHERE database = '{db:String}' AND table = '{table:String}' AND active
+    GROUP BY table, engine`,
+    format: 'JSONEachRow',
+    query_params: { db: config.clickhouseDatabase, table: tableName },
+  });
+
+  let tableInfo: Partial<TableDetail> = {};
+  for await (const row of infoRows.stream()) {
+    const r = row as any;
+    tableInfo = {
+      name: r.name,
+      engine: r.engine,
+      rows: Number(r.rows) || 0,
+      bytes: r.bytes || '0 B',
+      bytesRaw: Number(r.bytesRaw) || 0,
+      parts: Number(r.parts) || 0,
+      createdAt: r.created_at || '',
+    };
+  }
+
+  // Get columns
+  const colRows = await ch.query({
+    query: `SELECT
+      name,
+      type,
+      default_kind,
+      default_expression,
+      comment,
+      is_in_partition_key,
+      is_in_sorting_key,
+      is_in_primary_key
+    FROM system.columns
+    WHERE database = '{db:String}' AND table = '{table:String}'
+    ORDER BY position`,
+    format: 'JSONEachRow',
+    query_params: { db: config.clickhouseDatabase, table: tableName },
+  });
+
+  const columns: ColumnInfo[] = [];
+  for await (const row of colRows.stream()) {
+    const r = row as any;
+    columns.push({
+      name: r.name,
+      type: r.type,
+      defaultKind: r.default_kind || '',
+      defaultExpression: r.default_expression || '',
+      comment: r.comment || '',
+      isInPartitionKey: r.is_in_partition_key === 1,
+      isInSortingKey: r.is_in_sorting_key === 1,
+      isInPrimaryKey: r.is_in_primary_key === 1,
+    });
+  }
+
+  // Get sample data (last 10 rows)
+  let sampleData: Record<string, any>[] = [];
+  try {
+    const sampleRows = await ch.query({
+      query: `SELECT * FROM \`${config.clickhouseDatabase}\`.\`${tableName}\` LIMIT 10`,
+      format: 'JSONEachRow',
+    });
+    for await (const row of sampleRows.stream()) {
+      sampleData.push(row as Record<string, any>);
+    }
+  } catch {
+    // Some tables may not support SELECT directly, ignore
+  }
+
+  return {
+    ...tableInfo,
+    name: tableName,
+    engine: tableInfo.engine || '',
+    rows: tableInfo.rows || 0,
+    bytes: tableInfo.bytes || '0 B',
+    bytesRaw: tableInfo.bytesRaw || 0,
+    parts: tableInfo.parts || 0,
+    createdAt: tableInfo.createdAt || '',
+    columns,
+    sampleData,
+    sampleDataCount: sampleData.length,
+  };
+}
+
+export interface QueryResult {
+  columns: string[];
+  rows: Record<string, any>[];
+  rowCount: number;
+  queryTimeMs: number;
+  error?: string;
+}
+
+export async function executeClickHouseQuery(query: string): Promise<QueryResult> {
+  // Basic safety: only allow SELECT statements
+  const trimmed = query.trim().toUpperCase();
+  if (
+    !trimmed.startsWith('SELECT') &&
+    !trimmed.startsWith('EXPLAIN') &&
+    !trimmed.startsWith('SHOW') &&
+    !trimmed.startsWith('DESCRIBE')
+  ) {
+    return {
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      queryTimeMs: 0,
+      error: '只允许执行 SELECT / SHOW / DESCRIBE 查询',
+    };
+  }
+
+  // Prevent dangerous operations
+  const forbidden = ['ALTER', 'DROP', 'DELETE', 'INSERT', 'UPDATE', 'CREATE', 'TRUNCATE', 'ATTACH', 'DETACH', 'OPTIMIZE'];
+  for (const word of forbidden) {
+    if (trimmed.includes(word)) {
+      return {
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        queryTimeMs: 0,
+        error: `不允许执行包含 ${word} 的操作`,
+      };
+    }
+  }
+
+  const startTime = Date.now();
+  try {
+    const ch = await getClickHouseClient();
+    const resultRows = await ch.query({
+      query,
+      format: 'JSONEachRow',
+    });
+
+    const rows: Record<string, any>[] = [];
+    const columnSet = new Set<string>();
+    for await (const row of resultRows.stream()) {
+      const r = row as Record<string, any>;
+      rows.push(r);
+      for (const key of Object.keys(r)) {
+        columnSet.add(key);
+      }
+    }
+
+    return {
+      columns: Array.from(columnSet),
+      rows,
+      rowCount: rows.length,
+      queryTimeMs: Date.now() - startTime,
+    };
+  } catch (err) {
+    return {
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      queryTimeMs: Date.now() - startTime,
+      error: err instanceof Error ? err.message : '查询执行失败',
+    };
+  }
+}
+
+export interface OptimizeResult {
+  tables: { name: string; success: boolean; error?: string }[];
+  totalMs: number;
+}
+
+export async function optimizeClickHouse(): Promise<OptimizeResult> {
+  const startTime = Date.now();
+  const tables = await getClickHouseTables();
+  const results: { name: string; success: boolean; error?: string }[] = [];
+
+  const ch = await getClickHouseClient();
+
+  for (const table of tables) {
+    try {
+      // Only optimize MergeTree family tables
+      if (table.engine.includes('MergeTree') || table.engine.includes('ReplacingMergeTree')) {
+        await ch.exec({
+          query: `OPTIMIZE TABLE \`${config.clickhouseDatabase}\`.\`${table.name}\` FINAL`,
+        });
+        results.push({ name: table.name, success: true });
+      } else {
+        results.push({ name: table.name, success: true });
+      }
+    } catch (err) {
+      results.push({
+        name: table.name,
+        success: false,
+        error: err instanceof Error ? err.message : '优化失败',
+      });
+    }
+  }
+
+  return {
+    tables: results,
+    totalMs: Date.now() - startTime,
+  };
+}
+
+export interface CleanupResult {
+  deletedRows: number;
+  tables: { name: string; deletedRows: number }[];
+  totalMs: number;
+}
+
+export async function cleanupClickHouseData(): Promise<CleanupResult> {
+  const startTime = Date.now();
+  const ch = await getClickHouseClient();
+
+  const tablesToCleanup = [
+    { name: 'temp_numbers', condition: "expires_at < now64(3)" },
+    { name: 'sessions', condition: "expires_at < now64(3)" },
+    { name: 'handshake_sessions', condition: "expires_at < now64(3)" },
+    { name: 'verification_codes', condition: "expires_at < now64(3)" },
+    { name: 'notifications', condition: "created_at < now64(3) - INTERVAL 7 DAY" },
+  ];
+
+  const results: { name: string; deletedRows: number }[] = [];
+  let totalDeleted = 0;
+
+  for (const table of tablesToCleanup) {
+    try {
+      await ch.exec({
+        query: `ALTER TABLE \`${config.clickhouseDatabase}\`.\`${table.name}\` DELETE WHERE ${table.condition}`,
+      });
+      results.push({ name: table.name, deletedRows: -1 });
+      totalDeleted += 0;
+    } catch (err) {
+      results.push({ name: table.name, deletedRows: 0 });
+    }
+  }
+
+  return {
+    deletedRows: totalDeleted,
+    tables: results,
+    totalMs: Date.now() - startTime,
+  };
 }

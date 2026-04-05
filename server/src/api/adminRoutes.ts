@@ -20,6 +20,12 @@ import {
   getServiceStatus,
   stopServer,
   restartServer,
+  getClickHouseStatus,
+  getClickHouseTables,
+  getClickHouseTableDetail,
+  executeClickHouseQuery,
+  optimizeClickHouse,
+  cleanupClickHouseData,
 } from '../services/adminService';
 
 const router = Router();
@@ -306,6 +312,78 @@ router.post('/admin/service/restart', authenticateAdmin, (_req: Request, res: Re
     restartServer();
   } catch (err) {
     res.status(500).json({ error: '重启服务失败' });
+  }
+});
+
+// ─── Database Management (auth required) ─────────────────────────
+// ClickHouse 数据库连接、表管理、查询
+
+router.get('/admin/database/status', authenticateAdmin, async (_req: Request, res: Response) => {
+  try {
+    const status = await getClickHouseStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: '获取数据库状态失败' });
+  }
+});
+
+router.get('/admin/database/tables', authenticateAdmin, async (_req: Request, res: Response) => {
+  try {
+    const tables = await getClickHouseTables();
+    res.json({ tables });
+  } catch (err) {
+    res.status(500).json({ error: '获取表列表失败' });
+  }
+});
+
+router.get('/admin/database/tables/:name', authenticateAdmin, async (req: Request, res: Response) => {
+  try {
+    const detail = await getClickHouseTableDetail(req.params.name);
+    if (!detail) {
+      res.status(404).json({ error: '表不存在' });
+      return;
+    }
+    res.json(detail);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '获取表详情失败';
+    const status = message.includes('无效') ? 400 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+
+router.post('/admin/database/query', authenticateAdmin, async (req: Request, res: Response) => {
+  try {
+    const { query } = req.body;
+    if (!query || typeof query !== 'string') {
+      res.status(400).json({ error: '必须提供查询语句' });
+      return;
+    }
+    if (query.length > 5000) {
+      res.status(400).json({ error: '查询语句过长（最大 5000 字符）' });
+      return;
+    }
+    const result = await executeClickHouseQuery(query);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: '执行查询失败' });
+  }
+});
+
+router.post('/admin/database/optimize', authenticateAdmin, async (_req: Request, res: Response) => {
+  try {
+    const result = await optimizeClickHouse();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: '优化数据库失败' });
+  }
+});
+
+router.post('/admin/database/cleanup', authenticateAdmin, async (_req: Request, res: Response) => {
+  try {
+    const result = await cleanupClickHouseData();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: '清理过期数据失败' });
   }
 });
 
