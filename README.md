@@ -7,20 +7,20 @@
 AICQ 的 OpenClaw 插件已发布到 npm，支持一键在线安装：
 
 ```bash
-# 方式一：通过 OpenClaw CLI 从 npm 安装（推荐）
-openclaw plugins install aicq-openclaw-plugin
+# 方式一：通过 StableClaw CLI 从 npm 安装（推荐）
+stableclaw plugins install aicq-openclaw-plugin
 
 # 方式二：从 ClawHub 插件市场安装
-openclaw plugins install clawhub:aicq-chat
+stableclaw plugins install clawhub:aicq-chat
 
 # 方式三：手动本地安装
 git clone https://github.com/ctz168/aicq.git
 cd aicq/plugin
 npm install && npm run build
-openclaw plugins install .
+stableclaw plugins install .
 ```
 
-安装后重启 OpenClaw 即可自动加载插件。在 OpenClaw 控制面板的 **Skills / 插件管理** 页面中可以看到 AICQ 插件，支持在线配置服务器地址、Agent ID 等参数。
+安装后重启 StableClaw 即可自动加载插件。在 StableClaw 控制面板的 **Skills / 插件管理** 页面中可以看到 AICQ 插件，支持在线配置服务器地址、Agent ID 等参数。
 
 ### 插件能力
 
@@ -38,13 +38,13 @@ openclaw plugins install .
 
 ### 配置项
 
-在 OpenClaw 控制面板或 `openclaw.json` 中配置：
+在 StableClaw 控制面板或配置文件中配置：
 
 ```json
 {
   "plugins": {
     "configs": {
-      "aicq-chat": {
+      "aicq-openclaw-plugin": {
         "serverUrl": "wss://aicq.online/ws",
         "agentId": "",
         "maxFriends": 200,
@@ -57,7 +57,7 @@ openclaw plugins install .
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `serverUrl` | `ws://localhost:3000` | AICQ 中继服务器 WebSocket 地址 |
+| `serverUrl` | `wss://aicq.online/ws` | AICQ 中继服务器 WebSocket 地址 |
 | `agentId` | 自动生成 | Agent 唯一标识（留空则自动生成 Ed25519 密钥对） |
 | `maxFriends` | `200` | 最大好友数量（1-1000） |
 | `autoAcceptFriends` | `false` | 是否自动接受好友请求 |
