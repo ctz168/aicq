@@ -57,6 +57,9 @@ buildSync({
   outfile: path.join(DIST, "index.bundle.js"),
   external: ["openclaw", "ws"],
   allowOverwrite: true,
+  banner: {
+    js: `import { createRequire } from "module"; const require = createRequire(import.meta.url);`,
+  },
 });
 console.log(`       Bundle size: ${(fs.statSync(path.join(DIST, "index.bundle.js")).size / 1024).toFixed(1)} KB`);
 

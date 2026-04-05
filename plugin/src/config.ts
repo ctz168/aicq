@@ -7,12 +7,12 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import type { PluginConfig } from "./types.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// esbuild with platform:"node" injects __dirname in CJS output
+// For standalone/tsc, fallback to process.cwd()
+const _dirname = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 
 const SERVER_URL = process.env.AICQ_SERVER_URL || "https://aicq.online:61018";
 
@@ -29,7 +29,7 @@ export function loadConfig(overrides?: Partial<PluginConfig>): PluginConfig {
   // Try to read the plugin manifest for schema defaults
   let schemaDefaults: Partial<PluginConfig> = {};
   try {
-    const manifestPath = path.resolve(__dirname, "..", "openclaw.plugin.json");
+    const manifestPath = path.resolve(_dirname, "..", "openclaw.plugin.json");
     const manifestRaw = fs.readFileSync(manifestPath, "utf-8");
     const manifest = JSON.parse(manifestRaw);
     const schema = manifest.configSchema;
