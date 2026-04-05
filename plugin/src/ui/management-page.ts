@@ -194,6 +194,7 @@ tbody tr:hover { background: var(--bg3); }
 .provider-card .prov-desc { font-size: 12px; color: var(--text3); margin-bottom: 10px; }
 .provider-card .prov-model { font-size: 11px; color: var(--text2); background: var(--bg3); padding: 3px 8px; border-radius: 4px; display: inline-block; }
 .provider-card .prov-actions { margin-top: 12px; display: flex; gap: 6px; }
+.provider-card.custom-provider { border-color: var(--accent); border-style: dashed; }
 
 /* Modal */
 .modal-overlay {
@@ -600,6 +601,24 @@ const _T = {
   failed: { zh: '失败', en: 'Failed' },
   // Offline
   offline_msg: { zh: '您当前处于离线状态。部分功能可能受限。数据从本地缓存加载。', en: 'You are offline. Some features may be limited. Data is loaded from local cache.' },
+  // Custom Providers
+  add_custom_provider: { zh: '➕ 添加自定义提供商', en: '➕ Add Custom Provider' },
+  custom_provider: { zh: '🧩 自定义提供商', en: '🧩 Custom Provider' },
+  custom_provider_desc: { zh: '手动添加兼容 OpenAI API 格式的自定义模型提供商', en: 'Manually add custom model providers compatible with OpenAI API format' },
+  provider_name: { zh: '提供商名称', en: 'Provider Name' },
+  provider_name_placeholder: { zh: '例如：My Custom API', en: 'e.g., My Custom API' },
+  provider_name_required: { zh: '请输入提供商名称', en: 'Provider name is required' },
+  custom_provider_added: { zh: '自定义提供商已添加', en: 'Custom provider added' },
+  custom_provider_updated: { zh: '自定义提供商已更新', en: 'Custom provider updated' },
+  custom_provider_deleted: { zh: '自定义提供商已删除', en: 'Custom provider deleted' },
+  confirm_delete_custom: { zh: '确定要删除自定义提供商 "{name}" 吗？此操作不可恢复。', en: 'Are you sure you want to delete custom provider "{name}"? This cannot be undone.' },
+  edit_custom_provider: { zh: '编辑自定义提供商', en: 'Edit Custom Provider' },
+  save_custom: { zh: '💾 保存', en: '💾 Save' },
+  description_label: { zh: '描述', en: 'Description' },
+  description_placeholder: { zh: '可选：描述此提供商的用途', en: 'Optional: describe what this provider is for' },
+  api_key_label: { zh: 'API 密钥', en: 'API Key' },
+  model_id_label2: { zh: '模型 ID', en: 'Model ID' },
+  base_url_label: { zh: '基础地址', en: 'Base URL' },
 };
 function t(key) { return (_T[key] && _T[key][_lang]) || key; }
 function translateStatic() { document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if (k && _T[k]) { el.textContent = _T[k][_lang] || el.textContent; } }); document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.getAttribute('data-i18n-ph'); if (k && _T[k]) { el.placeholder = _T[k][_lang] || el.placeholder; } }); }
@@ -1222,6 +1241,7 @@ function getProviderIcon(id) {
     modelscope: '🏗️', zhipu: '🧠', qwen: '☁️', doubao: '🫘', moonshot: '🌙',
     minimax: '🔷', stepfun: '📈', baidu: '🔍', spark: '✨',
   };
+  if (id && id.startsWith('custom-')) return '🧩';
   return icons[id] || '⚪';
 }
 
@@ -1269,15 +1289,19 @@ function renderModels(data) {
     }
 
     cards += \\\`
-      <div class="provider-card" onclick="showModelConfigModal('\${escHtml(p.id)}')">
+      <div class="provider-card \${p.isCustom ? 'custom-provider' : ''}" onclick="\${p.isCustom ? "showEditCustomProviderModal('" + escHtml(p.id) + "')" : "showModelConfigModal('" + escHtml(p.id) + "')"}">
         <div class="prov-head">
-          <div class="prov-name">\${icon} \${escHtml(p.name)}</div>
+          <div class="prov-name">\${icon} \${escHtml(p.name)}\${p.isCustom ? ' <span class="tag" style="background:var(--accent-bg);color:var(--accent2)">🧩 Custom</span>' : ''}</div>
           \${statusBadge}
         </div>
-        <div class="prov-desc">\${escHtml(p.description)}</div>
+        <div class="prov-desc">\${escHtml(p.description || '')}</div>
         \${modelInfo}
         <div class="prov-actions">
-          <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showModelConfigModal('\${escHtml(p.id)}')">\${t('configure')}</button>
+          \${p.isCustom
+            ? '<button class="btn btn-sm btn-ok" onclick="event.stopPropagation();showEditCustomProviderModal(\\'' + escHtml(p.id) + '\\')">✏️ ' + t('configure') + '</button>' +
+              '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteCustomProvider(\\'' + escHtml(p.id) + '\\',\\'' + escHtml(p.name) + '\\')">🗑️</button>'
+            : '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showModelConfigModal(\\'' + escHtml(p.id) + '\\')">' + t('configure') + '</button>'
+          }
         </div>
       </div>\\\`;
   });
@@ -1323,12 +1347,100 @@ function renderModels(data) {
       \${defaultModel ? '<div class="stat-card"><div class="stat-icon" style="background:var(--warn-bg)">⭐</div><div class="stat-label">' + t('default_model_label') + '</div><div class="stat-value mono" style="font-size:13px">' + escHtml(defaultModel) + '</div></div>' : ''}
     </div>
     <p class="section-desc">\${t('configure_providers_desc')}</p>
+    <div style="margin-bottom:16px;text-align:right">
+      <button class="btn btn-primary" onclick="showAddCustomProviderModal()" style="font-size:13px">
+        \${t('add_custom_provider')}
+      </button>
+    </div>
     <div class="provider-grid">\${cards}</div>
     \${activeModelsSection}
   \\\`);
 }
 
 let _editProviderId = null;
+
+// --- Custom Provider Functions ---
+var _editCustomId = null;
+
+function showAddCustomProviderModal() {
+  _editCustomId = null;
+  document.getElementById('custom-provider-title').textContent = t('custom_provider');
+  document.getElementById('custom-name').value = '';
+  document.getElementById('custom-api-key').value = '';
+  document.getElementById('custom-model-id').value = '';
+  document.getElementById('custom-base-url').value = '';
+  document.getElementById('custom-description').value = '';
+  showModal('modal-custom-provider');
+}
+
+function showEditCustomProviderModal(id) {
+  if (!_modelProviders) return;
+  const p = _modelProviders.providers.find(pr => pr.id === id);
+  if (!p || !p.isCustom) return;
+  _editCustomId = id;
+  document.getElementById('custom-provider-title').textContent = t('edit_custom_provider');
+  document.getElementById('custom-name').value = p.name || '';
+  document.getElementById('custom-api-key').value = '';
+  document.getElementById('custom-model-id').value = p.modelId || p.modelHint || '';
+  document.getElementById('custom-base-url').value = p.baseUrl || '';
+  document.getElementById('custom-description').value = p.description || '';
+  showModal('modal-custom-provider');
+}
+
+async function saveCustomProvider() {
+  var name = document.getElementById('custom-name').value.trim();
+  var apiKey = document.getElementById('custom-api-key').value.trim();
+  var modelId = document.getElementById('custom-model-id').value.trim();
+  var baseUrl = document.getElementById('custom-base-url').value.trim();
+  var description = document.getElementById('custom-description').value.trim();
+
+  if (!name) { toast(t('provider_name_required'), 'err'); return; }
+
+  var url, method;
+  if (_editCustomId) {
+    url = '/api/models/custom/' + encodeURIComponent(_editCustomId);
+    method = 'PUT';
+  } else {
+    url = '/api/models/custom';
+    method = 'POST';
+  }
+
+  var body = { name: name };
+  if (apiKey) body.apiKey = apiKey;
+  if (modelId) body.modelId = modelId;
+  if (baseUrl) body.baseUrl = baseUrl;
+  if (description) body.description = description;
+
+  try {
+    var resp = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    var data = await resp.json();
+    if (data.success) {
+      hideModal('modal-custom-provider');
+      toast(_editCustomId ? t('custom_provider_updated') : t('custom_provider_added'), 'ok');
+      loadModels();
+    } else {
+      toast(data.message || 'Failed', 'err');
+    }
+  } catch (e) {
+    toast('Request failed: ' + e.message, 'err');
+  }
+}
+
+function deleteCustomProvider(id, name) {
+  if (!confirm(t('confirm_delete_custom').replace('{name}', name || id))) return;
+  fetch('/api/models/custom/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        toast(t('custom_provider_deleted'), 'ok');
+        loadModels();
+      } else {
+        toast(data.message || 'Failed to delete', 'err');
+      }
+    })
+    .catch(function(e) { toast('Delete failed: ' + e.message, 'err'); });
+}
+
 function showModelConfigModal(id) {
   const p = (_modelProviders?.providers || []).find(x => x.id === id);
   if (!p) { toast(t('provider_not_found'), 'err'); return; }
@@ -2200,6 +2312,39 @@ const HTML = `<!DOCTYPE html>
     <div class="form-actions">
       <button class="btn btn-default" onclick="hideModal('modal-model-config')">Cancel</button>
       <button class="btn btn-primary" onclick="saveModelConfig()">💾 Save Configuration</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Custom Provider -->
+<div class="modal-overlay hidden" id="modal-custom-provider" onclick="if(event.target===this)hideModal('modal-custom-provider')">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><h3>🧩 <span id="custom-provider-title">Custom Provider / 自定义提供商</span></h3><button class="modal-close" onclick="hideModal('modal-custom-provider')">✕</button></div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px">Manually add custom model providers compatible with OpenAI API format. / 手动添加兼容 OpenAI API 格式的自定义模型提供商</p>
+    <div class="form-group">
+      <label>📦 Provider Name / 提供商名称 *</label>
+      <input id="custom-name" type="text" placeholder="e.g., My Custom API / 例如：My Custom API">
+    </div>
+    <div class="form-group">
+      <label>🔑 API Key</label>
+      <input id="custom-api-key" type="password" placeholder="sk-...">
+      <div class="hint">Leave blank to keep the existing key when editing.</div>
+    </div>
+    <div class="form-group">
+      <label>🤖 Model ID</label>
+      <input id="custom-model-id" type="text" placeholder="gpt-4o">
+    </div>
+    <div class="form-group">
+      <label>🌐 Base URL</label>
+      <input id="custom-base-url" type="text" placeholder="https://api.example.com/v1">
+    </div>
+    <div class="form-group">
+      <label>📝 Description / 描述</label>
+      <textarea id="custom-description" rows="2" placeholder="Optional: describe what this provider is for / 可选：描述此提供商的用途"></textarea>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-default" onclick="hideModal('modal-custom-provider')">Cancel / 取消</button>
+      <button class="btn btn-primary" onclick="saveCustomProvider()">💾 Save / 保存</button>
     </div>
   </div>
 </div>
