@@ -14,7 +14,7 @@ import type { PluginConfig } from "./types.js";
 // For standalone/tsc, fallback to process.cwd()
 const _dirname = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 
-const SERVER_URL = process.env.AICQ_SERVER_URL || "https://aicq.online:61018";
+const SERVER_URL = process.env.AICQ_SERVER_URL || "https://aicq.online";
 
 /**
  * Load the plugin configuration.

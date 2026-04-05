@@ -381,13 +381,14 @@ function loadPage(page) {
 async function loadDashboard() {
   const el = $('#dashboard-content');
   html(el, '<div class="loading-mask"><div class="spinner"></div>Loading dashboard...</div>');
-  const [status, friends, identity] = await Promise.all([api('/status'), api('/friends'), api('/identity')]);
+  const [status, friends, identity, mgmtUrl] = await Promise.all([api('/status'), api('/friends'), api('/identity'), api('/mgmt-url')]);
   if (status.error) { html(el, '<div class="empty"><div class="icon">⚠️</div><p>Failed to connect to AICQ plugin</p></div>'); return; }
   const connCls = status.connected ? 'dot-ok' : 'dot-err';
   const connText = status.connected ? 'Connected' : 'Disconnected';
   const friendList = friends.friends || [];
   const aiFriends = friendList.filter(f => f.friendType === 'ai').length;
   const humanFriends = friendList.filter(f => f.friendType !== 'ai').length;
+  const mgmtLink = mgmtUrl?.mgmtUrl || window.location.origin;
 
   html(el, \\\`
     <div class="stats-grid">
@@ -429,9 +430,20 @@ async function loadDashboard() {
         <div class="detail-row"><div class="detail-key">Fingerprint</div><div class="detail-val mono">\${escHtml(identity.publicKeyFingerprint)}</div></div>
         <div class="detail-row"><div class="detail-key">Server URL</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${identity.serverUrl}')">\${escHtml(identity.serverUrl)} 📋</div></div>
         <div class="detail-row"><div class="detail-key">Connection</div><div class="detail-val"><span class="badge badge-\${identity.connected ? 'ok' : 'danger'}">\${identity.connected ? 'Online' : 'Offline'}</span></div></div>
+        <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val"><span class="badge badge-accent">v1.1.0</span></div></div>
       </div>
     </div>
+    <div class="card" style="margin-top:0">
+      <div class="card-header"><div class="card-title">🖥️ Management UI Access</div></div>
+      <div class="detail-row"><div class="detail-key">Current URL</div><div class="detail-val"><a href="\${escHtml(mgmtLink)}" target="_blank" style="color:var(--info);text-decoration:underline">\${escHtml(mgmtLink)}</a></div></div>
+      <div class="detail-row"><div class="detail-key">Local Access</div><div class="detail-val"><a href="http://127.0.0.1:6109" target="_blank" style="color:var(--info);text-decoration:underline">http://127.0.0.1:6109</a> <button class="btn btn-sm btn-primary" onclick="window.open('http://127.0.0.1:6109','_blank')" style="margin-left:8px">🔗 Open</button></div></div>
+      <div class="detail-row"><div class="detail-key">Gateway Path</div><div class="detail-val mono">/plugins/aicq-chat/</div></div>
+    </div>
   \\\`);
+
+  // Also set the mgmt-url-display in settings
+  const mgmtUrlEl = document.getElementById('mgmt-url-display');
+  if (mgmtUrlEl) mgmtUrlEl.textContent = window.location.href;
 }
 
 function renderMiniFriendList(friends) {
@@ -995,7 +1007,7 @@ function renderSettingsConnection() {
           <div style="flex:1">
             <div class="input-prefix">
               <span class="prefix">🌐</span>
-              <input type="url" id="set-server-url" value="\${escHtml(s.serverUrl || '')}" placeholder="https://aicq.online:61018">
+              <input type="url" id="set-server-url" value="\${escHtml(s.serverUrl || '')}" placeholder="https://aicq.online">
             </div>
             <div class="hint">The HTTPS URL of the AICQ relay server. WebSocket path /ws is auto-appended.</div>
           </div>
@@ -1037,7 +1049,8 @@ function renderSettingsConnection() {
     <div class="card">
       <div class="card-header"><div class="card-title">📁 Config File</div></div>
       <div class="detail-row"><div class="detail-key">Source</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(s.configPath || '')}')">\${escHtml(s.configPath || 'Not found')} 📋</div></div>
-      <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val">1.0.4</div></div>
+      <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val">1.1.0</div></div>
+      <div class="detail-row"><div class="detail-key">Management UI</div><div class="detail-val" id="mgmt-url-display" style="cursor:pointer" onclick="copyText(document.getElementById('mgmt-url-display')?.textContent || '')"></div></div>
       <div class="detail-row"><div class="detail-key">Uptime</div><div class="detail-val">\${formatUptime(s.uptimeSeconds)}</div></div>
     </div>
   \\\`);

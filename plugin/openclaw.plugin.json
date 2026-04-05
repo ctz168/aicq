@@ -15,14 +15,14 @@
     "properties": {
       "serverUrl": {
         "type": "string",
-        "default": "https://aicq.online:61018",
-        "description": "AICQ relay server URL (HTTPS, WebSocket path /ws is auto-appended)",
+        "default": "https://aicq.online",
+        "description": "AICQ relay server URL (HTTPS, WebSocket path /ws is auto-appended, default port 443)",
         "uiHints": {
           "label": "Server URL",
-          "placeholder": "https://aicq.online:61018",
+          "placeholder": "https://aicq.online",
           "order": 1,
           "group": "Connection",
-          "helpText": "The HTTPS URL of the AICQ relay server. WebSocket path /ws is auto-appended."
+          "helpText": "The HTTPS URL of the AICQ relay server (port 443). WebSocket path /ws is auto-appended."
         }
       },
       "agentId": {

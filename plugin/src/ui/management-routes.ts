@@ -829,7 +829,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
 
         return json(res, {
           exportDate: new Date().toISOString(),
-          pluginVersion: "1.0.4",
+          pluginVersion: "1.1.0",
           settings: pluginSection || {},
           fullConfig: result.config,
         });
@@ -943,6 +943,19 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
           const msg = e instanceof Error ? e.message : String(e);
           return json(res, { success: false, message: "Write failed: " + msg }, 500);
         }
+      }
+
+      // ── GET /api/mgmt-url ──
+      if (apiPath === "/mgmt-url" && method === "GET") {
+        // Determine the management UI URL
+        const host = (req.headers?.host as string) || "127.0.0.1:6109";
+        const protocol = (req.headers?.["x-forwarded-proto"] as string) || "http";
+        const mgmtUrl = protocol + "://" + host;
+        return json(res, {
+          mgmtUrl,
+          standaloneUrl: "http://127.0.0.1:6109",
+          gatewayPath: "/plugins/aicq-chat/",
+        });
       }
 
       // ── POST /api/agents ──
