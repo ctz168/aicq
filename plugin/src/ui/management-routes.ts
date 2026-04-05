@@ -582,6 +582,85 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         return json(res, { success: true, message: "Model configuration saved for " + provider.name });
       }
 
+      // ── GET /api/settings ──
+      if (apiPath === "/settings" && method === "GET") {
+        // Read current plugin settings from config file (config.aicq section)
+        // Falls back to runtime defaults
+        const result = readConfig();
+        const aicqSection = (result?.config?.aicq ?? {}) as Record<string, unknown>;
+
+        // Also check plugins.aicq-chat
+        const pluginsSection = result?.config?.plugins as Record<string, unknown> | undefined;
+        const pluginSection = pluginsSection?.["aicq-chat"] as Record<string, unknown> | undefined;
+
+        // Merge: plugin section > aicq section > defaults
+        const merged = { ...aicqSection, ...pluginSection };
+
+        return json(res, {
+          serverUrl: (merged.serverUrl as string) || serverUrl,
+          maxFriends: (merged.maxFriends as number) || 200,
+          autoAcceptFriends: Boolean(merged.autoAcceptFriends),
+          agentId: aicqAgentId,
+          publicKeyFingerprint: identityService.getPublicKeyFingerprint(),
+          connected: serverClient.isConnected(),
+          configSource: result ? path.basename(result.configPath) : "none",
+          configPath: result?.configPath || null,
+          // Runtime info
+          friendCount: store.getFriendCount(),
+          sessionCount: store.sessions.size,
+        });
+      }
+
+      // ── PUT /api/settings ──
+      if (apiPath === "/settings" && method === "PUT") {
+        const body = await readBody(req);
+
+        const newServerUrl = body.serverUrl as string | undefined;
+        const newMaxFriends = body.maxFriends as number | undefined;
+        const newAutoAccept = body.autoAcceptFriends as boolean | undefined;
+
+        // Validate
+        if (newServerUrl !== undefined && typeof newServerUrl !== "string") {
+          return json(res, { success: false, message: "serverUrl must be a string" }, 400);
+        }
+        if (newMaxFriends !== undefined && (typeof newMaxFriends !== "number" || newMaxFriends < 1 || newMaxFriends > 10000)) {
+          return json(res, { success: false, message: "maxFriends must be a number between 1 and 10000" }, 400);
+        }
+        if (newAutoAccept !== undefined && typeof newAutoAccept !== "boolean") {
+          return json(res, { success: false, message: "autoAcceptFriends must be a boolean" }, 400);
+        }
+
+        const result = readConfig();
+        if (!result) {
+          return json(res, { success: false, message: "No config file found. Create openclaw.json first." }, 400);
+        }
+
+        const config = result.config;
+
+        // Use plugins.aicq-chat section for cleaner namespacing
+        if (!config.plugins || typeof config.plugins !== "object") {
+          config.plugins = {};
+        }
+        const plugins = config.plugins as Record<string, unknown>;
+        if (!plugins["aicq-chat"] || typeof plugins["aicq-chat"] !== "object") {
+          plugins["aicq-chat"] = {};
+        }
+        const aicqConfig = plugins["aicq-chat"] as Record<string, unknown>;
+
+        // Apply changes
+        if (newServerUrl !== undefined) aicqConfig.serverUrl = newServerUrl;
+        if (newMaxFriends !== undefined) aicqConfig.maxFriends = newMaxFriends;
+        if (newAutoAccept !== undefined) aicqConfig.autoAcceptFriends = newAutoAccept;
+
+        const written = writeConfig(config);
+        if (!written) {
+          return json(res, { success: false, message: "Failed to write config file" }, 500);
+        }
+
+        logger.info("[API] Settings saved: " + JSON.stringify({ serverUrl: newServerUrl, maxFriends: newMaxFriends, autoAcceptFriends: newAutoAccept }));
+        return json(res, { success: true, message: "Settings saved successfully" });
+      }
+
       // ── Fallback ──
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Not found: " + apiPath }));

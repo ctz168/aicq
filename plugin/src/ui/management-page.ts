@@ -798,46 +798,131 @@ async function saveModelConfig() {
 }
 
 // ════════════════════════════════════════════════════════════
-// PAGE: Settings
+// PAGE: Settings (editable with save)
 // ════════════════════════════════════════════════════════════
+let _settingsSaving = false;
+
 async function loadSettings() {
   const el = $('#settings-content');
   html(el, '<div class="loading-mask"><div class="spinner"></div>Loading settings...</div>');
-  const [status, identity, config] = await Promise.all([api('/status'), api('/identity'), api('/config')]);
 
-  if (config.error) {
-    html(el, '<div class="empty"><div class="icon">⚠️</div><p>' + escHtml(config.error) + '</p></div>');
+  const settings = await api('/settings');
+  if (settings.error) {
+    html(el, '<div class="empty"><div class="icon">⚠️</div><p>' + escHtml(settings.error) + '</p></div>');
     return;
   }
 
+  window._currentSettings = settings;
+
   html(el, \\\`
-    <p class="section-desc">AICQ plugin runtime configuration and system information.</p>
+    <p class="section-desc">Configure the AICQ plugin local settings. Changes are saved to <strong>\${escHtml(settings.configSource || 'openclaw.json')}</strong> under the <code>plugins.aicq-chat</code> section.</p>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">🔌 Connection Settings</div></div>
-      <div class="detail-row"><div class="detail-key">Server URL</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(status.serverUrl)}')">\${escHtml(status.serverUrl)} 📋</div></div>
-      <div class="detail-row"><div class="detail-key">WebSocket Status</div><div class="detail-val"><span class="badge badge-\${status.connected ? 'ok' : 'danger'}">\${status.connected ? 'Connected' : 'Disconnected'}</span></div></div>
+      <div class="card-header">
+        <div class="card-title">🔌 Connection</div>
+        <span class="badge badge-\${settings.connected ? 'ok' : 'danger'}">\${settings.connected ? '● Connected' : '○ Disconnected'}</span>
+      </div>
+      <div class="form-group">
+        <label>Server URL</label>
+        <div class="input-prefix">
+          <span class="prefix">🌐</span>
+          <input type="url" id="set-server-url" value="\${escHtml(settings.serverUrl || '')}" placeholder="https://aicq.online:61018">
+        </div>
+        <div class="hint">The HTTPS URL of the AICQ relay server. WebSocket path /ws is auto-appended.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">👥 Friend Limits</div></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Max Friends</label>
+          <input type="number" id="set-max-friends" value="\${settings.maxFriends || 200}" min="1" max="10000" placeholder="200">
+          <div class="hint">Maximum number of encrypted friend connections (1–10000).</div>
+        </div>
+        <div class="form-group">
+          <label>Auto-Accept Friends</label>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+            <label style="text-transform:none;letter-spacing:normal;font-weight:400;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="set-auto-accept" \${settings.autoAcceptFriends ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent)">
+              Automatically accept all incoming friend requests
+            </label>
+          </div>
+          <div class="hint">When enabled, friend requests are accepted without manual review.</div>
+        </div>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-header"><div class="card-title">🤖 Agent Identity</div></div>
-      <div class="detail-row"><div class="detail-key">Agent ID</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(identity.agentId)}')">\${escHtml(identity.agentId)} 📋</div></div>
-      <div class="detail-row"><div class="detail-key">Public Key Fingerprint</div><div class="detail-val mono">\${escHtml(identity.publicKeyFingerprint)}</div></div>
+      <div class="detail-row"><div class="detail-key">Agent ID</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(settings.agentId)}')">\${escHtml(settings.agentId)} 📋</div></div>
+      <div class="detail-row"><div class="detail-key">Public Key Fingerprint</div><div class="detail-val mono">\${escHtml(settings.publicKeyFingerprint || '—')}</div></div>
+      <div class="detail-row"><div class="detail-key">Friends</div><div class="detail-val">\${settings.friendCount || 0}</div></div>
+      <div class="detail-row"><div class="detail-key">Active Sessions</div><div class="detail-val">\${settings.sessionCount || 0}</div></div>
     </div>
 
     <div class="card">
       <div class="card-header"><div class="card-title">📁 Config File</div></div>
-      <div class="detail-row"><div class="detail-key">Source</div><div class="detail-val" style="cursor:pointer" onclick="copyText('\${escHtml(config.configPath || '')}')">\${escHtml(config.configPath || 'Not found')} 📋</div></div>
-      <div class="detail-row"><div class="detail-key">Config Size</div><div class="detail-val">\${config.configSize || 0} bytes</div></div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><div class="card-title">📊 Statistics</div></div>
-      <div class="detail-row"><div class="detail-key">Friends Count</div><div class="detail-val">\${status.friendCount || 0}</div></div>
-      <div class="detail-row"><div class="detail-key">Active Sessions</div><div class="detail-val">\${status.sessionCount || 0}</div></div>
+      <div class="detail-row"><div class="detail-key">Source</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(settings.configPath || '')}')">\${escHtml(settings.configPath || 'Not found')} 📋</div></div>
       <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val">1.0.4</div></div>
     </div>
+
+    <div class="form-actions" style="justify-content:flex-start;margin-top:8px;padding-top:0;border-top:none">
+      <button class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">
+        💾 Save Settings
+      </button>
+      <button class="btn btn-default" onclick="loadSettings()">
+        🔄 Discard & Refresh
+      </button>
+      <span id="settings-save-status" style="margin-left:8px;font-size:12px;color:var(--text3)"></span>
+    </div>
   \\\`);
+}
+
+async function saveSettings() {
+  if (_settingsSaving) return;
+  _settingsSaving = true;
+
+  const btn = $('#btn-save-settings');
+  const statusEl = $('#settings-save-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  if (statusEl) statusEl.textContent = '';
+
+  const serverUrl = $('#set-server-url')?.value?.trim();
+  const maxFriends = parseInt($('#set-max-friends')?.value, 10);
+  const autoAcceptFriends = $('#set-auto-accept')?.checked ?? false;
+
+  // Basic validation
+  if (!serverUrl) {
+    toast('Server URL is required', 'warn');
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Settings'; }
+    _settingsSaving = false;
+    return;
+  }
+  if (isNaN(maxFriends) || maxFriends < 1 || maxFriends > 10000) {
+    toast('Max Friends must be between 1 and 10000', 'warn');
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Settings'; }
+    _settingsSaving = false;
+    return;
+  }
+
+  const r = await api('/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ serverUrl, maxFriends, autoAcceptFriends }),
+  });
+
+  _settingsSaving = false;
+  if (btn) { btn.disabled = false; btn.textContent = '💾 Save Settings'; }
+
+  if (r.success) {
+    toast('Settings saved successfully!', 'ok');
+    if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--ok)'; }
+    // Reload to reflect new values
+    setTimeout(() => loadSettings(), 1000);
+  } else {
+    toast(r.message || r.error || 'Failed to save settings', 'err');
+    if (statusEl) { statusEl.textContent = '✗ Failed'; statusEl.style.color = 'var(--danger)'; }
+  }
 }
 
 // ════════════════════════════════════════════════════════════
