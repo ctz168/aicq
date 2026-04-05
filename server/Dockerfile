@@ -49,8 +49,9 @@ COPY --from=builder /app/client/web/dist/ web/dist/
 COPY server/.env.example server/.env
 COPY server/docker/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Install nginx
-RUN apk add --no-cache nginx
+# Install nginx and pm2 for high concurrency
+RUN apk add --no-cache nginx openssl \
+    && npm install -g pm2
 
 # Environment
 ENV NODE_ENV=production

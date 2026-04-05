@@ -18,32 +18,36 @@ if [ ! -f /etc/nginx/ssl/aicq.online.crt ]; then
     echo "WARNING: Using self-signed certificate. Replace with Let's Encrypt for production."
 fi
 
-# Start Node.js server (background) on port 443
-echo "Starting AICQ server on port 443..."
+# Start Node.js server (background) with PM2 Cluster Mode
+# -i max automatically scales to all CPU cores
+echo "Starting AICQ server in cluster mode (max CPU cores)..."
 cd /app/server
-node dist/index.js &
+pm2-runtime start dist/index.js -i max --name aicq-server &
 SERVER_PID=$!
 
-# Wait for server to be ready (up to 60s since it needs to connect to ClickHouse)
-echo "Waiting for server to start..."
+# Wait for server to be ready on port 61018 (internal)
+echo "Waiting for server to start on port 61018..."
 for i in $(seq 1 60); do
-    if wget -q -O /dev/null http://127.0.0.1:443/health 2>/dev/null; then
+    if wget -q -O /dev/null http://127.0.0.1:61018/health 2>/dev/null; then
         echo "Server is ready!"
         break
     fi
     sleep 1
 done
 
-# Start Admin panel (Next.js standalone) on port 80
-echo "Starting Admin panel on port 80..."
+# Start Admin panel (Next.js standalone) on port 8080 (internal to container)
+# We will change NGINX to proxy to 8080 to avoid collision if needed, 
+# although Docker's 80 is usually fine if Nginx isn't using it yet.
+# But for clarity, we keep admin on 8080 and Nginx on 80.
+echo "Starting Admin panel..."
 cd /app/admin
-AICQ_SERVER_URL=http://localhost:443 node server.js &
+PORT=8080 AICQ_SERVER_URL=http://localhost:61018 node server.js &
 ADMIN_PID=$!
 
 # Wait for admin to be ready
-echo "Waiting for admin panel to start..."
+echo "Waiting for admin panel to start on port 8080..."
 for i in $(seq 1 30); do
-    if wget -q -O /dev/null http://127.0.0.1:80/ 2>/dev/null; then
+    if wget -q -O /dev/null http://127.0.0.1:8080/ 2>/dev/null; then
         echo "Admin panel is ready!"
         break
     fi
