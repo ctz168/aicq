@@ -664,7 +664,7 @@ const plugin = definePluginEntry({
       html: managementHtml,
     });
 
-    const mgmtPort = parseInt(process.env.AICQ_MGMT_PORT || "8099", 10);
+    const mgmtPort = parseInt(process.env.AICQ_MGMT_PORT || "461099", 10);
     const mgmtServer = http.createServer((req, res) => {
       managementHandler(req, res).catch((err) => {
         logger.error("[HTTP] Management server error: " + (err instanceof Error ? err.message : err));
