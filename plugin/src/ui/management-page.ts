@@ -310,6 +310,289 @@ tbody tr:hover { background: var(--bg3); }
 `;
 
 const JS = `
+// ── i18n ──
+const _lang = 'zh'; // Default Chinese; set to 'en' to switch to English
+const _T = {
+  // Sidebar
+  nav_overview: { zh: '概览', en: 'Overview' },
+  nav_management: { zh: '管理', en: 'Management' },
+  nav_system: { zh: '系统', en: 'System' },
+  nav_dashboard: { zh: '仪表盘', en: 'Dashboard' },
+  nav_agents: { zh: '智能体', en: 'Agents' },
+  nav_friends: { zh: '好友', en: 'Friends' },
+  nav_models: { zh: '模型', en: 'Models' },
+  nav_settings: { zh: '设置', en: 'Settings' },
+  collapse_sidebar: { zh: '收起侧栏', en: 'Collapse sidebar' },
+  management_console: { zh: '管理控制台', en: 'Management Console' },
+  // Header
+  connecting: { zh: '连接中...', en: 'Connecting...' },
+  connected: { zh: '已连接', en: 'Connected' },
+  disconnected: { zh: '已断开', en: 'Disconnected' },
+  refresh: { zh: '刷新', en: 'Refresh' },
+  // Dashboard
+  loading_dashboard: { zh: '正在加载仪表盘...', en: 'Loading dashboard...' },
+  failed_connect: { zh: '无法连接到 AICQ 插件', en: 'Failed to connect to AICQ plugin' },
+  server_status: { zh: '服务器状态', en: 'Server Status' },
+  total_friends: { zh: '好友总数', en: 'Total Friends' },
+  active_sessions: { zh: '活跃会话', en: 'Active Sessions' },
+  encrypted_sessions: { zh: '加密会话', en: 'Encrypted sessions' },
+  agent_id: { zh: '智能体 ID', en: 'Agent ID' },
+  fingerprint: { zh: '指纹', en: 'Fingerprint' },
+  recent_friends: { zh: '最近好友', en: 'Recent Friends' },
+  view_all: { zh: '查看全部 →', en: 'View All →' },
+  identity_info: { zh: '身份信息', en: 'Identity Info' },
+  server_url: { zh: '服务器地址', en: 'Server URL' },
+  connection: { zh: '连接', en: 'Connection' },
+  online: { zh: '在线', en: 'Online' },
+  offline: { zh: '离线', en: 'Offline' },
+  plugin_version: { zh: '插件版本', en: 'Plugin Version' },
+  mgmt_ui_access: { zh: '管理界面访问', en: 'Management UI Access' },
+  current_url: { zh: '当前地址', en: 'Current URL' },
+  local_access: { zh: '本地访问', en: 'Local Access' },
+  open: { zh: '打开', en: 'Open' },
+  gateway_path: { zh: '网关路径', en: 'Gateway Path' },
+  no_friends_yet: { zh: '暂无好友', en: 'No friends yet' },
+  // Agents
+  loading_agents: { zh: '正在加载智能体...', en: 'Loading agents...' },
+  active: { zh: '启用', en: 'active' },
+  disabled: { zh: '禁用', en: 'disabled' },
+  default_model: { zh: '默认', en: 'default' },
+  no_agents_configured: { zh: '未配置智能体', en: 'No agents configured' },
+  add_agents_hint: { zh: '请在 openclaw.json 或 stableclaw.json 配置文件中添加智能体', en: 'Add agents to your openclaw.json or stableclaw.json config file' },
+  search_agents: { zh: '搜索智能体...', en: 'Search agents...' },
+  add_agent: { zh: '添加智能体', en: 'Add Agent' },
+  agent_list_from: { zh: '智能体列表来自', en: 'Agent list from' },
+  total_label: { zh: '总计', en: 'Total' },
+  agents_configured: { zh: '个智能体已配置', en: 'agents configured' },
+  status: { zh: '状态', en: 'Status' },
+  agent: { zh: '智能体', en: 'Agent' },
+  model: { zh: '模型', en: 'Model' },
+  provider: { zh: '提供商', en: 'Provider' },
+  system_prompt: { zh: '系统提示词', en: 'System Prompt' },
+  actions: { zh: '操作', en: 'Actions' },
+  confirm_delete_agent: { zh: '确定要删除这个智能体吗？', en: 'Are you sure you want to delete this agent?' },
+  agent_deleted: { zh: '智能体已删除', en: 'Agent deleted' },
+  delete_failed: { zh: '删除失败', en: 'Delete failed' },
+  add_new_agent: { zh: '➕ 添加新智能体', en: '➕ Add New Agent' },
+  edit_agent: { zh: '✏️ 编辑智能体', en: '✏️ Edit Agent' },
+  agent_name_required: { zh: '请输入智能体名称', en: 'Agent name is required' },
+  agent_updated: { zh: '智能体已更新', en: 'Agent updated' },
+  agent_added: { zh: '智能体已添加', en: 'Agent added' },
+  no_data: { zh: '暂无数据', en: 'No data' },
+  // Friends
+  loading_friends: { zh: '正在加载好友...', en: 'Loading friends...' },
+  friends: { zh: '好友', en: 'Friends' },
+  requests: { zh: '请求', en: 'Requests' },
+  sessions: { zh: '会话', en: 'Sessions' },
+  search_friends: { zh: '搜索好友...', en: 'Search friends...' },
+  all: { zh: '全部', en: 'All' },
+  ai: { zh: 'AI', en: 'AI' },
+  human: { zh: '人类', en: 'Human' },
+  add_friend: { zh: '添加好友', en: 'Add Friend' },
+  type: { zh: '类型', en: 'Type' },
+  friend_label: { zh: '好友', en: 'Friend' },
+  permissions: { zh: '权限', en: 'Permissions' },
+  last_message: { zh: '最后消息', en: 'Last Message' },
+  add_friend_hint: { zh: '使用6位临时号码或节点ID添加好友', en: 'Add a friend using their 6-digit temp number or node ID' },
+  unavailable_offline: { zh: '离线时不可用', en: 'Unavailable while offline' },
+  request_id: { zh: '请求 ID', en: 'Request ID' },
+  from: { zh: '来自', en: 'From' },
+  time: { zh: '时间', en: 'Time' },
+  no_pending_requests: { zh: '暂无待处理请求', en: 'No pending requests' },
+  accept: { zh: '接受', en: 'Accept' },
+  reject: { zh: '拒绝', en: 'Reject' },
+  peer_id: { zh: '对端 ID', en: 'Peer ID' },
+  established: { zh: '建立时间', en: 'Established' },
+  messages: { zh: '条消息', en: 'messages' },
+  no_active_sessions: { zh: '暂无活跃会话', en: 'No active sessions' },
+  enter_temp_or_id: { zh: '请输入临时号码或节点ID', en: 'Enter a temp number or node ID' },
+  sending_request: { zh: '正在发送好友请求...', en: 'Sending friend request...' },
+  friend_request_sent: { zh: '好友请求已发送！', en: 'Friend request sent!' },
+  failed_add_friend: { zh: '添加好友失败', en: 'Failed to add friend' },
+  remove_friend_confirm: { zh: '确定移除好友 ', en: 'Remove friend ' },
+  friend_removed: { zh: '好友已移除', en: 'Friend removed' },
+  edit_permissions: { zh: '编辑权限', en: 'Edit Permissions' },
+  friend_permissions: { zh: '好友权限', en: 'Friend Permissions' },
+  chat_perm: { zh: '💬 聊天', en: '💬 Chat' },
+  exec_perm: { zh: '🔧 执行', en: '🔧 Exec' },
+  chat_perm_hint: { zh: '（发送/接收消息）', en: '(send/receive messages)' },
+  exec_perm_hint: { zh: '（执行工具/命令）', en: '(execute tools/commands)' },
+  save_permissions: { zh: '保存权限', en: 'Save Permissions' },
+  permissions_updated: { zh: '权限已更新', en: 'Permissions updated' },
+  request_accepted: { zh: '请求已接受', en: 'Request accepted' },
+  request_rejected: { zh: '请求已拒绝', en: 'Request rejected' },
+  // Models
+  loading_models: { zh: '正在加载模型配置...', en: 'Loading model configuration...' },
+  configured: { zh: '已配置', en: 'Configured' },
+  providers_with_keys: { zh: '已配置API密钥的提供商', en: 'Providers with API keys' },
+  configure: { zh: '配置', en: 'Configure' },
+  not_set: { zh: '未设置', en: 'Not set' },
+  key_set: { zh: '● 已设置密钥', en: '● Key set' },
+  active_model_configs: { zh: '当前模型配置', en: 'Active Model Configurations' },
+  base_url: { zh: '基础地址', en: 'Base URL' },
+  configure_providers_desc: { zh: '为智能体配置LLM提供商。点击提供商卡片设置或更新API密钥、模型和基础地址。更改将直接保存到配置文件。', en: 'Configure LLM providers for your agents. Click a provider card to set or update the API key, model, and base URL. Changes are saved directly to your config file.' },
+  current_key: { zh: '当前：', en: 'Current: ' },
+  no_api_key: { zh: '未配置API密钥', en: 'No API key configured' },
+  provider_not_found: { zh: '未找到提供商', en: 'Provider not found' },
+  enter_api_key: { zh: '输入API密钥', en: 'Enter API key' },
+  enter_model_id: { zh: '输入模型ID', en: 'Model ID' },
+  default_url: { zh: '默认地址', en: 'Default URL' },
+  enter_api_key_or_model: { zh: '请至少输入API密钥或模型ID', en: 'Enter at least an API key or model ID' },
+  saving_config: { zh: '正在保存配置...', en: 'Saving configuration...' },
+  config_saved: { zh: '配置已保存！', en: 'Configuration saved!' },
+  failed_save: { zh: '保存失败', en: 'Failed to save' },
+  confirm_delete_provider: { zh: '确定删除提供商 "', en: 'Delete configuration for provider "' },
+  provider_deleted: { zh: '提供商配置已删除', en: 'Provider configuration deleted' },
+  // Settings
+  loading_settings: { zh: '正在加载设置...', en: 'Loading settings...' },
+  tab_connection: { zh: '🔌 连接', en: '🔌 Connection' },
+  tab_friends: { zh: '👥 好友', en: '👥 Friends' },
+  tab_security: { zh: '🔒 安全', en: '🔒 Security' },
+  tab_advanced: { zh: '⚙️ 高级', en: '⚙️ Advanced' },
+  tab_json: { zh: '📝 JSON编辑', en: '📝 JSON Editor' },
+  conn_desc: { zh: '配置服务器连接和WebSocket设置。更改需要重启插件才能完全生效。', en: 'Configure server connection and WebSocket settings. Changes require a plugin restart to take full effect.' },
+  server_connection: { zh: '🌐 服务器连接', en: '🌐 Server Connection' },
+  server_url_label: { zh: '服务器地址', en: 'Server URL' },
+  server_url_hint: { zh: 'AICQ中继服务器的HTTPS地址。WebSocket路径 /ws 会自动追加。', en: 'The HTTPS URL of the AICQ relay server. WebSocket path /ws is auto-appended.' },
+  conn_timeout: { zh: '连接超时（秒）', en: 'Connection Timeout (seconds)' },
+  conn_timeout_hint: { zh: 'HTTP请求超时时间（5-120秒）。默认：30秒。', en: 'HTTP request timeout (5–120s). Default: 30s.' },
+  ws_auto_reconnect: { zh: 'WebSocket自动重连', en: 'WS Auto-Reconnect' },
+  auto_reconnect_label: { zh: '断开时自动重连', en: 'Auto-reconnect when disconnected' },
+  auto_reconnect_hint: { zh: '断开连接后自动重新连接WebSocket。', en: 'Automatically reconnect WebSocket on disconnection.' },
+  ws_reconnect_interval: { zh: '重连间隔（秒）', en: 'WS Reconnect Interval (seconds)' },
+  ws_reconnect_hint: { zh: '重连尝试之间的间隔（5-600秒）。默认：60秒。', en: 'Interval between reconnection attempts (5–600s). Default: 60s.' },
+  test: { zh: '测试', en: 'Test' },
+  testing: { zh: '测试中...', en: 'Testing...' },
+  enter_server_url: { zh: '请先输入服务器地址', en: 'Enter a server URL first' },
+  conn_ok: { zh: '连接成功', en: 'Connected successfully' },
+  conn_ok_latency: { zh: '连接成功！延迟：', en: 'Connection OK! Latency: ' },
+  conn_failed: { zh: '连接失败', en: 'Connection failed' },
+  config_file: { zh: '📁 配置文件', en: '📁 Config File' },
+  source: { zh: '来源', en: 'Source' },
+  mgmt_ui: { zh: '管理界面', en: 'Management UI' },
+  uptime: { zh: '运行时间', en: 'Uptime' },
+  not_found: { zh: '未找到', en: 'Not found' },
+  friends_tab_desc: { zh: '配置好友管理、权限和临时号码设置。', en: 'Configure friend management, permissions, and temporary number settings.' },
+  of_max: { zh: ' / 最大 ', en: ' of ' },
+  max_friends: { zh: '最大好友数', en: 'Max Friends' },
+  auto_accept: { zh: '自动接受好友', en: 'Auto-Accept Friends' },
+  auto_accept_label: { zh: '自动接受请求', en: 'Automatically accept requests' },
+  auto_accept_hint: { zh: '启用后，传入的好友请求将自动接受。', en: 'When enabled, incoming friend requests are accepted without review.' },
+  default_perms: { zh: '新好友默认权限', en: 'Default Permissions for New Friends' },
+  default_perms_hint: { zh: '自动接受新好友请求时应用的默认权限。', en: 'Default permissions applied when auto-accepting new friend requests.' },
+  temp_numbers: { zh: '🔢 临时号码', en: '🔢 Temporary Numbers' },
+  temp_expiry: { zh: '临时号码有效期（秒）', en: 'Temp Number Expiry (seconds)' },
+  temp_expiry_hint: { zh: '临时好友号码的有效时间（60-3600秒）。默认：5分钟。', en: 'How long a temporary friend number remains valid (60–3600s). Default: 5 minutes.' },
+  sec_desc: { zh: '配置加密、P2P和身份安全设置。', en: 'Configure encryption, P2P, and identity security settings.' },
+  agent_identity: { zh: '🤖 智能体身份', en: '🤖 Agent Identity' },
+  public_key_fp: { zh: '公钥指纹', en: 'Public Key Fingerprint' },
+  reset_identity: { zh: '🗑️ 重置身份', en: '🗑️ Reset Identity' },
+  reset_identity_warn: { zh: '⚠️ 这将永久删除所有好友、会话和密钥', en: '⚠️ This deletes all friends, sessions, and keys permanently' },
+  p2p_encryption: { zh: '🔒 P2P与加密', en: '🔒 P2P & Encryption' },
+  enable_p2p: { zh: '启用P2P连接', en: 'Enable P2P Connections' },
+  allow_p2p: { zh: '允许直接P2P消息', en: 'Allow direct P2P messaging' },
+  enable_p2p_hint: { zh: '双方都在线时启用点对点加密连接。', en: 'Enable peer-to-peer encrypted connections when both parties are online.' },
+  hs_timeout: { zh: '握手超时（秒）', en: 'Handshake Timeout (seconds)' },
+  hs_timeout_hint: { zh: 'Noise-XK握手超时时间（10-300秒）。默认：60秒。', en: 'Noise-XK handshake timeout (10–300s). Default: 60s.' },
+  adv_desc: { zh: '文件传输、日志和配置管理的高级设置。', en: 'Advanced settings for file transfer, logging, and configuration management.' },
+  file_transfer: { zh: '📎 文件传输', en: '📎 File Transfer' },
+  enable_ft: { zh: '启用文件传输', en: 'Enable File Transfer' },
+  allow_ft: { zh: '允许文件传输', en: 'Allow file transfers' },
+  enable_ft_hint: { zh: '启用好友间的加密文件传输。', en: 'Enable encrypted file transfer between friends.' },
+  max_file_size: { zh: '最大文件大小', en: 'Max File Size' },
+  max_file_size_hint: { zh: '加密传输的最大文件大小。当前：', en: 'Maximum file size for encrypted transfers. Current: ' },
+  logging: { zh: '📋 日志', en: '📋 Logging' },
+  log_level: { zh: '日志级别', en: 'Log Level' },
+  log_debug: { zh: '🐛 调试 — 详细输出', en: '🐛 Debug — Verbose output for troubleshooting' },
+  log_info: { zh: 'ℹ️ 信息 — 一般信息（默认）', en: 'ℹ️ Info — General information (default)' },
+  log_warn: { zh: '⚠️ 警告 — 警告和重要事件', en: '⚠️ Warn — Warnings and important events' },
+  log_error: { zh: '❌ 错误 — 仅错误', en: '❌ Error — Errors only' },
+  log_none: { zh: '🔇 无 — 禁用所有日志', en: '🔇 None — Disable all logging' },
+  log_level_hint: { zh: '控制插件日志输出的详细程度。', en: 'Controls the verbosity of plugin log output.' },
+  import_export: { zh: '📦 导入/导出设置', en: '📦 Import / Export Settings' },
+  export_settings: { zh: '📥 导出设置', en: '📥 Export Settings' },
+  import_settings: { zh: '📤 导入设置', en: '📤 Import Settings' },
+  import_export_hint: { zh: '将当前AICQ插件设置导出为JSON。导入可从备份恢复设置。', en: 'Export current AICQ plugin settings as JSON. Import to restore settings from a backup.' },
+  save: { zh: '💾 保存', en: '💾 Save' },
+  saving: { zh: '保存中...', en: 'Saving...' },
+  saved: { zh: '✓ 已保存', en: '✓ Saved' },
+  settings_saved: { zh: '设置已保存：', en: 'Settings saved: ' },
+  all_saved: { zh: '所有设置已保存！', en: 'All settings saved!' },
+  delete_everything: { zh: '🗑️ 删除所有数据', en: '🗑️ Delete Everything' },
+  confirm_delete: { zh: '🗑️ 确认删除', en: '🗑️ Confirm Delete' },
+  resetting: { zh: '重置中...', en: 'Resetting...' },
+  reset_success: { zh: '身份重置成功，请重启插件。', en: 'Identity reset successfully. Please restart the plugin.' },
+  reset_failed: { zh: '重置失败', en: 'Reset failed' },
+  exported_success: { zh: '设置导出成功', en: 'Settings exported successfully' },
+  paste_json: { zh: '请先粘贴JSON设置', en: 'Paste JSON settings first' },
+  importing: { zh: '导入中...', en: 'Importing...' },
+  imported_success: { zh: '设置导入成功！', en: 'Settings imported successfully!' },
+  import_failed: { zh: '导入失败', en: 'Import failed' },
+  loading_config: { zh: '正在加载配置...', en: 'Loading config...' },
+  json_editor_desc: { zh: '直接编辑原始JSON配置。注意语法——无效的JSON将被拒绝。', en: 'Edit the raw JSON configuration directly. Be careful with syntax — invalid JSON will be rejected.' },
+  json_editor: { zh: '📝 JSON配置编辑器', en: '📝 Config JSON Editor' },
+  raw_json: { zh: '原始JSON配置', en: 'Raw JSON Configuration' },
+  raw_json_hint: { zh: '直接编辑配置JSON。使用格式化按钮美化。', en: 'Directly edit the configuration JSON. Use the Format button to prettify.' },
+  format: { zh: '📐 格式化', en: '📐 Format' },
+  copy: { zh: '📋 复制', en: '📋 Copy' },
+  revert: { zh: '↩️ 还原', en: '↩️ Revert' },
+  save_config: { zh: '💾 保存配置', en: '💾 Save Config' },
+  json_formatted: { zh: 'JSON已格式化', en: 'JSON formatted' },
+  valid_json: { zh: '✓ 有效JSON', en: '✓ Valid JSON' },
+  invalid_json: { zh: '✗ 无效JSON：', en: '✗ Invalid JSON: ' },
+  no_content: { zh: '没有可保存的内容', en: 'No content to save' },
+  config_saved: { zh: '配置已保存！', en: 'Config saved successfully!' },
+  testing_conn_to: { zh: '正在测试到 ', en: 'Testing connection to ' },
+  config_file_label: { zh: '📄 配置文件', en: '📄 Config File' },
+  // Modals
+  add_friend_title: { zh: '➕ 添加好友', en: '➕ Add Friend' },
+  temp_or_node: { zh: '临时号码或节点ID', en: 'Temp Number or Node ID' },
+  temp_or_node_ph: { zh: '6位号码或节点ID', en: '6-digit number or node ID' },
+  temp_or_node_hint: { zh: '输入好友的6位临时号码或完整节点ID。', en: 'Enter the 6-digit temporary number or the full node ID of your friend.' },
+  cancel: { zh: '取消', en: 'Cancel' },
+  send_request: { zh: '发送请求', en: 'Send Request' },
+  close: { zh: '关闭', en: 'Close' },
+  save_agent: { zh: '💾 保存智能体', en: '💾 Save Agent' },
+  save_configuration: { zh: '💾 保存配置', en: '💾 Save Configuration' },
+  reset_identity_title: { zh: '🗑️ 重置智能体身份', en: '🗑️ Reset Agent Identity' },
+  reset_warning_title: { zh: '⚠️ 警告：这是一个破坏性操作！', en: '⚠️ WARNING: This is a destructive operation!' },
+  reset_warning_desc: { zh: '这将永久删除：', en: 'This will permanently delete:' },
+  reset_keypair: { zh: '• 你的Ed25519密钥对和智能体ID', en: '• Your Ed25519 key pair and agent ID' },
+  reset_friends: { zh: '• 所有好友连接和会话', en: '• All friend connections and sessions' },
+  reset_requests: { zh: '• 所有待处理的好友请求', en: '• All pending friend requests' },
+  reset_temp: { zh: '• 所有临时号码', en: '• All temporary numbers' },
+  reset_restart_hint: { zh: '重置后，必须重启插件以生成新身份。', en: 'After reset, you must restart the plugin to generate a new identity.' },
+  type_reset: { zh: '输入 RESET 以确认', en: 'Type RESET to confirm' },
+  import_title: { zh: '📤 导入设置', en: '📤 Import Settings' },
+  paste_json_label: { zh: '粘贴JSON设置', en: 'Paste JSON Settings' },
+  paste_json_ph: { zh: '{"serverUrl": "https://...", ...}', en: '{"serverUrl": "https://...", ...}' },
+  paste_json_hint: { zh: '粘贴从另一个AICQ实例导出的JSON设置。设置将与现有值合并。', en: 'Paste the JSON settings exported from another AICQ instance. Settings will be merged with existing values.' },
+  agent_name: { zh: '智能体名称 *', en: 'Agent Name *' },
+  agent_id_label: { zh: '智能体ID', en: 'Agent ID' },
+  agent_id_hint: { zh: '唯一标识符。留空自动生成。', en: 'Unique identifier. Leave empty for auto-generation.' },
+  model_label: { zh: '模型', en: 'Model' },
+  provider_label: { zh: '提供商', en: 'Provider' },
+  system_prompt_label: { zh: '系统提示词', en: 'System Prompt' },
+  temperature: { zh: '温度', en: 'Temperature' },
+  max_tokens: { zh: '最大Token数', en: 'Max Tokens' },
+  top_p: { zh: 'Top P', en: 'Top P' },
+  tools: { zh: '工具', en: 'Tools' },
+  enabled: { zh: '启用', en: 'Enabled' },
+  // Utilities
+  copied_clipboard: { zh: '已复制到剪贴板', en: 'Copied to clipboard' },
+  copy_failed: { zh: '复制失败', en: 'Copy failed' },
+  just_now: { zh: '刚刚', en: 'just now' },
+  min_ago: { zh: '分钟前', en: ' min ago' },
+  h_ago: { zh: '小时前', en: 'h ago' },
+  d_ago: { zh: '天前', en: 'd ago' },
+  none: { zh: '无', en: 'none' },
+  failed: { zh: '失败', en: 'Failed' },
+  // Offline
+  offline_msg: { zh: '您当前处于离线状态。部分功能可能受限。数据从本地缓存加载。', en: 'You are offline. Some features may be limited. Data is loaded from local cache.' },
+};
+function t(key) { return (_T[key] && _T[key][_lang]) || key; }
+function translateStatic() { document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if (k && _T[k]) { el.textContent = _T[k][_lang] || el.textContent; } }); document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.getAttribute('data-i18n-ph'); if (k && _T[k]) { el.placeholder = _T[k][_lang] || el.placeholder; } }); }
+
 // ── Globals ──
 const API = '/api';
 let currentPage = 'dashboard';
@@ -335,7 +618,7 @@ function showOfflineBanner() {
   if (offlineBannerEl) return;
   offlineBannerEl = document.createElement('div');
   offlineBannerEl.className = 'offline-banner';
-  offlineBannerEl.innerHTML = '<span class="offline-icon">🔌</span><span>You are offline. Some features may be limited. Data is loaded from local cache.</span>';
+  offlineBannerEl.innerHTML = '<span class="offline-icon">🔌</span><span>' + t('offline_msg') + '</span>';
   const mainContent = document.querySelector('.main');
   if (mainContent) {
     mainContent.insertBefore(offlineBannerEl, mainContent.firstChild);
@@ -393,13 +676,13 @@ function escHtml(s) { if (s == null) return ''; const d = document.createElement
 function timeAgo(iso) {
   if (!iso) return '—';
   const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 0) return 'just now';
+  if (diff < 0) return t('just_now');
   const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
-  if (m < 1) return 'just now'; if (m < 60) return m + ' min ago'; if (h < 24) return h + 'h ago'; if (d < 30) return d + 'd ago';
+  if (m < 1) return t('just_now'); if (m < 60) return m + t('min_ago'); if (h < 24) return h + t('h_ago'); if (d < 30) return d + t('d_ago');
   return new Date(iso).toLocaleDateString();
 }
 function maskKey(s) { if (!s || s.length < 12) return s || ''; return s.substring(0, 6) + '••••••' + s.slice(-4); }
-function copyText(text) { navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard', 'ok')).catch(() => toast('Copy failed', 'err')); }
+function copyText(text) { navigator.clipboard.writeText(text).then(() => toast(t('copied_clipboard'), 'ok')).catch(() => toast(t('copy_failed'), 'err')); }
 
 // ── Modal ──
 function showModal(id) { show(id); }
@@ -437,15 +720,15 @@ function loadPage(page) {
 // ════════════════════════════════════════════════════════════
 async function loadDashboard() {
   const el = $('#dashboard-content');
-  html(el, '<div class="loading-mask"><div class="spinner"></div>Loading dashboard...</div>');
+  html(el, '<div class="loading-mask"><div class="spinner"></div>' + t('loading_dashboard') + '</div>');
   const results = await Promise.allSettled([api('/status'), api('/friends'), api('/identity'), api('/mgmt-url')]);
   const status = results[0].status === 'fulfilled' ? results[0].value : { error: results[0].reason?.message || 'Failed' };
   const friends = results[1].status === 'fulfilled' ? results[1].value : { friends: [], error: true };
   const identity = results[2].status === 'fulfilled' ? results[2].value : { agentId: '—', publicKeyFingerprint: '—', serverUrl: '—', connected: false };
   const mgmtUrl = results[3].status === 'fulfilled' ? results[3].value : { mgmtUrl: window.location.origin };
-  if (status.error) { html(el, '<div class="empty"><div class="icon">⚠️</div><p>Failed to connect to AICQ plugin</p></div>'); return; }
+  if (status.error) { html(el, '<div class="empty"><div class="icon">⚠️</div><p>' + t('failed_connect') + '</p></div>'); return; }
   const connCls = status.connected ? 'dot-ok' : 'dot-err';
-  const connText = status.connected ? 'Connected' : 'Disconnected';
+  const connText = status.connected ? t('connected') : t('disconnected');
   const friendList = friends.friends || [];
   const aiFriends = friendList.filter(f => f.friendType === 'ai').length;
   const humanFriends = friendList.filter(f => f.friendType !== 'ai').length;
@@ -455,7 +738,7 @@ async function loadDashboard() {
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-icon" style="background:var(--accent-bg)">📡</div>
-        <div class="stat-label">Server Status</div>
+        <div class="stat-label">\${t('server_status')}</div>
         <div class="stat-value" style="font-size:16px;display:flex;align-items:center;gap:8px">
           <span class="dot \${connCls}"></span> \${connText}
         </div>
@@ -463,42 +746,42 @@ async function loadDashboard() {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:var(--ok-bg)">👥</div>
-        <div class="stat-label">Total Friends</div>
+        <div class="stat-label">\${t('total_friends')}</div>
         <div class="stat-value">\${friendList.length}</div>
         <div class="stat-sub">\${aiFriends} AI · \${humanFriends} Human</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:var(--info-bg)">🔗</div>
-        <div class="stat-label">Active Sessions</div>
+        <div class="stat-label">\${t('active_sessions')}</div>
         <div class="stat-value">\${status.sessionCount || 0}</div>
-        <div class="stat-sub">Encrypted sessions</div>
+        <div class="stat-sub">\${t('encrypted_sessions')}</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:var(--warn-bg)">🔑</div>
-        <div class="stat-label">Agent ID</div>
+        <div class="stat-label">\${t('agent_id')}</div>
         <div class="stat-value mono" style="font-size:13px">\${escHtml(status.agentId)}</div>
-        <div class="stat-sub">Fingerprint: \${escHtml(status.fingerprint)}</div>
+        <div class="stat-sub">\${t('fingerprint')}: \${escHtml(status.fingerprint)}</div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div class="card">
-        <div class="card-header"><div class="card-title">📋 Recent Friends</div><button class="btn btn-sm btn-ghost" onclick="navigate('friends')">View All →</button></div>
+        <div class="card-header"><div class="card-title">📋 \${t('recent_friends')}</div><button class="btn btn-sm btn-ghost" onclick="navigate('friends')">\${t('view_all')}</button></div>
         \${renderMiniFriendList(friendList.slice(0, 5))}
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">🤖 Identity Info</div></div>
-        <div class="detail-row"><div class="detail-key">Agent ID</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${identity.agentId}')">\${escHtml(identity.agentId)} 📋</div></div>
-        <div class="detail-row"><div class="detail-key">Fingerprint</div><div class="detail-val mono">\${escHtml(identity.publicKeyFingerprint)}</div></div>
-        <div class="detail-row"><div class="detail-key">Server URL</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${identity.serverUrl}')">\${escHtml(identity.serverUrl)} 📋</div></div>
-        <div class="detail-row"><div class="detail-key">Connection</div><div class="detail-val"><span class="badge badge-\${identity.connected ? 'ok' : 'danger'}">\${identity.connected ? 'Online' : 'Offline'}</span></div></div>
-        <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val"><span class="badge badge-accent">v1.2.0</span></div></div>
+        <div class="card-header"><div class="card-title">🤖 \${t('identity_info')}</div></div>
+        <div class="detail-row"><div class="detail-key">\${t('agent_id')}</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${identity.agentId}')">\${escHtml(identity.agentId)} 📋</div></div>
+        <div class="detail-row"><div class="detail-key">\${t('fingerprint')}</div><div class="detail-val mono">\${escHtml(identity.publicKeyFingerprint)}</div></div>
+        <div class="detail-row"><div class="detail-key">\${t('server_url')}</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${identity.serverUrl}')">\${escHtml(identity.serverUrl)} 📋</div></div>
+        <div class="detail-row"><div class="detail-key">\${t('connection')}</div><div class="detail-val"><span class="badge badge-\${identity.connected ? 'ok' : 'danger'}">\${identity.connected ? t('online') : t('offline')}</span></div></div>
+        <div class="detail-row"><div class="detail-key">\${t('plugin_version')}</div><div class="detail-val"><span class="badge badge-accent">v1.2.0</span></div></div>
       </div>
     </div>
     <div class="card" style="margin-top:0">
-      <div class="card-header"><div class="card-title">🖥️ Management UI Access</div></div>
-      <div class="detail-row"><div class="detail-key">Current URL</div><div class="detail-val"><a href="\${escHtml(mgmtLink)}" target="_blank" style="color:var(--info);text-decoration:underline">\${escHtml(mgmtLink)}</a></div></div>
-      <div class="detail-row"><div class="detail-key">Local Access</div><div class="detail-val"><a href="http://127.0.0.1:6109" target="_blank" style="color:var(--info);text-decoration:underline">http://127.0.0.1:6109</a> <button class="btn btn-sm btn-primary" onclick="window.open('http://127.0.0.1:6109','_blank')" style="margin-left:8px">🔗 Open</button></div></div>
-      <div class="detail-row"><div class="detail-key">Gateway Path</div><div class="detail-val mono">/plugins/aicq-chat/</div></div>
+      <div class="card-header"><div class="card-title">🖥️ \${t('mgmt_ui_access')}</div></div>
+      <div class="detail-row"><div class="detail-key">\${t('current_url')}</div><div class="detail-val"><a href="\${escHtml(mgmtLink)}" target="_blank" style="color:var(--info);text-decoration:underline">\${escHtml(mgmtLink)}</a></div></div>
+      <div class="detail-row"><div class="detail-key">\${t('local_access')}</div><div class="detail-val"><a href="http://127.0.0.1:6109" target="_blank" style="color:var(--info);text-decoration:underline">http://127.0.0.1:6109</a> <button class="btn btn-sm btn-primary" onclick="window.open('http://127.0.0.1:6109','_blank')" style="margin-left:8px">🔗 \${t('open')}</button></div></div>
+      <div class="detail-row"><div class="detail-key">\${t('gateway_path')}</div><div class="detail-val mono">/plugins/aicq-chat/</div></div>
     </div>
   \\\`);
 
@@ -508,7 +791,7 @@ async function loadDashboard() {
 }
 
 function renderMiniFriendList(friends) {
-  if (!friends.length) return '<div class="empty"><p>No friends yet</p></div>';
+  if (!friends.length) return '<div class="empty"><p>' + t('no_friends_yet') + '</p></div>';
   let html = '';
   friends.forEach(f => {
     html += '<div class="detail-row"><div class="detail-key"><span class="badge badge-' + (f.friendType === 'ai' ? 'info' : 'ghost') + '">' + escHtml(f.friendType || '?') + '</span></div><div class="detail-val mono truncate" style="font-size:12px">' + escHtml(f.id) + '</div></div>';
@@ -521,7 +804,7 @@ function renderMiniFriendList(friends) {
 // ════════════════════════════════════════════════════════════
 async function loadAgents() {
   const el = $('#agents-content');
-  html(el, '<div class="loading-mask"><div class="spinner"></div>Loading agents...</div>');
+  html(el, '<div class="loading-mask"><div class="spinner"></div>' + t('loading_agents') + '</div>');
   const data = await api('/agents');
   if (data.error) { html(el, '<div class="empty"><div class="icon">⚠️</div><p>' + escHtml(data.error) + '</p></div>'); return; }
 
@@ -531,9 +814,9 @@ async function loadAgents() {
 
   let rows = '';
   agents.forEach((a, i) => {
-    const modelBadge = a.model ? '<span class="badge badge-accent">' + escHtml(a.model) + '</span>' : '<span class="badge badge-ghost">default</span>';
+    const modelBadge = a.model ? '<span class="badge badge-accent">' + escHtml(a.model) + '</span>' : '<span class="badge badge-ghost">' + t('default_model') + '</span>';
     const providerBadge = a.provider ? '<span class="tag">' + escHtml(a.provider) + '</span>' : '';
-    const statusBadge = a.enabled !== false ? '<span class="badge badge-ok">active</span>' : '<span class="badge badge-warn">disabled</span>';
+    const statusBadge = a.enabled !== false ? '<span class="badge badge-ok">' + t('active') + '</span>' : '<span class="badge badge-warn">' + t('disabled') + '</span>';
 
     rows += \\\`<tr>
       <td>\${statusBadge}</td>
@@ -553,23 +836,23 @@ async function loadAgents() {
 
   if (!agents.length) {
     html(el, \\\`
-      <p class="section-desc">Reads agent configurations from <strong>\${escHtml(configSource)}</strong>. Configure your agents in the config file.</p>
-      <div class="empty"><div class="icon">🤖</div><p>No agents configured</p><p class="sub">Add agents to your openclaw.json or stableclaw.json config file</p></div>
+      <p class="section-desc">\${t('agent_list_from')} <strong>\${escHtml(configSource)}</strong></p>
+      <div class="empty"><div class="icon">🤖</div><p>\${t('no_agents_configured')}</p><p class="sub">\${t('add_agents_hint')}</p></div>
     \\\`);
     return;
   }
 
   html(el, \\\`
     <div class="toolbar">
-      <div class="search-box"><input type="text" placeholder="Search agents..." id="agent-search" oninput="filterAgentTable()"></div>
-      <button class="btn btn-sm btn-primary" onclick="showAddAgentModal()">➕ Add Agent</button>
-      <button class="btn btn-sm btn-default" onclick="loadAgents()">🔄 Refresh</button>
+      <div class="search-box"><input type="text" placeholder="\${t('search_agents')}" id="agent-search" oninput="filterAgentTable()"></div>
+      <button class="btn btn-sm btn-primary" onclick="showAddAgentModal()">\${t('add_agent')}</button>
+      <button class="btn btn-sm btn-default" onclick="loadAgents()">🔄 \${t('refresh')}</button>
     </div>
-    <p class="section-desc">Agent list from <strong style="color:var(--accent2)">\${escHtml(configSource)}</strong>. Total: <strong>\${agents.length}</strong> agents configured.</p>
+    <p class="section-desc">\${t('agent_list_from')} <strong style="color:var(--accent2)">\${escHtml(configSource)}</strong>. \${t('total_label')}: <strong>\${agents.length}</strong> \${t('agents_configured')}.</p>
     <div class="card" style="padding:0;overflow:hidden">
       <div style="overflow-x:auto">
         <table>
-          <thead><tr><th style="width:60px">Status</th><th>Agent</th><th>Model</th><th>Provider</th><th>System Prompt</th><th style="width:90px">Actions</th></tr></thead>
+          <thead><tr><th style="width:60px">\${t('status')}</th><th>\${t('agent')}</th><th>\${t('model')}</th><th>\${t('provider')}</th><th>\${t('system_prompt')}</th><th style="width:90px">\${t('actions')}</th></tr></thead>
           <tbody id="agent-table-body">\${rows}</tbody>
         </table>
       </div>
@@ -595,23 +878,23 @@ function viewAgent(index) {
       details += '<div class="detail-row"><div class="detail-key">' + escHtml(k) + '</div><div class="detail-val mono" style="font-size:12px;cursor:pointer" onclick="copyText(decodeURIComponent(\\'' + encodeURIComponent(String(v)) + '\\'))">' + display + ' 📋</div></div>';
     }
   }
-  html('#view-agent-body', details || '<div class="empty"><p>No data</p></div>');
-  $('#view-agent-title').textContent = a.name || a.id || 'Agent';
+  html('#view-agent-body', details || '<div class="empty"><p>' + t('no_data') + '</p></div>');
+  $('#view-agent-title').textContent = a.name || a.id || t('agent');
   showModal('modal-view-agent');
 }
 
 async function deleteAgent(index) {
-  if (!confirm('Are you sure you want to delete this agent?')) return;
+  if (!confirm(t('confirm_delete_agent'))) return;
   const r = await api('/agents/' + index, { method: 'DELETE' });
-  if (r.success) { toast('Agent deleted', 'ok'); loadAgents(); }
-  else { toast(r.message || r.error || 'Delete failed', 'err'); }
+  if (r.success) { toast(t('agent_deleted'), 'ok'); loadAgents(); }
+  else { toast(r.message || r.error || t('delete_failed'), 'err'); }
 }
 
 let _editAgentIndex = null;
 
 function showAddAgentModal() {
   _editAgentIndex = null;
-  $('#agent-form-title').textContent = '➕ Add New Agent';
+  $('#agent-form-title').textContent = t('add_new_agent');
   $('#agent-form-name').value = '';
   $('#agent-form-id').value = '';
   $('#agent-form-model').value = '';
@@ -631,7 +914,7 @@ function showEditAgentModal(index) {
   const a = agents[index];
   if (!a) return;
   _editAgentIndex = index;
-  $('#agent-form-title').textContent = '✏️ Edit Agent';
+  $('#agent-form-title').textContent = t('edit_agent');
   $('#agent-form-name').value = a.name || '';
   $('#agent-form-id').value = a.id || '';
   $('#agent-form-model').value = a.model || '';
@@ -664,7 +947,7 @@ async function saveAgent() {
     tools: toolsRaw ? toolsRaw.split(',').map(t => t.trim()).filter(Boolean) : [],
   };
 
-  if (!agent.name) { toast('Agent name is required', 'warn'); return; }
+  if (!agent.name) { toast(t('agent_name_required'), 'warn'); return; }
 
   let r;
   if (_editAgentIndex !== null) {
@@ -676,11 +959,11 @@ async function saveAgent() {
   }
 
   if (r.success) {
-    toast(_editAgentIndex !== null ? 'Agent updated' : 'Agent added', 'ok');
+    toast(_editAgentIndex !== null ? t('agent_updated') : t('agent_added'), 'ok');
     hideModal('modal-add-agent');
     loadAgents();
   } else {
-    toast(r.message || r.error || 'Failed', 'err');
+    toast(r.message || r.error || t('failed'), 'err');
   }
 }
 
@@ -691,7 +974,7 @@ let friendsFilter = 'all';
 
 async function loadFriends() {
   const el = $('#friends-content');
-  html(el, '<div class="loading-mask"><div class="spinner"></div>Loading friends...</div>');
+  html(el, '<div class="loading-mask"><div class="spinner"></div>' + t('loading_friends') + '</div>');
   const results = await Promise.allSettled([api('/friends'), api('/friends/requests'), api('/sessions')]);
   const friends = results[0].status === 'fulfilled' ? results[0].value : { friends: [] };
   const requests = results[1].status === 'fulfilled' ? results[1].value : { requests: [] };
@@ -710,9 +993,9 @@ async function loadFriends() {
   const sessCount = (sessions.sessions || []).length;
 
   html('#friends-tabs', \\\`
-    <button class="filter-btn \${friendsSubTab==='friends'?'active':''}" onclick="friendsSubTab='friends';loadFriends()">👥 Friends (<span id="fc">\${friendCount}</span>)</button>
-    <button class="filter-btn \${friendsSubTab==='requests'?'active':''}" onclick="friendsSubTab='requests';loadFriends()">📨 Requests (<span id="rc">\${reqCount}</span>)</button>
-    <button class="filter-btn \${friendsSubTab==='sessions'?'active':''}" onclick="friendsSubTab='sessions';loadFriends()">🔗 Sessions (<span id="sc">\${sessCount}</span>)</button>
+    <button class="filter-btn \${friendsSubTab==='friends'?'active':''}" onclick="friendsSubTab='friends';loadFriends()">👥 \${t('friends')} (<span id="fc">\${friendCount}</span>)</button>
+    <button class="filter-btn \${friendsSubTab==='requests'?'active':''}" onclick="friendsSubTab='requests';loadFriends()">📨 \${t('requests')} (<span id="rc">\${reqCount}</span>)</button>
+    <button class="filter-btn \${friendsSubTab==='sessions'?'active':''}" onclick="friendsSubTab='sessions';loadFriends()">🔗 \${t('sessions')} (<span id="sc">\${sessCount}</span>)</button>
   \\\`);
 
   window._friendsData = friends;
@@ -747,24 +1030,24 @@ function renderFriendsList(friends) {
 
   html(el, \\\`
     <div class="toolbar">
-      <div class="search-box"><input type="text" placeholder="Search friends..." id="friend-search" oninput="filterFriendTable()"></div>
+      <div class="search-box"><input type="text" placeholder="\${t('search_friends')}" id="friend-search" oninput="filterFriendTable()"></div>
       <div class="filter-group">
-        <button class="filter-btn \${friendsFilter==='all'?'active':''}" onclick="friendsFilter='all';filterFriendTable()">All</button>
-        <button class="filter-btn \${friendsFilter==='ai'?'active':''}" onclick="friendsFilter='ai';filterFriendTable()">AI</button>
-        <button class="filter-btn \${friendsFilter==='human'?'active':''}" onclick="friendsFilter='human';filterFriendTable()">Human</button>
+        <button class="filter-btn \${friendsFilter==='all'?'active':''}" onclick="friendsFilter='all';filterFriendTable()">\${t('all')}</button>
+        <button class="filter-btn \${friendsFilter==='ai'?'active':''}" onclick="friendsFilter='ai';filterFriendTable()">\${t('ai')}</button>
+        <button class="filter-btn \${friendsFilter==='human'?'active':''}" onclick="friendsFilter='human';filterFriendTable()">\${t('human')}</button>
       </div>
       <span style="flex:1"></span>
-      <button class="btn btn-sm btn-primary" onclick="showAddFriendModal()" \${isOffline ? 'disabled title="Unavailable while offline"' : ''}>➕ Add Friend</button>
+      <button class="btn btn-sm btn-primary" onclick="showAddFriendModal()" \${isOffline ? 'disabled title="' + t('unavailable_offline') + '"' : ''}>\${t('add_friend')}</button>
       <button class="btn btn-sm btn-default" onclick="loadFriends()">🔄</button>
     </div>
     <div class="card" style="padding:0;overflow:hidden">
       <div style="overflow-x:auto;max-height:calc(100vh - 280px);overflow-y:auto">
         <table>
-          <thead><tr><th style="width:60px">Type</th><th>Friend</th><th>Permissions</th><th>Fingerprint</th><th>Last Message</th><th style="width:80px">Actions</th></tr></thead>
+          <thead><tr><th style="width:60px">\${t('type')}</th><th>\${t('friend_label')}</th><th>\${t('permissions')}</th><th>\${t('fingerprint')}</th><th>\${t('last_message')}</th><th style="width:80px">\${t('actions')}</th></tr></thead>
           <tbody id="friend-table-body">\${rows}</tbody>
         </table>
       </div>
-      \${!friends.length ? '<div class="empty"><div class="icon">👥</div><p>No friends yet</p><p class="sub">Add a friend using their 6-digit temp number or node ID</p></div>' : ''}
+      \${!friends.length ? '<div class="empty"><div class="icon">👥</div><p>' + t('no_friends_yet') + '</p><p class="sub">' + t('add_friend_hint') + '</p></div>' : ''}
     </div>
   \\\`);
 }
@@ -789,18 +1072,18 @@ function renderRequestsList(requests) {
       <td><span class="badge badge-\${stCls}">\${escHtml(r.status)}</span></td>
       <td>\${timeAgo(r.createdAt)}</td>
       <td>
-        \${r.status === 'pending' ? '<div class="actions-cell"><button class="btn btn-sm btn-ok" onclick="acceptFriendReq(\\'' + escHtml(r.id) + '\\')">✓ Accept</button><button class="btn btn-sm btn-danger" onclick="rejectFriendReq(\\'' + escHtml(r.id) + '\\')">✗ Reject</button></div>' : '—'}
+        \${r.status === 'pending' ? '<div class="actions-cell"><button class="btn btn-sm btn-ok" onclick="acceptFriendReq(\\'' + escHtml(r.id) + '\\')">✓ \${t('accept')}</button><button class="btn btn-sm btn-danger" onclick="rejectFriendReq(\\'' + escHtml(r.id) + '\\')">✗ \${t('reject')}</button></div>' : '—'}
       </td>
     </tr>\\\`;
   });
   html(el, \\\`
-    <div class="toolbar"><button class="btn btn-sm btn-default" onclick="loadFriends()">🔄 Refresh</button></div>
+    <div class="toolbar"><button class="btn btn-sm btn-default" onclick="loadFriends()">🔄 \${t('refresh')}</button></div>
     <div class="card" style="padding:0;overflow:hidden">
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>Request ID</th><th>From</th><th>Status</th><th>Time</th><th style="width:160px">Actions</th></tr></thead>
+        <thead><tr><th>\${t('request_id')}</th><th>\${t('from')}</th><th>\${t('status')}</th><th>\${t('time')}</th><th style="width:160px">\${t('actions')}</th></tr></thead>
         <tbody>\${rows}</tbody>
       </table></div>
-      \${!requests.length ? '<div class="empty"><div class="icon">📨</div><p>No pending requests</p></div>' : ''}
+      \${!requests.length ? '<div class="empty"><div class="icon">📨</div><p>' + t('no_pending_requests') + '</p></div>' : ''}
     </div>
   \\\`);
 }
@@ -812,17 +1095,17 @@ function renderSessionsList(sessions) {
     rows += \\\`<tr>
       <td class="mono" style="font-size:12px;cursor:pointer" onclick="copyText('\${escHtml(s.peerId)}')">\${escHtml(s.peerId)} 📋</td>
       <td>\${timeAgo(s.createdAt)}</td>
-      <td><span class="badge badge-info">\${s.messageCount} messages</span></td>
+      <td><span class="badge badge-info">\${s.messageCount} \${t('messages')}</span></td>
     </tr>\\\`;
   });
   html(el, \\\`
-    <div class="toolbar"><button class="btn btn-sm btn-default" onclick="loadFriends()">🔄 Refresh</button></div>
+    <div class="toolbar"><button class="btn btn-sm btn-default" onclick="loadFriends()">🔄 \${t('refresh')}</button></div>
     <div class="card" style="padding:0;overflow:hidden">
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>Peer ID</th><th>Established</th><th>Messages</th></tr></thead>
+        <thead><tr><th>\${t('peer_id')}</th><th>\${t('established')}</th><th>\${t('messages')}</th></tr></thead>
         <tbody>\${rows}</tbody>
       </table></div>
-      \${!sessions.length ? '<div class="empty"><div class="icon">🔗</div><p>No active sessions</p></div>' : ''}
+      \${!sessions.length ? '<div class="empty"><div class="icon">🔗</div><p>' + t('no_active_sessions') + '</p></div>' : ''}
     </div>
   \\\`);
 }
@@ -830,18 +1113,18 @@ function renderSessionsList(sessions) {
 function showAddFriendModal() { $('#add-friend-target').value = ''; showModal('modal-add-friend'); setTimeout(() => $('#add-friend-target')?.focus(), 100); }
 async function addFriend() {
   const target = $('#add-friend-target').value.trim();
-  if (!target) { toast('Enter a temp number or node ID', 'warn'); return; }
+  if (!target) { toast(t('enter_temp_or_id'), 'warn'); return; }
   hideModal('modal-add-friend');
-  toast('Sending friend request...', 'info');
+  toast(t('sending_request'), 'info');
   const r = await api('/friends', { method: 'POST', body: JSON.stringify({ target }) });
-  if (r.success) { toast(r.message || 'Friend request sent!', 'ok'); loadFriends(); }
-  else { toast(r.message || r.error || 'Failed to add friend', 'err'); }
+  if (r.success) { toast(r.message || t('friend_request_sent'), 'ok'); loadFriends(); }
+  else { toast(r.message || r.error || t('failed_add_friend'), 'err'); }
 }
 async function removeFriend(id) {
-  if (!confirm('Remove friend ' + id + '?')) return;
+  if (!confirm(t('remove_friend_confirm') + id + '?')) return;
   const r = await api('/friends/' + encodeURIComponent(id), { method: 'DELETE' });
-  if (r.success) { toast('Friend removed', 'ok'); loadFriends(); }
-  else { toast(r.message || r.error || 'Failed', 'err'); }
+  if (r.success) { toast(t('friend_removed'), 'ok'); loadFriends(); }
+  else { toast(r.message || r.error || t('failed'), 'err'); }
 }
 
 let _editFriendId = null;
@@ -856,16 +1139,16 @@ async function saveFriendPerms() {
   if ($('#perm-chat').checked) perms.push('chat');
   if ($('#perm-exec').checked) perms.push('exec');
   const r = await api('/friends/' + encodeURIComponent(_editFriendId) + '/permissions', { method: 'PUT', body: JSON.stringify({ permissions: perms }) });
-  if (r.success) { toast('Permissions updated', 'ok'); hideModal('modal-permissions'); loadFriends(); }
-  else { toast(r.message || r.error || 'Failed', 'err'); }
+  if (r.success) { toast(t('permissions_updated'), 'ok'); hideModal('modal-permissions'); loadFriends(); }
+  else { toast(r.message || r.error || t('failed'), 'err'); }
 }
 async function acceptFriendReq(id) {
   const r = await api('/friends/requests/' + encodeURIComponent(id) + '/accept', { method: 'POST', body: JSON.stringify({ permissions: ['chat'] }) });
-  if (r.success) { toast('Request accepted', 'ok'); loadFriends(); } else { toast(r.message || r.error || 'Failed', 'err'); }
+  if (r.success) { toast(t('request_accepted'), 'ok'); loadFriends(); } else { toast(r.message || r.error || t('failed'), 'err'); }
 }
 async function rejectFriendReq(id) {
   const r = await api('/friends/requests/' + encodeURIComponent(id) + '/reject', { method: 'POST', body: JSON.stringify({}) });
-  if (r.success) { toast('Request rejected', 'ok'); loadFriends(); } else { toast(r.message || r.error || 'Failed', 'err'); }
+  if (r.success) { toast(t('request_rejected'), 'ok'); loadFriends(); } else { toast(r.message || r.error || t('failed'), 'err'); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -875,7 +1158,7 @@ let _modelProviders = null;
 
 async function loadModels() {
   const el = $('#models-content');
-  html(el, '<div class="loading-mask"><div class="spinner"></div>Loading model configuration...</div>');
+  html(el, '<div class="loading-mask"><div class="spinner"></div>' + t('loading_models') + '</div>');
   const data = await api('/models');
   if (data.error) { html(el, '<div class="empty"><div class="icon">⚠️</div><p>' + escHtml(data.error) + '</p></div>'); return; }
   _modelProviders = data;
@@ -891,8 +1174,8 @@ function renderModels(data) {
   providers.forEach(p => {
     const icon = p.id === 'openai' ? '🟢' : p.id === 'anthropic' ? '🟠' : p.id === 'google' ? '🔵' : p.id === 'ollama' ? '🟣' : p.id === 'deepseek' ? '🔷' : p.id === 'groq' ? '⚡' : p.id === 'openrouter' ? '🌐' : '⚪';
     const statusBadge = p.configured
-      ? '<span class="badge badge-ok">● Configured</span>'
-      : '<span class="badge badge-ghost">Not set</span>';
+      ? '<span class="badge badge-ok">' + t('key_set') + '</span>'
+      : '<span class="badge badge-ghost">' + t('not_set') + '</span>';
     const currentModel = p.modelId ? '<span class="prov-model">' + escHtml(p.modelId) + '</span>' : '';
 
     cards += \\\`
@@ -904,7 +1187,7 @@ function renderModels(data) {
         <div class="prov-desc">\${escHtml(p.description)}</div>
         \${currentModel}
         <div class="prov-actions">
-          <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showModelConfigModal('\${escHtml(p.id)}')">Configure</button>
+          <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showModelConfigModal('\${escHtml(p.id)}')">\${t('configure')}</button>
         </div>
       </div>\\\`;
   });
@@ -916,11 +1199,11 @@ function renderModels(data) {
       rows += \\\`<tr>
         <td style="font-weight:500">\${escHtml(m.provider)}</td>
         <td class="mono">\${escHtml(m.modelId)}</td>
-        <td><span class="badge badge-ok">● Key set</span></td>
-        <td class="mono" style="font-size:11px">\${escHtml(m.baseUrl || 'default')}</td>
+        <td><span class="badge badge-ok">' + t('key_set') + '</span></td>
+        <td class="mono" style="font-size:11px">\${escHtml(m.baseUrl || t('default_model'))}</td>
         <td>
           <div class="actions-cell">
-            <button class="btn btn-sm btn-ghost" onclick="showModelConfigModal('\${escHtml(m.providerId)}')">Edit</button>
+            <button class="btn btn-sm btn-ghost" onclick="showModelConfigModal('\${escHtml(m.providerId)}')">\${t('configure')}</button>
             <button class="btn btn-sm btn-danger" onclick="deleteModelProvider('\${escHtml(m.providerId)}')" title="Delete">🗑️</button>
           </div>
         </td>
@@ -928,9 +1211,9 @@ function renderModels(data) {
     });
     activeModelsSection = \\\`
       <div class="card" style="margin-top:20px">
-        <div class="card-header"><div class="card-title">📊 Active Model Configurations</div></div>
+        <div class="card-header"><div class="card-title">📊 \${t('active_model_configs')}</div></div>
         <div style="overflow-x:auto"><table>
-          <thead><tr><th>Provider</th><th>Model</th><th>API Key</th><th>Base URL</th><th>Actions</th></tr></thead>
+          <thead><tr><th>\${t('provider')}</th><th>\${t('model')}</th><th>API Key</th><th>\${t('base_url')}</th><th>\${t('actions')}</th></tr></thead>
           <tbody>\${rows}</tbody>
         </table></div>
       </div>\\\`;
@@ -940,12 +1223,12 @@ function renderModels(data) {
     <div class="stats-grid" style="margin-bottom:24px">
       <div class="stat-card">
         <div class="stat-icon" style="background:var(--accent-bg)">🧠</div>
-        <div class="stat-label">Configured</div>
+        <div class="stat-label">\${t('configured')}</div>
         <div class="stat-value">\${configured} / \${providers.length}</div>
-        <div class="stat-sub">Providers with API keys</div>
+        <div class="stat-sub">\${t('providers_with_keys')}</div>
       </div>
     </div>
-    <p class="section-desc">Configure LLM providers for your agents. Click a provider card to set or update the API key, model, and base URL. Changes are saved directly to your config file.</p>
+    <p class="section-desc">\${t('configure_providers_desc')}</p>
     <div class="provider-grid">\${cards}</div>
     \${activeModelsSection}
   \\\`);
@@ -954,35 +1237,35 @@ function renderModels(data) {
 let _editProviderId = null;
 function showModelConfigModal(id) {
   const p = (_modelProviders?.providers || []).find(x => x.id === id);
-  if (!p) { toast('Provider not found', 'err'); return; }
+  if (!p) { toast(t('provider_not_found'), 'err'); return; }
   _editProviderId = id;
   $('#model-name').textContent = p.name;
   $('#model-icon').textContent = p.id === 'openai' ? '🟢' : p.id === 'anthropic' ? '🟠' : '🟢';
   $('#model-api-key').value = '';
-  $('#model-api-key').placeholder = p.apiKeyHint || 'Enter API key';
+  $('#model-api-key').placeholder = p.apiKeyHint || t('enter_api_key');
   $('#model-model-id').value = p.modelId || '';
-  $('#model-model-id').placeholder = p.modelHint || 'Model ID';
+  $('#model-model-id').placeholder = p.modelHint || t('enter_model_id');
   $('#model-base-url').value = p.baseUrl || '';
-  $('#model-base-url').placeholder = p.baseUrlHint || 'Default URL';
-  $('#model-current-key').textContent = p.apiKeyHasValue ? 'Current: ' + p.apiKey : 'No API key configured';
+  $('#model-base-url').placeholder = p.baseUrlHint || t('default_url');
+  $('#model-current-key').textContent = p.apiKeyHasValue ? t('current_key') + p.apiKey : t('no_api_key');
   showModal('modal-model-config');
 }
 async function saveModelConfig() {
   const apiKey = $('#model-api-key').value.trim();
   const modelId = $('#model-model-id').value.trim();
   const baseUrl = $('#model-base-url').value.trim();
-  if (!apiKey && !modelId) { toast('Enter at least an API key or model ID', 'warn'); return; }
+  if (!apiKey && !modelId) { toast(t('enter_api_key_or_model'), 'warn'); return; }
   hideModal('modal-model-config');
-  toast('Saving configuration...', 'info');
+  toast(t('saving_config'), 'info');
   const r = await api('/models/' + encodeURIComponent(_editProviderId), { method: 'PUT', body: JSON.stringify({ apiKey, modelId, baseUrl }) });
-  if (r.success) { toast(r.message || 'Configuration saved!', 'ok'); loadModels(); }
-  else { toast(r.message || r.error || 'Failed to save', 'err'); }
+  if (r.success) { toast(r.message || t('config_saved'), 'ok'); loadModels(); }
+  else { toast(r.message || r.error || t('failed_save'), 'err'); }
 }
 async function deleteModelProvider(providerId) {
-  if (!confirm('Delete configuration for provider "' + providerId + '"? This will remove its API key and model settings.')) return;
+  if (!confirm(t('confirm_delete_provider') + providerId + '"?')) return;
   const r = await api('/models/' + encodeURIComponent(providerId), { method: 'DELETE' });
-  if (r.success) { toast('Provider configuration deleted', 'ok'); loadModels(); }
-  else { toast(r.message || r.error || 'Delete failed', 'err'); }
+  if (r.success) { toast(t('provider_deleted'), 'ok'); loadModels(); }
+  else { toast(r.message || r.error || t('delete_failed'), 'err'); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1013,7 +1296,7 @@ function formatUptime(seconds) {
 
 async function loadSettings() {
   const el = $('#settings-content');
-  html(el, '<div class="loading-mask"><div class="spinner"></div>Loading settings...</div>');
+  html(el, '<div class="loading-mask"><div class="spinner"></div>' + t('loading_settings') + '</div>');
 
   const settings = await api('/settings');
   if (settings.error) {
@@ -1025,11 +1308,11 @@ async function loadSettings() {
 
   // Render settings tabs nav
   html('#settings-tabs', \\\`
-    <button class="filter-btn \${_settingsTab==='connection'?'active':''}" onclick="_settingsTab='connection';renderSettingsTab()">🔌 Connection</button>
-    <button class="filter-btn \${_settingsTab==='friends'?'active':''}" onclick="_settingsTab='friends';renderSettingsTab()">👥 Friends</button>
-    <button class="filter-btn \${_settingsTab==='security'?'active':''}" onclick="_settingsTab='security';renderSettingsTab()">🔒 Security</button>
-    <button class="filter-btn \${_settingsTab==='advanced'?'active':''}" onclick="_settingsTab='advanced';renderSettingsTab()">⚙️ Advanced</button>
-    <button class="filter-btn \${_settingsTab==='json'?'active':''}" onclick="_settingsTab='json';renderSettingsTab()">📝 JSON Editor</button>
+    <button class="filter-btn \${_settingsTab==='connection'?'active':''}" onclick="_settingsTab='connection';renderSettingsTab()">\${t('tab_connection')}</button>
+    <button class="filter-btn \${_settingsTab==='friends'?'active':''}" onclick="_settingsTab='friends';renderSettingsTab()">\${t('tab_friends')}</button>
+    <button class="filter-btn \${_settingsTab==='security'?'active':''}" onclick="_settingsTab='security';renderSettingsTab()">\${t('tab_security')}</button>
+    <button class="filter-btn \${_settingsTab==='advanced'?'active':''}" onclick="_settingsTab='advanced';renderSettingsTab()">\${t('tab_advanced')}</button>
+    <button class="filter-btn \${_settingsTab==='json'?'active':''}" onclick="_settingsTab='json';renderSettingsTab()">\${t('tab_json')}</button>
   \\\`);
 
   renderSettingsTab();
@@ -1038,11 +1321,11 @@ async function loadSettings() {
 function renderSettingsTab() {
   // Update tab buttons
   html('#settings-tabs', \\\`
-    <button class="filter-btn \${_settingsTab==='connection'?'active':''}" onclick="_settingsTab='connection';renderSettingsTab()">🔌 Connection</button>
-    <button class="filter-btn \${_settingsTab==='friends'?'active':''}" onclick="_settingsTab='friends';renderSettingsTab()">👥 Friends</button>
-    <button class="filter-btn \${_settingsTab==='security'?'active':''}" onclick="_settingsTab='security';renderSettingsTab()">🔒 Security</button>
-    <button class="filter-btn \${_settingsTab==='advanced'?'active':''}" onclick="_settingsTab='advanced';renderSettingsTab()">⚙️ Advanced</button>
-    <button class="filter-btn \${_settingsTab==='json'?'active':''}" onclick="_settingsTab='json';renderSettingsTab()">📝 JSON Editor</button>
+    <button class="filter-btn \${_settingsTab==='connection'?'active':''}" onclick="_settingsTab='connection';renderSettingsTab()">\${t('tab_connection')}</button>
+    <button class="filter-btn \${_settingsTab==='friends'?'active':''}" onclick="_settingsTab='friends';renderSettingsTab()">\${t('tab_friends')}</button>
+    <button class="filter-btn \${_settingsTab==='security'?'active':''}" onclick="_settingsTab='security';renderSettingsTab()">\${t('tab_security')}</button>
+    <button class="filter-btn \${_settingsTab==='advanced'?'active':''}" onclick="_settingsTab='advanced';renderSettingsTab()">\${t('tab_advanced')}</button>
+    <button class="filter-btn \${_settingsTab==='json'?'active':''}" onclick="_settingsTab='json';renderSettingsTab()">\${t('tab_json')}</button>
   \\\`);
 
   switch (_settingsTab) {
@@ -1055,7 +1338,7 @@ function renderSettingsTab() {
 }
 
 function sectionSaveBtn(section, id) {
-  return \\\`<button class="btn btn-primary btn-sm" id="btn-save-\${id}" onclick="saveSettingsSection('\${section}', '\${id}')">💾 Save</button>
+  return \\\`<button class="btn btn-primary btn-sm" id="btn-save-\${id}" onclick="saveSettingsSection('\${section}', '\${id}')">\${t('save')}</button>
     <span id="status-\${id}" style="font-size:12px;color:var(--text3);margin-left:8px"></span>\\\`;
 }
 
@@ -1065,51 +1348,51 @@ function renderSettingsConnection() {
   const el = $('#settings-content');
 
   html(el, \\\`
-    <p class="section-desc">Configure server connection and WebSocket settings. Changes require a plugin restart to take full effect.</p>
+    <p class="section-desc">\${t('conn_desc')}</p>
 
     <div class="card">
       <div class="card-header">
-        <div class="card-title">🌐 Server Connection</div>
-        <span class="badge badge-\${s.connected ? 'ok' : 'danger'}">\${s.connected ? '● Connected' : '○ Disconnected'}</span>
+        <div class="card-title">\${t('server_connection')}</div>
+        <span class="badge badge-\${s.connected ? 'ok' : 'danger'}">\${s.connected ? '● ' + t('connected') : '○ ' + t('disconnected')}</span>
       </div>
       <div class="form-group">
-        <label>Server URL</label>
+        <label>\${t('server_url_label')}</label>
         <div style="display:flex;gap:8px;align-items:start">
           <div style="flex:1">
             <div class="input-prefix">
               <span class="prefix">🌐</span>
               <input type="url" id="set-server-url" value="\${escHtml(s.serverUrl || '')}" placeholder="https://aicq.online">
             </div>
-            <div class="hint">The HTTPS URL of the AICQ relay server. WebSocket path /ws is auto-appended.</div>
+            <div class="hint">\${t('server_url_hint')}</div>
           </div>
-          <button class="btn btn-ok btn-sm" id="btn-test-conn" onclick="testConnection()" style="white-space:nowrap;margin-top:1px">🔍 Test</button>
+          <button class="btn btn-ok btn-sm" id="btn-test-conn" onclick="testConnection()" style="white-space:nowrap;margin-top:1px">🔍 \${t('test')}</button>
         </div>
         <div id="conn-test-result" style="margin-top:8px"></div>
       </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label>Connection Timeout (seconds)</label>
+          <label>\${t('conn_timeout')}</label>
           <input type="number" id="set-connection-timeout" value="\${s.connectionTimeout || 30}" min="5" max="120" placeholder="30">
-          <div class="hint">HTTP request timeout (5–120s). Default: 30s.</div>
+          <div class="hint">\${t('conn_timeout_hint')}</div>
         </div>
         <div class="form-group">
-          <label>WS Auto-Reconnect</label>
+          <label>\${t('ws_auto_reconnect')}</label>
           <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
             <label class="toggle-label">
               <input type="checkbox" id="set-ws-auto-reconnect" \${s.wsAutoReconnect ? 'checked' : ''}>
               <span class="toggle-slider"></span>
-              <span>Auto-reconnect when disconnected</span>
+              <span>\${t('auto_reconnect_label')}</span>
             </label>
           </div>
-          <div class="hint">Automatically reconnect WebSocket on disconnection.</div>
+          <div class="hint">\${t('auto_reconnect_hint')}</div>
         </div>
       </div>
 
       <div class="form-group">
-        <label>WS Reconnect Interval (seconds)</label>
+        <label>\${t('ws_reconnect_interval')}</label>
         <input type="number" id="set-ws-reconnect-interval" value="\${s.wsReconnectInterval || 60}" min="5" max="600" placeholder="60">
-        <div class="hint">Interval between reconnection attempts (5–600s). Default: 60s.</div>
+        <div class="hint">\${t('ws_reconnect_hint')}</div>
       </div>
 
       <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
@@ -1118,11 +1401,11 @@ function renderSettingsConnection() {
     </div>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">📁 Config File</div></div>
-      <div class="detail-row"><div class="detail-key">Source</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(s.configPath || '')}')">\${escHtml(s.configPath || 'Not found')} 📋</div></div>
-      <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val">1.1.1</div></div>
-      <div class="detail-row"><div class="detail-key">Management UI</div><div class="detail-val" id="mgmt-url-display" style="cursor:pointer" onclick="copyText(document.getElementById('mgmt-url-display')?.textContent || '')"></div></div>
-      <div class="detail-row"><div class="detail-key">Uptime</div><div class="detail-val">\${formatUptime(s.uptimeSeconds)}</div></div>
+      <div class="card-header"><div class="card-title">\${t('config_file')}</div></div>
+      <div class="detail-row"><div class="detail-key">\${t('source')}</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(s.configPath || '')}')">\${escHtml(s.configPath || t('not_found'))} 📋</div></div>
+      <div class="detail-row"><div class="detail-key">\${t('plugin_version')}</div><div class="detail-val">1.1.1</div></div>
+      <div class="detail-row"><div class="detail-key">\${t('mgmt_ui')}</div><div class="detail-val" id="mgmt-url-display" style="cursor:pointer" onclick="copyText(document.getElementById('mgmt-url-display')?.textContent || '')"></div></div>
+      <div class="detail-row"><div class="detail-key">\${t('uptime')}</div><div class="detail-val">\${formatUptime(s.uptimeSeconds)}</div></div>
     </div>
   \\\`);
 }
@@ -1132,37 +1415,37 @@ async function testConnection() {
   const resultEl = $('#conn-test-result');
   const url = $('#set-server-url')?.value?.trim() || _settingsData.serverUrl;
 
-  if (!url) { toast('Enter a server URL first', 'warn'); return; }
+  if (!url) { toast(t('enter_server_url'), 'warn'); return; }
 
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin:0"></span> Testing...'; }
-  if (resultEl) html(resultEl, '<div style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px"><span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Testing connection to ' + escHtml(url) + '...</div>');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin:0"></span> ' + t('testing'); }
+  if (resultEl) html(resultEl, '<div style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px"><span class="spinner" style="width:12px;height:12px;border-width:2px"></span> ' + t('testing_conn_to') + escHtml(url) + '...</div>');
 
   const r = await api('/settings/test-connection', {
     method: 'POST',
     body: JSON.stringify({ serverUrl: url, timeout: 10000 }),
   });
 
-  if (btn) { btn.disabled = false; btn.innerHTML = '🔍 Test'; }
+  if (btn) { btn.disabled = false; btn.innerHTML = '🔍 ' + t('test'); }
 
   if (r.success) {
     const latencyBadge = r.latency < 200 ? '<span class="badge badge-ok">' + r.latency + 'ms</span>' : r.latency < 1000 ? '<span class="badge badge-warn">' + r.latency + 'ms</span>' : '<span class="badge badge-danger">' + r.latency + 'ms</span>';
     if (resultEl) html(resultEl, \\\`
       <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ok)">
-        <span class="dot dot-ok"></span> Connected successfully \${latencyBadge}
+        <span class="dot dot-ok"></span> \${t('conn_ok')} \${latencyBadge}
         \${r.serverInfo?.version ? '<span class="tag">v' + escHtml(r.serverInfo.version) + '</span>' : ''}
       </div>
     \\\`);
-    toast('Connection OK! Latency: ' + r.latency + 'ms', 'ok');
+    toast(t('conn_ok_latency') + r.latency + 'ms', 'ok');
   } else {
     const cls = r.status === 'timeout' ? 'warn' : 'danger';
     const icon = r.status === 'timeout' ? '⏱️' : '❌';
     if (resultEl) html(resultEl, \\\`
       <div style="font-size:12px;color:var(--\${cls});display:flex;align-items:center;gap:8px">
-        \${icon} \${escHtml(r.message || 'Connection failed')}
+        \${icon} \${escHtml(r.message || t('conn_failed'))}
         <span class="badge badge-ghost">\${r.latency}ms</span>
       </div>
     \\\`);
-    toast(r.message || 'Connection failed', 'err');
+    toast(r.message || t('conn_failed'), 'err');
   }
 }
 
@@ -1172,58 +1455,58 @@ function renderSettingsFriends() {
   const el = $('#settings-content');
 
   html(el, \\\`
-    <p class="section-desc">Configure friend management, permissions, and temporary number settings.</p>
+    <p class="section-desc">\${t('friends_tab_desc')}</p>
 
     <div class="stats-grid" style="margin-bottom:20px">
       <div class="stat-card">
         <div class="stat-icon" style="background:var(--ok-bg)">👥</div>
-        <div class="stat-label">Friends</div>
+        <div class="stat-label">\${t('friends')}</div>
         <div class="stat-value">\${s.friendCount || 0}</div>
-        <div class="stat-sub">of \${s.maxFriends || 200} max</div>
+        <div class="stat-sub">\${t('of_max')}\${s.maxFriends || 200}</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:var(--info-bg)">🔗</div>
-        <div class="stat-label">Sessions</div>
+        <div class="stat-label">\${t('sessions')}</div>
         <div class="stat-value">\${s.sessionCount || 0}</div>
-        <div class="stat-sub">Encrypted sessions</div>
+        <div class="stat-sub">\${t('encrypted_sessions')}</div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">👥 Friend Limits & Permissions</div></div>
+      <div class="card-header"><div class="card-title">👥 \${t('max_friends')} & \${t('permissions')}</div></div>
       <div class="form-row">
         <div class="form-group">
-          <label>Max Friends</label>
+          <label>\${t('max_friends')}</label>
           <input type="number" id="set-max-friends" value="\${s.maxFriends || 200}" min="1" max="10000" placeholder="200">
-          <div class="hint">Maximum number of encrypted friend connections (1–10,000).</div>
+          <div class="hint">\${t('max_friends')} (1–10,000)</div>
         </div>
         <div class="form-group">
-          <label>Auto-Accept Friends</label>
+          <label>\${t('auto_accept')}</label>
           <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
             <label class="toggle-label">
               <input type="checkbox" id="set-auto-accept" \${s.autoAcceptFriends ? 'checked' : ''}>
               <span class="toggle-slider"></span>
-              <span>Automatically accept requests</span>
+              <span>\${t('auto_accept_label')}</span>
             </label>
           </div>
-          <div class="hint">When enabled, incoming friend requests are accepted without review.</div>
+          <div class="hint">\${t('auto_accept_hint')}</div>
         </div>
       </div>
       <div class="form-group">
-        <label>Default Permissions for New Friends</label>
+        <label>\${t('default_perms')}</label>
         <div style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap">
           <label class="toggle-label">
             <input type="checkbox" id="set-perm-chat" \${(s.defaultPermissions || []).includes('chat') ? 'checked' : ''}>
             <span class="toggle-slider"></span>
-            <span>💬 Chat</span>
+            <span>\${t('chat_perm')}</span>
           </label>
           <label class="toggle-label">
             <input type="checkbox" id="set-perm-exec" \${(s.defaultPermissions || []).includes('exec') ? 'checked' : ''}>
             <span class="toggle-slider"></span>
-            <span>🔧 Exec</span>
+            <span>\${t('exec_perm')}</span>
           </label>
         </div>
-        <div class="hint">Default permissions applied when auto-accepting new friend requests.</div>
+        <div class="hint">\${t('default_perms_hint')}</div>
       </div>
       <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
         \${sectionSaveBtn('friends', 'friends')}
@@ -1231,11 +1514,11 @@ function renderSettingsFriends() {
     </div>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">🔢 Temporary Numbers</div></div>
+      <div class="card-header"><div class="card-title">\${t('temp_numbers')}</div></div>
       <div class="form-group">
-        <label>Temp Number Expiry (seconds)</label>
+        <label>\${t('temp_expiry')}</label>
         <input type="number" id="set-temp-expiry" value="\${s.tempNumberExpiry || 300}" min="60" max="3600" placeholder="300">
-        <div class="hint">How long a temporary friend number remains valid (60–3600s). Default: 5 minutes.</div>
+        <div class="hint">\${t('temp_expiry_hint')}</div>
       </div>
       <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
         \${sectionSaveBtn('temp', 'temp')}
@@ -1250,36 +1533,36 @@ function renderSettingsSecurity() {
   const el = $('#settings-content');
 
   html(el, \\\`
-    <p class="section-desc">Configure encryption, P2P, and identity security settings.</p>
+    <p class="section-desc">\${t('sec_desc')}</p>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">🤖 Agent Identity</div></div>
-      <div class="detail-row"><div class="detail-key">Agent ID</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(s.agentId)}')">\${escHtml(s.agentId)} 📋</div></div>
-      <div class="detail-row"><div class="detail-key">Public Key Fingerprint</div><div class="detail-val mono">\${escHtml(s.publicKeyFingerprint || '—')}</div></div>
+      <div class="card-header"><div class="card-title">\${t('agent_identity')}</div></div>
+      <div class="detail-row"><div class="detail-key">\${t('agent_id')}</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(s.agentId)}')">\${escHtml(s.agentId)} 📋</div></div>
+      <div class="detail-row"><div class="detail-key">\${t('public_key_fp')}</div><div class="detail-val mono">\${escHtml(s.publicKeyFingerprint || '—')}</div></div>
       <div style="padding-top:12px;display:flex;gap:8px">
-        <button class="btn btn-danger btn-sm" onclick="showResetIdentityModal()">🗑️ Reset Identity</button>
-        <span style="font-size:12px;color:var(--text3);display:flex;align-items:center">⚠️ This deletes all friends, sessions, and keys permanently</span>
+        <button class="btn btn-danger btn-sm" onclick="showResetIdentityModal()">\${t('reset_identity')}</button>
+        <span style="font-size:12px;color:var(--text3);display:flex;align-items:center">\${t('reset_identity_warn')}</span>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">🔒 P2P & Encryption</div></div>
+      <div class="card-header"><div class="card-title">\${t('p2p_encryption')}</div></div>
       <div class="form-row">
         <div class="form-group">
-          <label>Enable P2P Connections</label>
+          <label>\${t('enable_p2p')}</label>
           <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
             <label class="toggle-label">
               <input type="checkbox" id="set-enable-p2p" \${s.enableP2P ? 'checked' : ''}>
               <span class="toggle-slider"></span>
-              <span>Allow direct P2P messaging</span>
+              <span>\${t('allow_p2p')}</span>
             </label>
           </div>
-          <div class="hint">Enable peer-to-peer encrypted connections when both parties are online.</div>
+          <div class="hint">\${t('enable_p2p_hint')}</div>
         </div>
         <div class="form-group">
-          <label>Handshake Timeout (seconds)</label>
+          <label>\${t('hs_timeout')}</label>
           <input type="number" id="set-handshake-timeout" value="\${s.handshakeTimeout || 60}" min="10" max="300" placeholder="60">
-          <div class="hint">Noise-XK handshake timeout (10–300s). Default: 60s.</div>
+          <div class="hint">\${t('hs_timeout_hint')}</div>
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
@@ -1295,24 +1578,24 @@ function renderSettingsAdvanced() {
   const el = $('#settings-content');
 
   html(el, \\\`
-    <p class="section-desc">Advanced settings for file transfer, logging, and configuration management.</p>
+    <p class="section-desc">\${t('adv_desc')}</p>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">📎 File Transfer</div></div>
+      <div class="card-header"><div class="card-title">\${t('file_transfer')}</div></div>
       <div class="form-row">
         <div class="form-group">
-          <label>Enable File Transfer</label>
+          <label>\${t('enable_ft')}</label>
           <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
             <label class="toggle-label">
               <input type="checkbox" id="set-enable-ft" \${s.enableFileTransfer ? 'checked' : ''}>
               <span class="toggle-slider"></span>
-              <span>Allow file transfers</span>
+              <span>\${t('allow_ft')}</span>
             </label>
           </div>
-          <div class="hint">Enable encrypted file transfer between friends.</div>
+          <div class="hint">\${t('enable_ft_hint')}</div>
         </div>
         <div class="form-group">
-          <label>Max File Size</label>
+          <label>\${t('max_file_size')}</label>
           <select id="set-max-file-size">
             <option value="10485760" \${s.maxFileSize <= 10485760 ? 'selected' : ''}>10 MB</option>
             <option value="52428800" \${s.maxFileSize > 10485760 && s.maxFileSize <= 52428800 ? 'selected' : ''}>50 MB</option>
@@ -1320,7 +1603,7 @@ function renderSettingsAdvanced() {
             <option value="524288000" \${s.maxFileSize > 104857600 && s.maxFileSize <= 524288000 ? 'selected' : ''}>500 MB</option>
             <option value="1073741824" \${s.maxFileSize > 524288000 ? 'selected' : ''}>1 GB</option>
           </select>
-          <div class="hint">Maximum file size for encrypted transfers. Current: \${formatBytes(s.maxFileSize)}.</div>
+          <div class="hint">\${t('max_file_size_hint')}\${formatBytes(s.maxFileSize)}.</div>
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
@@ -1329,17 +1612,17 @@ function renderSettingsAdvanced() {
     </div>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">📋 Logging</div></div>
+      <div class="card-header"><div class="card-title">\${t('logging')}</div></div>
       <div class="form-group">
-        <label>Log Level</label>
+        <label>\${t('log_level')}</label>
         <select id="set-log-level" style="max-width:300px">
-          <option value="debug" \${s.logLevel === 'debug' ? 'selected' : ''}>🐛 Debug — Verbose output for troubleshooting</option>
-          <option value="info" \${s.logLevel === 'info' ? 'selected' : ''}>ℹ️ Info — General information (default)</option>
-          <option value="warn" \${s.logLevel === 'warn' ? 'selected' : ''}>⚠️ Warn — Warnings and important events</option>
-          <option value="error" \${s.logLevel === 'error' ? 'selected' : ''}>❌ Error — Errors only</option>
-          <option value="none" \${s.logLevel === 'none' ? 'selected' : ''}>🔇 None — Disable all logging</option>
+          <option value="debug" \${s.logLevel === 'debug' ? 'selected' : ''}>\${t('log_debug')}</option>
+          <option value="info" \${s.logLevel === 'info' ? 'selected' : ''}>\${t('log_info')}</option>
+          <option value="warn" \${s.logLevel === 'warn' ? 'selected' : ''}>\${t('log_warn')}</option>
+          <option value="error" \${s.logLevel === 'error' ? 'selected' : ''}>\${t('log_error')}</option>
+          <option value="none" \${s.logLevel === 'none' ? 'selected' : ''}>\${t('log_none')}</option>
         </select>
-        <div class="hint">Controls the verbosity of plugin log output.</div>
+        <div class="hint">\${t('log_level_hint')}</div>
       </div>
       <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
         \${sectionSaveBtn('logging', 'log')}
@@ -1347,12 +1630,12 @@ function renderSettingsAdvanced() {
     </div>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">📦 Import / Export Settings</div></div>
+      <div class="card-header"><div class="card-title">\${t('import_export')}</div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-default btn-sm" onclick="exportSettings()">📥 Export Settings</button>
-        <button class="btn btn-ok btn-sm" onclick="showImportSettingsModal()">📤 Import Settings</button>
+        <button class="btn btn-default btn-sm" onclick="exportSettings()">\${t('export_settings')}</button>
+        <button class="btn btn-ok btn-sm" onclick="showImportSettingsModal()">\${t('import_settings')}</button>
       </div>
-      <div class="hint" style="margin-top:10px">Export current AICQ plugin settings as JSON. Import to restore settings from a backup.</div>
+      <div class="hint" style="margin-top:10px">\${t('import_export_hint')}</div>
     </div>
   \\\`);
 }
@@ -1361,7 +1644,7 @@ function renderSettingsAdvanced() {
 async function saveSettingsSection(section, id) {
   const btn = $('#btn-save-' + id);
   const statusEl = $('#status-' + id);
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('saving'); }
   if (statusEl) { statusEl.textContent = ''; statusEl.style.color = 'var(--text3)'; }
 
   let data = {};
@@ -1409,17 +1692,17 @@ async function saveSettingsSection(section, id) {
     body: JSON.stringify({ section, data }),
   });
 
-  if (btn) { btn.disabled = false; btn.textContent = '💾 Save'; }
+  if (btn) { btn.disabled = false; btn.textContent = t('save'); }
 
   if (r.success) {
-    toast('Settings saved: ' + section, 'ok');
-    if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--ok)'; }
+    toast(t('settings_saved') + section, 'ok');
+    if (statusEl) { statusEl.textContent = t('saved'); statusEl.style.color = 'var(--ok)'; }
     // Refresh settings data
     const fresh = await api('/settings');
     if (fresh && !fresh.error) { _settingsData = fresh; }
   } else {
-    toast(r.message || r.error || 'Save failed', 'err');
-    if (statusEl) { statusEl.textContent = '✗ ' + (r.message || 'Failed'); statusEl.style.color = 'var(--danger)'; }
+    toast(r.message || r.error || t('failed_save'), 'err');
+    if (statusEl) { statusEl.textContent = '✗ ' + (r.message || t('failed')); statusEl.style.color = 'var(--danger)'; }
   }
 }
 
@@ -1437,15 +1720,15 @@ async function saveSettings() {
   const r = await api('/settings', { method: 'PUT', body: JSON.stringify(allData) });
   _settingsSaving = false;
 
-  if (r.success) { toast('All settings saved!', 'ok'); setTimeout(() => loadSettings(), 800); }
-  else { toast(r.message || r.error || 'Save failed', 'err'); }
+  if (r.success) { toast(t('all_saved'), 'ok'); setTimeout(() => loadSettings(), 800); }
+  else { toast(r.message || r.error || t('failed_save'), 'err'); }
 }
 
 // ── Reset Identity ──
 function showResetIdentityModal() {
   $('#reset-confirm-input').value = '';
   $('#reset-confirm-btn').disabled = true;
-  $('#reset-confirm-btn').textContent = '🗑️ Delete Everything';
+  $('#reset-confirm-btn').textContent = t('delete_everything');
   showModal('modal-reset-identity');
   setTimeout(() => $('#reset-confirm-input')?.focus(), 100);
 }
@@ -1453,27 +1736,27 @@ function showResetIdentityModal() {
 function checkResetConfirm() {
   const v = $('#reset-confirm-input')?.value?.trim();
   const btn = $('#reset-confirm-btn');
-  if (btn) { btn.disabled = (v !== 'RESET'); btn.textContent = v === 'RESET' ? '🗑️ Confirm Delete' : '🗑️ Delete Everything'; }
+  if (btn) { btn.disabled = (v !== 'RESET'); btn.textContent = v === 'RESET' ? t('confirm_delete') : t('delete_everything'); }
 }
 
 async function executeResetIdentity() {
   const btn = $('#reset-confirm-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Resetting...'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('resetting'); }
 
   const r = await api('/settings/reset-identity', {
     method: 'POST',
     body: JSON.stringify({ confirm: true }),
   });
 
-  if (btn) { btn.disabled = false; btn.textContent = '🗑️ Delete Everything'; }
+  if (btn) { btn.disabled = false; btn.textContent = t('delete_everything'); }
 
   if (r.success) {
-    toast('Identity reset successfully. Please restart the plugin.', 'ok');
+    toast(t('reset_success'), 'ok');
     hideModal('modal-reset-identity');
     // Reload settings to reflect cleared state
     setTimeout(() => loadSettings(), 1000);
   } else {
-    toast(r.message || r.error || 'Reset failed', 'err');
+    toast(r.message || r.error || t('reset_failed'), 'err');
   }
 }
 
@@ -1490,7 +1773,7 @@ async function exportSettings() {
   a.download = 'aicq-settings-' + new Date().toISOString().slice(0, 10) + '.json';
   a.click();
   URL.revokeObjectURL(url);
-  toast('Settings exported successfully', 'ok');
+  toast(t('exported_success'), 'ok');
 }
 
 function showImportSettingsModal() {
@@ -1501,27 +1784,27 @@ function showImportSettingsModal() {
 
 async function executeImportSettings() {
   const raw = $('#import-json-input')?.value?.trim();
-  if (!raw) { toast('Paste JSON settings first', 'warn'); return; }
+  if (!raw) { toast(t('paste_json'), 'warn'); return; }
 
   let settings;
-  try { settings = JSON.parse(raw); } catch (e) { toast('Invalid JSON: ' + e.message, 'err'); return; }
+  try { settings = JSON.parse(raw); } catch (e) { toast(t('invalid_json') + e.message, 'err'); return; }
 
   const btn = $('#import-confirm-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('importing'); }
 
   const r = await api('/settings/import', {
     method: 'POST',
     body: JSON.stringify({ settings, merge: true }),
   });
 
-  if (btn) { btn.disabled = false; btn.textContent = '📤 Import'; }
+  if (btn) { btn.disabled = false; btn.textContent = t('import_settings'); }
 
   if (r.success) {
-    toast('Settings imported successfully!', 'ok');
+    toast(t('imported_success'), 'ok');
     hideModal('modal-import-settings');
     setTimeout(() => loadSettings(), 800);
   } else {
-    toast(r.message || r.error || 'Import failed', 'err');
+    toast(r.message || r.error || t('import_failed'), 'err');
   }
 }
 
@@ -1532,7 +1815,7 @@ let _jsonEditorConfigFile = '';
 
 async function renderSettingsJsonEditor() {
   const el = $('#settings-content');
-  html(el, '<div class="loading-mask"><div class="spinner"></div>Loading config...</div>');
+  html(el, '<div class="loading-mask"><div class="spinner"></div>' + t('loading_config') + '</div>');
 
   const queryParams = _jsonEditorConfigFile ? '?file=' + encodeURIComponent(_jsonEditorConfigFile) : '';
   const data = await api('/config-file/raw' + queryParams);
@@ -1565,7 +1848,7 @@ async function renderSettingsJsonEditor() {
 
     <div class="card">
       <div class="card-header">
-        <div class="card-title">📝 Config JSON Editor</div>
+        <div class="card-title">\${t('json_editor')}</div>
         <div style="display:flex;gap:8px;align-items:center">
           <span class="mono" style="font-size:11px;color:var(--text3)">\${escHtml(data.filePath)}</span>
           <button class="btn btn-sm btn-default" onclick="renderSettingsJsonEditor()">🔄 Reload</button>
@@ -1573,19 +1856,19 @@ async function renderSettingsJsonEditor() {
       </div>
       \${fileSelectorHtml}
       <div class="form-group">
-        <label>Raw JSON Configuration</label>
+        <label>\${t('raw_json')}</label>
         <textarea id="json-editor" style="min-height:400px;font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:12px;line-height:1.5;tab-size:2;background:var(--bg)" spellcheck="false">\${escHtml(data.content)}</textarea>
-        <div class="hint">Directly edit the configuration JSON. Use the Format button to prettify.</div>
+        <div class="hint">\${t('raw_json_hint')}</div>
       </div>
       <div id="json-editor-status" style="margin-bottom:12px;font-size:12px"></div>
       <div class="form-actions" style="justify-content:space-between">
         <div style="display:flex;gap:8px">
-          <button class="btn btn-sm btn-default" onclick="formatJsonEditor()">📐 Format</button>
-          <button class="btn btn-sm btn-default" onclick="copyText($('#json-editor')?.value || '')">📋 Copy</button>
+          <button class="btn btn-sm btn-default" onclick="formatJsonEditor()">\${t('format')}</button>
+          <button class="btn btn-sm btn-default" onclick="copyText($('#json-editor')?.value || '')">\${t('copy')}</button>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-sm btn-default" onclick="renderSettingsJsonEditor()">↩️ Revert</button>
-          <button class="btn btn-sm btn-primary" id="btn-save-json" onclick="saveJsonConfig()">💾 Save Config</button>
+          <button class="btn btn-sm btn-default" onclick="renderSettingsJsonEditor()">\${t('revert')}</button>
+          <button class="btn btn-sm btn-primary" id="btn-save-json" onclick="saveJsonConfig()">\${t('save_config')}</button>
         </div>
       </div>
     </div>
@@ -1598,10 +1881,10 @@ function formatJsonEditor() {
   try {
     const obj = JSON.parse(ta.value);
     ta.value = JSON.stringify(obj, null, 2);
-    toast('JSON formatted', 'ok');
-    $('#json-editor-status').innerHTML = '<span style="color:var(--ok)">✓ Valid JSON</span>';
+    toast(t('json_formatted'), 'ok');
+    $('#json-editor-status').innerHTML = '<span style="color:var(--ok)">' + t('valid_json') + '</span>';
   } catch (e) {
-    toast('Invalid JSON: ' + e.message, 'err');
+    toast(t('invalid_json') + e.message, 'err');
     $('#json-editor-status').innerHTML = '<span style="color:var(--danger)">✗ ' + escHtml(e.message) + '</span>';
   }
 }
@@ -1610,29 +1893,29 @@ async function saveJsonConfig() {
   const btn = $('#btn-save-json');
   const statusEl = $('#json-editor-status');
   const raw = $('#json-editor')?.value;
-  if (!raw) { toast('No content to save', 'warn'); return; }
+  if (!raw) { toast(t('no_content'), 'warn'); return; }
 
   // Validate first
   try { JSON.parse(raw); } catch (e) {
-    toast('Invalid JSON: ' + e.message, 'err');
+    toast(t('invalid_json') + e.message, 'err');
     if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">✗ ' + escHtml(e.message) + '</span>';
     return;
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--text3)"><span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span> Saving...</span>';
+  if (btn) { btn.disabled = true; btn.textContent = t('saving'); }
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--text3)"><span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span> ' + t('saving') + '</span>';
 
   const queryParams = _jsonEditorConfigFile ? '?file=' + encodeURIComponent(_jsonEditorConfigFile) : '';
   const r = await api('/config-file/raw' + queryParams, { method: 'PUT', body: JSON.stringify({ content: raw }) });
 
-  if (btn) { btn.disabled = false; btn.textContent = '💾 Save Config'; }
+  if (btn) { btn.disabled = false; btn.textContent = t('save_config'); }
 
   if (r.success) {
-    toast('Config saved successfully!', 'ok');
+    toast(t('config_saved'), 'ok');
     if (statusEl) statusEl.innerHTML = '<span style="color:var(--ok)">✓ Saved at ' + new Date().toLocaleTimeString() + '</span>';
   } else {
-    toast(r.message || 'Save failed', 'err');
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">✗ ' + escHtml(r.message || 'Failed') + '</span>';
+    toast(r.message || t('failed_save'), 'err');
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">✗ ' + escHtml(r.message || t('failed')) + '</span>';
   }
 }
 
@@ -1656,7 +1939,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dot = $('#header-dot');
         if (dot) { dot.className = 'dot ' + (s.connected ? 'dot-ok' : 'dot-err'); }
         const txt = $('#header-status');
-        if (txt) txt.textContent = s.connected ? 'Connected' : 'Disconnected';
+        if (txt) txt.textContent = s.connected ? t('connected') : t('disconnected');
         // Auto-remove offline banner when server reconnects
         if (s.connected) hideOfflineBanner();
       }
