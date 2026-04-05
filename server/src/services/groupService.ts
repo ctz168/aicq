@@ -125,6 +125,7 @@ export function createGroup(
   };
 
   store.groups.set(groupId, group);
+  store.persistGroup(group);
   console.log(`[group] 群组已创建: ${name} (${groupId}), 创建者: ${ownerId}`);
   return group;
 }
@@ -210,6 +211,7 @@ export function inviteMember(
 
   group.members.set(targetId, member);
   group.updatedAt = Date.now();
+  store.persistGroup(group);
 
   console.log(`[group] ${inviterId} 邀请 ${targetId} 加入群组 ${groupId}`);
   return member;
@@ -253,6 +255,7 @@ export function kickMember(
 
   group.members.delete(targetId);
   group.updatedAt = Date.now();
+  store.persistGroup(group);
 
   // 通知被踢者
   if (isOnline(targetId)) {
@@ -302,13 +305,15 @@ export function leaveGroup(
     }
     store.groupMessages.delete(groupId);
     store.groups.delete(groupId);
-    console.log(`[group] 群主 ${accountId} 解散了群组 ${groupId}`);
+    store.deleteGroupFromDB(groupId);
+    console.log(`[group] 群主 ${accountId} 解散了群组 ${groupId} (leave)`);
     return { left: true, disbanded: true };
   }
 
   // 普通成员或 admin 退出
   group.members.delete(accountId);
   group.updatedAt = Date.now();
+  store.persistGroup(group);
 
   console.log(`[group] ${accountId} 退出了群组 ${groupId}`);
   return { left: true, disbanded: false };
@@ -344,7 +349,8 @@ export function disbandGroup(
 
   store.groupMessages.delete(groupId);
   store.groups.delete(groupId);
-  console.log(`[group] 群主 ${ownerId} 解散了群组 ${groupId}`);
+  store.deleteGroupFromDB(groupId);
+  console.log(`[group] 群主 ${ownerId} 解散了群组 ${groupId} (disband)`);
   return true;
 }
 
@@ -386,6 +392,7 @@ export function updateGroup(
   }
 
   group.updatedAt = Date.now();
+  store.persistGroup(group);
   return group;
 }
 
@@ -514,6 +521,7 @@ export function transferOwnership(
   targetMember.role = 'owner';
   group.ownerId = newOwnerId;
   group.updatedAt = Date.now();
+  store.persistGroup(group);
 
   console.log(`[group] ${currentOwnerId} 将群组 ${groupId} 转让给 ${newOwnerId}`);
   return group;
@@ -555,6 +563,7 @@ export function setMemberRole(
 
   targetMember.role = role;
   group.updatedAt = Date.now();
+  store.persistGroup(group);
 
   console.log(`[group] ${setterId} 将 ${targetId} 的角色设为 ${role} (群组 ${groupId})`);
   return targetMember;
@@ -604,6 +613,7 @@ export function muteMember(
 
   targetMember.isMuted = muted;
   group.updatedAt = Date.now();
+  store.persistGroup(group);
 
   // 通知被禁言者
   if (isOnline(targetId)) {

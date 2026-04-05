@@ -58,6 +58,7 @@ export function initiateHandshake(
   };
 
   store.handshakeSessions.set(session.id, session);
+  store.persistHandshakeSession(session);
 
   // Add pending request for target node
   const pending = store.pendingRequests.get(tempRecord.nodeId) || [];
@@ -68,6 +69,7 @@ export function initiateHandshake(
     createdAt: now,
   });
   store.pendingRequests.set(tempRecord.nodeId, pending);
+  store.persistPendingRequests(tempRecord.nodeId, pending);
 
   return session;
 }
@@ -129,10 +131,12 @@ export function submitConfirm(
     if (!nodeA.friends.has(session.targetNodeId)) {
       nodeA.friends.add(session.targetNodeId);
       nodeA.friendCount = nodeA.friends.size;
+      store.persistNode(nodeA);
     }
     if (!nodeB.friends.has(session.requesterId)) {
       nodeB.friends.add(session.requesterId);
       nodeB.friendCount = nodeB.friends.size;
+      store.persistNode(nodeB);
     }
   }
 
@@ -140,6 +144,7 @@ export function submitConfirm(
   const pending = store.pendingRequests.get(session.targetNodeId) || [];
   const filtered = pending.filter((p) => p.sessionId !== sessionId);
   store.pendingRequests.set(session.targetNodeId, filtered);
+  store.persistPendingRequests(session.targetNodeId, filtered);
 
   return session;
 }

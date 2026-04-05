@@ -42,6 +42,11 @@ export interface Config {
   maxFriendsAIToAI: number;
   maxGroupsCreate: number;
   maxGroupsJoin: number;
+  // ClickHouse
+  clickhouseUrl: string;
+  clickhouseUser: string;
+  clickhousePassword: string;
+  clickhouseDatabase: string;
   [key: string]: string | number | boolean;
 }
 
@@ -64,4 +69,9 @@ export const config: Config = {
   maxFriendsAIToAI: parseInt(process.env.MAX_FRIENDS_AI_TO_AI || '1000', 10),
   maxGroupsCreate: parseInt(process.env.MAX_GROUPS_CREATE || '20', 10),
   maxGroupsJoin: parseInt(process.env.MAX_GROUPS_JOIN || '50', 10),
+  // ClickHouse configuration
+  clickhouseUrl: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+  clickhouseUser: process.env.CLICKHOUSE_USER || 'default',
+  clickhousePassword: process.env.CLICKHOUSE_PASSWORD || '',
+  clickhouseDatabase: process.env.CLICKHOUSE_DATABASE || 'aicq',
 };

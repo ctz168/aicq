@@ -66,6 +66,7 @@ export function sendFriendRequest(
   };
 
   store.friendRequests.set(request.id, request);
+  store.persistFriendRequest(request);
   console.log(`[friend-request] ${fromId} 向 ${toId} 发送好友请求 (${request.id})`);
   return request;
 }
@@ -126,6 +127,7 @@ export function acceptFriendRequest(
     request.status = 'rejected';
     request.updatedAt = Date.now();
     store.friendRequests.set(requestId, request);
+    store.persistFriendRequest(request);
     throw new Error('添加好友失败，可能是好友数量已达上限');
   }
 
@@ -141,6 +143,7 @@ export function acceptFriendRequest(
   request.status = 'accepted';
   request.updatedAt = Date.now();
   store.friendRequests.set(requestId, request);
+  store.persistFriendRequest(request);
 
   // 在 Account 层面也记录权限
   friendshipService.setFriendPermissions(accountId, request.fromId, finalPerms);
@@ -177,6 +180,7 @@ export function rejectFriendRequest(
   request.status = 'rejected';
   request.updatedAt = Date.now();
   store.friendRequests.set(requestId, request);
+  store.persistFriendRequest(request);
 
   console.log(`[friend-request] ${accountId} 拒绝了 ${request.fromId} 的好友请求 (${requestId})`);
   return request;

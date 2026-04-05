@@ -43,6 +43,7 @@ export function initiateTransfer(
   };
 
   store.fileTransfers.set(transfer.id, transfer);
+  store.persistFileTransfer(transfer);
 
   return transfer;
 }
@@ -82,6 +83,7 @@ export function reportChunkProgress(
   }
 
   transfer.chunksReceived[chunkIndex] = true;
+  store.persistFileTransfer(transfer);
 }
 
 /**
@@ -114,6 +116,7 @@ export function completeTransfer(sessionId: string): void {
   }
 
   transfer.completedAt = Date.now();
+  store.persistFileTransfer(transfer);
 }
 
 /**
@@ -129,4 +132,5 @@ export function cancelTransfer(sessionId: string): void {
   }
 
   transfer.cancelledAt = Date.now();
+  store.persistFileTransfer(transfer);
 }

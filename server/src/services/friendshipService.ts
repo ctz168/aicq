@@ -42,6 +42,9 @@ export function addFriend(nodeA: string, nodeB: string): boolean {
   b.friends.add(nodeA);
   b.friendCount = b.friends.size;
 
+  store.persistNode(a);
+  store.persistNode(b);
+
   return true;
 }
 
@@ -73,6 +76,9 @@ export function removeFriend(nodeA: string, nodeB: string): boolean {
   a.friendCount = a.friends.size;
   b.friends.delete(nodeA);
   b.friendCount = b.friends.size;
+
+  store.persistNode(a);
+  store.persistNode(b);
 
   // Clean up permissions for both sides
   cleanupPermissions(nodeA, nodeB);
@@ -134,6 +140,8 @@ export function setFriendPermissions(
     friendPerms.set(friendId, permissions);
   }
 
+  store.persistNodePermission(nodeId, friendId, permissions);
+
   return true;
 }
 
@@ -164,4 +172,5 @@ export function initDefaultPermissions(nodeId: string, friendId: string): void {
     }
     friendPerms.set(friendId, ['chat']);
   }
+  store.persistNodePermission(nodeId, friendId, ['chat']);
 }

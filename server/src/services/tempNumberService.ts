@@ -36,6 +36,7 @@ export function requestTempNumber(nodeId: string): TempNumberRecord {
   };
 
   store.tempNumbers.set(number, record);
+  store.persistTempNumber(record);
 
   return record;
 }

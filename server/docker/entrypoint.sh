@@ -24,9 +24,9 @@ cd /app/server
 node dist/index.js &
 SERVER_PID=$!
 
-# Wait for server to be ready
+# Wait for server to be ready (up to 60s since it needs to connect to ClickHouse)
 echo "Waiting for server to start..."
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
     if wget -q -O /dev/null http://127.0.0.1:443/health 2>/dev/null; then
         echo "Server is ready!"
         break

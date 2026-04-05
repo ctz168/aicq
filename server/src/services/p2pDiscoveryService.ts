@@ -35,6 +35,7 @@ export function registerOnlineNode(nodeId: string, ws: WebSocket): void {
   if (node) {
     node.lastSeen = Date.now();
     node.socketId = (ws as any).id || null;
+    store.persistNode(node);
   }
 }
 
@@ -52,6 +53,7 @@ export function unregisterOnlineNode(nodeId: string): void {
   if (node) {
     node.lastSeen = Date.now();
     node.socketId = null;
+    store.persistNode(node);
   }
 }
 

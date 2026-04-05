@@ -30,6 +30,7 @@ export function startSubAgent(
   };
 
   store.subAgents.set(session.id, session);
+  store.persistSubAgent(session);
   console.log(`[subagent] 启动子代理 ${session.id}, 任务: ${task.slice(0, 50)}`);
   return session;
 }
@@ -66,6 +67,7 @@ export function sendInput(
   session.status = 'running';
   session.updatedAt = Date.now();
   store.subAgents.set(subAgentId, session);
+  store.persistSubAgent(session);
 
   console.log(`[subagent] 收到人工输入 ${subAgentId}`);
   return session;
@@ -95,6 +97,7 @@ export function abortSubAgent(
   session.status = 'completed';
   session.updatedAt = Date.now();
   store.subAgents.set(subAgentId, session);
+  store.persistSubAgent(session);
 
   console.log(`[subagent] 中止子代理 ${subAgentId}`);
   return session;

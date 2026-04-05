@@ -4,7 +4,8 @@ import { WebSocketServer } from 'ws';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config';
-import { startPeriodicCleanup } from './db/memoryStore';
+import { store, startPeriodicCleanup } from './db/memoryStore';
+import { initClickHouseSchema, closeClickHouse } from './db/clickhouse';
 import apiRoutes from './api/routes';
 import authRoutes from './api/authRoutes';
 import groupRoutes from './api/groupRoutes';
@@ -30,6 +31,7 @@ app.get('/health', (_req, res) => {
     domain: config.domain,
     uptime: process.uptime(),
     timestamp: Date.now(),
+    storage: 'clickhouse',
   });
 });
 
@@ -77,35 +79,59 @@ setupWebSocketHandler(wss);
 // ─── Start Server ──────────────────────────────────────────────────
 const PORT = config.port;
 
-server.listen(PORT, () => {
-  console.log(`[aicq-server] HTTP + WebSocket server running on port ${PORT}`);
-  console.log(`[aicq-server] Domain: ${config.domain}`);
-  console.log(`[aicq-server] Max friends per node: ${config.maxFriends}`);
-  console.log(`[aicq-server] Temp number TTL: ${config.tempNumberTtlHours}h`);
-  console.log(`[aicq-server] Max HTTP connections: ${config.maxConnections}`);
-  console.log(`[aicq-server] Max WS connections: ${config.maxWsConnections}`);
+async function startServer() {
+  console.log(`[aicq-server] Connecting to ClickHouse at ${config.clickhouseUrl}...`);
 
-  // Start periodic cleanup of expired records
-  startPeriodicCleanup();
+  try {
+    // Initialize ClickHouse schema
+    await initClickHouseSchema();
+    console.log('[aicq-server] ClickHouse schema ready');
+
+    // Load data from ClickHouse into memory
+    await store.loadFromClickHouse();
+    console.log('[aicq-server] All data loaded from ClickHouse');
+  } catch (err) {
+    console.error('[aicq-server] ClickHouse connection/initialization failed:', err instanceof Error ? err.message : err);
+    console.error('[aicq-server] Please ensure ClickHouse is running and accessible.');
+    console.error('[aicq-server] Server will start with empty data store. Data will NOT persist without ClickHouse.');
+  }
+
+  server.listen(PORT, () => {
+    console.log(`[aicq-server] HTTP + WebSocket server running on port ${PORT}`);
+    console.log(`[aicq-server] Domain: ${config.domain}`);
+    console.log(`[aicq-server] Storage: ClickHouse (${config.clickhouseUrl})`);
+    console.log(`[aicq-server] Max friends per node: ${config.maxFriends}`);
+    console.log(`[aicq-server] Temp number TTL: ${config.tempNumberTtlHours}h`);
+    console.log(`[aicq-server] Max HTTP connections: ${config.maxConnections}`);
+    console.log(`[aicq-server] Max WS connections: ${config.maxWsConnections}`);
+
+    // Start periodic cleanup of expired records
+    startPeriodicCleanup();
+  });
+}
+
+startServer().catch((err) => {
+  console.error('[aicq-server] Fatal error during startup:', err);
+  process.exit(1);
 });
 
 // ─── Graceful Shutdown ─────────────────────────────────────────────
-process.on('SIGTERM', () => {
-  console.log('[aicq-server] SIGTERM received, shutting down...');
+async function gracefulShutdown(signal: string) {
+  console.log(`[aicq-server] ${signal} received, shutting down...`);
   wss.close(() => {
-    server.close(() => {
+    server.close(async () => {
+      try {
+        await closeClickHouse();
+        console.log('[aicq-server] ClickHouse connection closed');
+      } catch (err) {
+        console.warn('[aicq-server] Error closing ClickHouse:', err);
+      }
       process.exit(0);
     });
   });
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('[aicq-server] SIGINT received, shutting down...');
-  wss.close(() => {
-    server.close(() => {
-      process.exit(0);
-    });
-  });
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export { app, server, wss };

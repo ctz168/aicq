@@ -521,6 +521,7 @@ router.post('/agent-execution/push', authenticateJWT, generalLimiter, (req: Requ
       const senderNode = store.nodes.get(senderId);
       if (senderNode) {
         senderNode.gatewayUrl = payload.gatewayUrl;
+        store.persistNode(senderNode);
       }
     }
 

@@ -393,6 +393,7 @@ function handleMessage(
           store.groupMessages.set(groupId, []);
         }
         store.groupMessages.get(groupId)!.push(msgRecord);
+        store.persistGroupMessage(msgRecord);
 
         // 发送推送通知给每个在线的群成员
         if (group) {
@@ -699,6 +700,7 @@ function sendPushNotification(
   };
 
   store.notifications.set(notificationId, notification);
+  store.persistNotification(notification);
 
   // 通过 WebSocket 发送推送
   if (isOnline(accountId)) {
@@ -747,6 +749,7 @@ function simulateStreaming(
         prodSession.output = 'Sub-Agent backend not configured for production.';
         prodSession.updatedAt = Date.now();
         store.subAgents.set(subAgentId, prodSession);
+        store.persistSubAgent(prodSession);
       }
     } catch {
       // ignore send errors
@@ -785,6 +788,7 @@ function simulateStreaming(
       session.output += (session.output ? '\n' : '') + responses[index];
       session.updatedAt = Date.now();
       store.subAgents.set(subAgentId, session);
+      store.persistSubAgent(session);
 
       // Send streaming chunk
       try {
