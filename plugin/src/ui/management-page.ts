@@ -545,6 +545,10 @@ function showAddAgentModal() {
   $('#agent-form-provider').value = '';
   $('#agent-form-prompt').value = '';
   $('#agent-form-enabled').checked = true;
+  $('#agent-form-temperature').value = '0.7';
+  $('#agent-form-max-tokens').value = '4096';
+  $('#agent-form-top-p').value = '1';
+  $('#agent-form-tools').value = '';
   showModal('modal-add-agent');
   setTimeout(() => $('#agent-form-name')?.focus(), 100);
 }
@@ -561,10 +565,19 @@ function showEditAgentModal(index) {
   $('#agent-form-provider').value = a.provider || '';
   $('#agent-form-prompt').value = a.systemPrompt || '';
   $('#agent-form-enabled').checked = a.enabled !== false;
+  $('#agent-form-temperature').value = a.temperature ?? 0.7;
+  $('#agent-form-max-tokens').value = a.maxTokens ?? 4096;
+  $('#agent-form-top-p').value = a.topP ?? 1;
+  $('#agent-form-tools').value = Array.isArray(a.tools) ? a.tools.join(', ') : (a.tools || '');
   showModal('modal-add-agent');
 }
 
 async function saveAgent() {
+  const tempVal = parseFloat($('#agent-form-temperature')?.value);
+  const maxTokensVal = parseInt($('#agent-form-max-tokens')?.value, 10);
+  const topPVal = parseFloat($('#agent-form-top-p')?.value);
+  const toolsRaw = $('#agent-form-tools')?.value?.trim() || '';
+
   const agent = {
     name: $('#agent-form-name')?.value?.trim() || '',
     id: $('#agent-form-id')?.value?.trim() || '',
@@ -572,6 +585,10 @@ async function saveAgent() {
     provider: $('#agent-form-provider')?.value?.trim() || '',
     systemPrompt: $('#agent-form-prompt')?.value?.trim() || '',
     enabled: $('#agent-form-enabled')?.checked ?? true,
+    temperature: isNaN(tempVal) ? 0.7 : Math.min(2, Math.max(0, tempVal)),
+    maxTokens: isNaN(maxTokensVal) ? 4096 : maxTokensVal,
+    topP: isNaN(topPVal) ? 1 : Math.min(1, Math.max(0, topPVal)),
+    tools: toolsRaw ? toolsRaw.split(',').map(t => t.trim()).filter(Boolean) : [],
   };
 
   if (!agent.name) { toast('Agent name is required', 'warn'); return; }
@@ -818,7 +835,12 @@ function renderModels(data) {
         <td class="mono">\${escHtml(m.modelId)}</td>
         <td><span class="badge badge-ok">● Key set</span></td>
         <td class="mono" style="font-size:11px">\${escHtml(m.baseUrl || 'default')}</td>
-        <td><button class="btn btn-sm btn-ghost" onclick="showModelConfigModal('\${escHtml(m.providerId)}')">Edit</button></td>
+        <td>
+          <div class="actions-cell">
+            <button class="btn btn-sm btn-ghost" onclick="showModelConfigModal('\${escHtml(m.providerId)}')">Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteModelProvider('\${escHtml(m.providerId)}')" title="Delete">🗑️</button>
+          </div>
+        </td>
       </tr>\\\`;
     });
     activeModelsSection = \\\`
@@ -872,6 +894,12 @@ async function saveModelConfig() {
   const r = await api('/models/' + encodeURIComponent(_editProviderId), { method: 'PUT', body: JSON.stringify({ apiKey, modelId, baseUrl }) });
   if (r.success) { toast(r.message || 'Configuration saved!', 'ok'); loadModels(); }
   else { toast(r.message || r.error || 'Failed to save', 'err'); }
+}
+async function deleteModelProvider(providerId) {
+  if (!confirm('Delete configuration for provider "' + providerId + '"? This will remove its API key and model settings.')) return;
+  const r = await api('/models/' + encodeURIComponent(providerId), { method: 'DELETE' });
+  if (r.success) { toast('Provider configuration deleted', 'ok'); loadModels(); }
+  else { toast(r.message || r.error || 'Delete failed', 'err'); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -931,8 +959,8 @@ function renderSettingsTab() {
     <button class="filter-btn \${_settingsTab==='friends'?'active':''}" onclick="_settingsTab='friends';renderSettingsTab()">👥 Friends</button>
     <button class="filter-btn \${_settingsTab==='security'?'active':''}" onclick="_settingsTab='security';renderSettingsTab()">🔒 Security</button>
     <button class="filter-btn \${_settingsTab==='advanced'?'active':''}" onclick="_settingsTab='advanced';renderSettingsTab()">⚙️ Advanced</button>
-  \\\`);
     <button class="filter-btn \${_settingsTab==='json'?'active':''}" onclick="_settingsTab='json';renderSettingsTab()">📝 JSON Editor</button>
+  \\\`);
 
   switch (_settingsTab) {
     case 'connection': renderSettingsConnection(); break;
@@ -1416,34 +1444,54 @@ async function executeImportSettings() {
 // ════════════════════════════════════════════════════════════
 // JSON Config Editor
 // ════════════════════════════════════════════════════════════
+let _jsonEditorConfigFile = '';
+
 async function renderSettingsJsonEditor() {
   const el = $('#settings-content');
   html(el, '<div class="loading-mask"><div class="spinner"></div>Loading config...</div>');
 
-  const data = await api('/config/raw');
+  const queryParams = _jsonEditorConfigFile ? '?file=' + encodeURIComponent(_jsonEditorConfigFile) : '';
+  const data = await api('/config-file/raw' + queryParams);
   if (data.error) {
     html(el, '<div class="empty"><div class="icon">⚠️</div><p>' + escHtml(data.error) + '</p></div>');
     return;
   }
 
+  _jsonEditorConfigFile = data.fileName || '';
+  const hasMultipleFiles = data.availableFiles && data.availableFiles.length > 1;
+  let fileSelectorHtml = '';
+  if (hasMultipleFiles) {
+    const options = data.availableFiles.map(f =>
+      '<option value="' + escHtml(f) + '"' + (f === data.fileName ? ' selected' : '') + '>' + escHtml(f) + '</option>'
+    ).join('');
+    fileSelectorHtml = \\\`
+      <div class="form-group" style="margin-bottom:16px">
+        <label>📄 Config File</label>
+        <select id="json-editor-file-select" onchange="_jsonEditorConfigFile=this.value;renderSettingsJsonEditor()" style="max-width:300px">
+          \${options}
+        </select>
+      </div>\\\`;
+  }
+
   html(el, \\\`\
     <p class="section-desc">
-      Edit the raw JSON configuration directly. Supports both <strong>openclaw.json</strong> and <strong>stableclaw.json</strong>.
-      <span class="badge badge-accent" style="margin-left:8px">📄 \${escHtml(data.configSource)}</span>
+      Edit the raw JSON configuration directly. Be careful with syntax — invalid JSON will be rejected.
+      <span class="badge badge-accent" style="margin-left:8px">📄 \${escHtml(data.fileName)}</span>
     </p>
 
     <div class="card">
       <div class="card-header">
         <div class="card-title">📝 Config JSON Editor</div>
         <div style="display:flex;gap:8px;align-items:center">
-          <span class="mono" style="font-size:11px;color:var(--text3)">\${escHtml(data.configPath)}</span>
-          <button class="btn btn-sm btn-default" onclick="loadSettings()">🔄 Reload</button>
+          <span class="mono" style="font-size:11px;color:var(--text3)">\${escHtml(data.filePath)}</span>
+          <button class="btn btn-sm btn-default" onclick="renderSettingsJsonEditor()">🔄 Reload</button>
         </div>
       </div>
+      \${fileSelectorHtml}
       <div class="form-group">
         <label>Raw JSON Configuration</label>
-        <textarea id="json-editor" style="min-height:400px;font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:12px;line-height:1.5;tab-size:2" spellcheck="false">\${escHtml(data.rawJson)}</textarea>
-        <div class="hint">Directly edit the configuration JSON. Be careful with syntax — invalid JSON will be rejected.</div>
+        <textarea id="json-editor" style="min-height:400px;font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:12px;line-height:1.5;tab-size:2;background:var(--bg)" spellcheck="false">\${escHtml(data.content)}</textarea>
+        <div class="hint">Directly edit the configuration JSON. Use the Format button to prettify.</div>
       </div>
       <div id="json-editor-status" style="margin-bottom:12px;font-size:12px"></div>
       <div class="form-actions" style="justify-content:space-between">
@@ -1456,16 +1504,6 @@ async function renderSettingsJsonEditor() {
           <button class="btn btn-sm btn-primary" id="btn-save-json" onclick="saveJsonConfig()">💾 Save Config</button>
         </div>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><div class="card-title">🔀 Switch Config File</div></div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-        <span style="font-size:13px;color:var(--text2)">Current: <strong style="color:var(--accent2)">\${escHtml(data.configSource)}</strong></span>
-        <button class="btn btn-sm btn-ok" onclick="switchConfigFile('openclaw')" \${data.configSource === 'openclaw.json' ? 'disabled' : ''}>→ openclaw.json</button>
-        <button class="btn btn-sm btn-warn" onclick="switchConfigFile('stableclaw')" \${data.configSource === 'stableclaw.json' ? 'disabled' : ''}>→ stableclaw.json</button>
-      </div>
-      <div class="hint" style="margin-top:10px">Copy current config to the other filename. Does not delete the original file.</div>
     </div>
   \`);
 }
@@ -1493,14 +1531,15 @@ async function saveJsonConfig() {
   // Validate first
   try { JSON.parse(raw); } catch (e) {
     toast('Invalid JSON: ' + e.message, 'err');
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">✗ Invalid JSON — cannot save</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">✗ ' + escHtml(e.message) + '</span>';
     return;
   }
 
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
   if (statusEl) statusEl.innerHTML = '<span style="color:var(--text3)"><span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span> Saving...</span>';
 
-  const r = await api('/config/raw', { method: 'PUT', body: JSON.stringify({ rawJson: raw }) });
+  const queryParams = _jsonEditorConfigFile ? '?file=' + encodeURIComponent(_jsonEditorConfigFile) : '';
+  const r = await api('/config-file/raw' + queryParams, { method: 'PUT', body: JSON.stringify({ content: raw }) });
 
   if (btn) { btn.disabled = false; btn.textContent = '💾 Save Config'; }
 
@@ -1510,17 +1549,6 @@ async function saveJsonConfig() {
   } else {
     toast(r.message || 'Save failed', 'err');
     if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">✗ ' + escHtml(r.message || 'Failed') + '</span>';
-  }
-}
-
-async function switchConfigFile(target) {
-  if (!confirm('Copy current config to ' + target + '.json? The original file will be kept.')) return;
-  const r = await api('/config/switch', { method: 'POST', body: JSON.stringify({ target }) });
-  if (r.success) {
-    toast('Config copied to ' + target + '.json', 'ok');
-    setTimeout(() => renderSettingsJsonEditor(), 500);
-  } else {
-    toast(r.message || 'Failed to switch', 'err');
   }
 }
 
@@ -1770,6 +1798,30 @@ const HTML = `<!DOCTYPE html>
     <div class="form-group">
       <label>System Prompt</label>
       <textarea id="agent-form-prompt" rows="4" placeholder="You are a helpful assistant..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Temperature</label>
+        <input type="number" id="agent-form-temperature" min="0" max="2" step="0.1" value="0.7">
+        <div class="hint">0 = deterministic, 2 = creative. Default: 0.7</div>
+      </div>
+      <div class="form-group">
+        <label>Max Tokens</label>
+        <input type="number" id="agent-form-max-tokens" min="1" step="1" value="4096">
+        <div class="hint">Maximum response length. Default: 4096</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Top P</label>
+        <input type="number" id="agent-form-top-p" min="0" max="1" step="0.05" value="1">
+        <div class="hint">Nucleus sampling. Default: 1</div>
+      </div>
+      <div class="form-group">
+        <label>Tools</label>
+        <input type="text" id="agent-form-tools" placeholder="web_search, code_exec, ...">
+        <div class="hint">Comma-separated list of tool names</div>
+      </div>
     </div>
     <div class="form-group">
       <label class="toggle-label">

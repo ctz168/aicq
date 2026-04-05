@@ -955,8 +955,14 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         const result = readConfig();
         if (!result) return json(res, { success: false, message: "No config file found" }, 400);
         const config = result.config;
+        // If config.agent exists as a single object, convert it to an agents array first
         if (!Array.isArray(config.agents)) {
           config.agents = [];
+          const singleAgent = config.agent;
+          if (typeof singleAgent === "object" && singleAgent !== null && !Array.isArray(singleAgent)) {
+            (config.agents as Array<unknown>).push(singleAgent);
+            delete config.agent;
+          }
         }
         (config.agents as Array<unknown>).push(agent);
         const written = writeConfig(config);
@@ -1019,6 +1025,75 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
           const msg = e instanceof Error ? e.message : String(e);
           return json(res, { success: false, message: "Failed: " + msg }, 500);
         }
+      }
+
+      // ── GET /api/config-file/raw ──
+      if (apiPath === "/config-file/raw" && method === "GET") {
+        const configPath = findConfigPath();
+        if (!configPath) return json(res, { error: "No config file found" }, 404);
+        const configName = path.basename(configPath);
+        const raw = fs.readFileSync(configPath, "utf-8");
+        const config = JSON.parse(raw) as Record<string, unknown>;
+        const stats = fs.statSync(configPath);
+        return json(res, {
+          configPath,
+          configName,
+          raw,
+          config,
+          size: stats.size,
+          modified: stats.mtime.toISOString(),
+        });
+      }
+
+      // ── PUT /api/config-file/raw ──
+      if (apiPath === "/config-file/raw" && method === "PUT") {
+        const body = await readBody(req);
+        const content = body.content as string;
+        if (!content) return json(res, { success: false, message: "Missing content field" }, 400);
+        let parsed: unknown;
+        try { parsed = JSON.parse(content); } catch (e) {
+          return json(res, { success: false, message: "Invalid JSON: " + (e instanceof Error ? e.message : String(e)) }, 400);
+        }
+        const configPath = findConfigPath();
+        if (!configPath) return json(res, { success: false, message: "No config file found" }, 400);
+        try {
+          fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), "utf-8");
+          logger.info("[API] Config file written via /config-file/raw");
+          return json(res, { success: true, message: "Config file saved", configPath });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return json(res, { success: false, message: "Write failed: " + msg }, 500);
+        }
+      }
+
+      // ── DELETE /api/models/:providerId ──
+      if (apiPath.match(/^\/models\/[^/]+$/) && method === "DELETE") {
+        const providerId = decodeURIComponent(apiPath.slice("/models/".length));
+
+        const provider = MODEL_PROVIDERS.find((p) => p.id === providerId);
+        if (!provider) return json(res, { success: false, message: "Unknown provider: " + providerId }, 400);
+
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+
+        const config = result.config;
+
+        // Clear in config.providers section
+        const providersSection = config.providers as Record<string, unknown> | undefined;
+        if (providersSection && typeof providersSection === "object" && providersSection[provider.configKey]) {
+          providersSection[provider.configKey] = {};
+        }
+
+        // Clear top-level provider key
+        if (config[provider.configKey]) {
+          config[provider.configKey] = {};
+        }
+
+        const written = writeConfig(config);
+        if (!written) return json(res, { success: false, message: "Failed to write config file" }, 500);
+
+        logger.info("[API] Model config cleared for provider: " + providerId);
+        return json(res, { success: true, message: "Model configuration cleared for " + provider.name });
       }
 
       // ── Fallback ──
