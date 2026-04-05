@@ -8,17 +8,17 @@
 const CSS = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #0f1117; --bg2: #1a1d27; --bg3: #242836; --bg4: #2e3347;
-  --bg5: #353a50; --text: #e4e6ef; --text2: #9499b3; --text3: #5c6080;
-  --accent: #6366f1; --accent2: #818cf8; --accent-bg: rgba(99,102,241,.12);
-  --ok: #34d399; --ok-bg: rgba(52,211,153,.12); --warn: #fbbf24; --warn-bg: rgba(251,191,36,.12);
-  --danger: #ef4444; --danger-bg: rgba(239,68,68,.12); --info: #60a5fa; --info-bg: rgba(96,165,250,.12);
-  --border: #2e3347; --radius: 8px; --radius-lg: 12px; --shadow: 0 2px 12px rgba(0,0,0,.3);
+  --bg: #f5f7fa; --bg2: #ffffff; --bg3: #f0f2f5; --bg4: #e4e7ec;
+  --bg5: #d1d5db; --text: #1f2937; --text2: #6b7280; --text3: #9ca3af;
+  --accent: #4f46e5; --accent2: #6366f1; --accent-bg: rgba(79,70,229,.08);
+  --ok: #10b981; --ok-bg: rgba(16,185,129,.08); --warn: #f59e0b; --warn-bg: rgba(245,158,11,.08);
+  --danger: #ef4444; --danger-bg: rgba(239,68,68,.08); --info: #3b82f6; --info-bg: rgba(59,130,246,.08);
+  --border: #e5e7eb; --radius: 8px; --radius-lg: 12px; --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
   --sidebar-w: 240px; --header-h: 56px;
   --transition: .2s cubic-bezier(.4,0,.2,1);
 }
 html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; overflow: hidden; }
-a { color: var(--info); text-decoration: none; }
+a { color: var(--accent); text-decoration: none; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
@@ -30,7 +30,7 @@ a { color: var(--info); text-decoration: none; }
 /* Sidebar */
 .sidebar {
   width: var(--sidebar-w); min-width: var(--sidebar-w); height: 100vh;
-  background: var(--bg2); border-right: 1px solid var(--border);
+  background: #ffffff; border-right: 1px solid var(--border);
   display: flex; flex-direction: column; transition: width var(--transition), min-width var(--transition);
   z-index: 20; overflow: hidden;
 }
@@ -45,7 +45,7 @@ a { color: var(--info); text-decoration: none; }
   border-bottom: 1px solid var(--border); min-height: var(--header-h);
 }
 .sidebar-logo {
-  width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), #a855f7);
+  width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), #7c3aed);
   display: grid; place-items: center; font-size: 13px; font-weight: 800; color: #fff; flex-shrink: 0;
 }
 .sidebar-header-text h1 { font-size: 14px; font-weight: 700; line-height: 1.2; }
@@ -84,7 +84,7 @@ a { color: var(--info); text-decoration: none; }
 .main-header {
   height: var(--header-h); min-height: var(--header-h);
   display: flex; align-items: center; gap: 16px; padding: 0 24px;
-  background: var(--bg2); border-bottom: 1px solid var(--border);
+  background: #ffffff; border-bottom: 1px solid var(--border);
 }
 .toggle-btn {
   width: 32px; height: 32px; border-radius: 6px; background: var(--bg3);
@@ -116,12 +116,12 @@ a { color: var(--info); text-decoration: none; }
 .btn-default:hover:not(:disabled) { background: var(--bg4); }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--accent2); }
-.btn-danger { background: var(--danger-bg); color: #fca5a5; border: 1px solid rgba(239,68,68,.2); }
-.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,.2); }
-.btn-ok { background: var(--ok-bg); color: #6ee7b7; border: 1px solid rgba(52,211,153,.2); }
-.btn-ok:hover:not(:disabled) { background: rgba(52,211,153,.2); }
-.btn-warn { background: var(--warn-bg); color: #fde68a; border: 1px solid rgba(251,191,36,.2); }
-.btn-warn:hover:not(:disabled) { background: rgba(251,191,36,.2); }
+.btn-danger { background: var(--danger-bg); color: #dc2626; border: 1px solid rgba(239,68,68,.15); }
+.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,.15); }
+.btn-ok { background: var(--ok-bg); color: #059669; border: 1px solid rgba(16,185,129,.15); }
+.btn-ok:hover:not(:disabled) { background: rgba(16,185,129,.15); }
+.btn-warn { background: var(--warn-bg); color: #d97706; border: 1px solid rgba(245,158,11,.15); }
+.btn-warn:hover:not(:disabled) { background: rgba(245,158,11,.15); }
 .btn-ghost { background: transparent; color: var(--text2); }
 .btn-ghost:hover:not(:disabled) { background: var(--bg3); color: var(--text); }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
@@ -197,14 +197,14 @@ tbody tr:hover { background: var(--bg3); }
 
 /* Modal */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.65); display: flex;
+  position: fixed; inset: 0; background: rgba(0,0,0,.3); display: flex;
   align-items: center; justify-content: center; z-index: 100;
   animation: fadeIn .15s ease-out;
 }
 .modal-overlay.hidden { display: none; }
 .modal {
   background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  padding: 28px; width: 90%; max-width: 520px; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  padding: 28px; width: 90%; max-width: 520px; box-shadow: 0 10px 25px rgba(0,0,0,.1), 0 6px 10px rgba(0,0,0,.06);
   max-height: 85vh; overflow-y: auto; animation: modalIn .2s ease-out;
 }
 @keyframes modalIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -240,15 +240,15 @@ tbody tr:hover { background: var(--bg3); }
 /* Toast */
 .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
 .toast {
-  padding: 12px 20px; border-radius: var(--radius); color: #fff; font-size: 13px;
-  animation: slideIn .2s ease-out; box-shadow: var(--shadow); display: flex; align-items: center; gap: 8px;
+  padding: 12px 20px; border-radius: var(--radius); color: var(--text); font-size: 13px;
+  animation: slideIn .2s ease-out; box-shadow: 0 4px 12px rgba(0,0,0,.08); display: flex; align-items: center; gap: 8px;
   max-width: 400px;
 }
 .toast.hidden { display: none; }
-.toast-ok { background: #065f46; border: 1px solid var(--ok); }
-.toast-err { background: #7f1d1d; border: 1px solid var(--danger); }
-.toast-info { background: #1e3a5f; border: 1px solid var(--info); }
-.toast-warn { background: #78350f; border: 1px solid var(--warn); }
+.toast-ok { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+.toast-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.toast-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a5f; }
+.toast-warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
 @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
 /* Actions cell */
@@ -280,8 +280,9 @@ tbody tr:hover { background: var(--bg3); }
 
 /* Offline banner */
 .offline-banner {
-  background: linear-gradient(90deg, #7f1d1d, #991b1b);
-  color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+  border-bottom: 1px solid #fecaca;
   padding: 10px 24px;
   font-size: 13px;
   display: flex;
@@ -2101,7 +2102,7 @@ const HTML = `<!DOCTYPE html>
     <div class="modal-header"><h3>🗑️ Reset Agent Identity</h3><button class="modal-close" onclick="hideModal('modal-reset-identity')">✕</button></div>
     <div style="margin-bottom:16px">
       <div class="card" style="border-color:var(--danger);background:var(--danger-bg)">
-        <p style="font-size:13px;color:#fca5a5;line-height:1.6">
+        <p style="font-size:13px;color:#991b1b;line-height:1.6">
           <strong>⚠️ WARNING: This is a destructive operation!</strong><br><br>
           This will permanently delete:<br>
           • Your Ed25519 key pair and agent ID<br>
