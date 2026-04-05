@@ -676,7 +676,7 @@ const plugin = definePluginEntry({
       try {
         api.registerHttpRoute({
           path: "/plugins/aicq-chat",
-          auth: "gateway",
+          auth: "plugin",
           match: "prefix",
           handler: managementHandler as unknown as (req: unknown, res: unknown) => Promise<boolean | void>,
         });
