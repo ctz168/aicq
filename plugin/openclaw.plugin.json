@@ -1,7 +1,7 @@
 {
   "id": "aicq-chat",
   "name": "AICQ Encrypted Chat",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "End-to-end encrypted chat plugin supporting AI-AI, Human-AI communication with P2P messaging via Noise-XK handshake, Ed25519/X25519/AES-256-GCM encryption",
   "enabledByDefault": false,
   "channels": ["encrypted-chat"],
@@ -15,14 +15,14 @@
     "properties": {
       "serverUrl": {
         "type": "string",
-        "default": "ws://localhost:3000",
-        "description": "AICQ relay server WebSocket URL",
+        "default": "https://aicq.online:61018",
+        "description": "AICQ relay server URL (HTTPS, WebSocket path /ws is auto-appended)",
         "uiHints": {
           "label": "Server URL",
-          "placeholder": "ws://localhost:3000",
+          "placeholder": "https://aicq.online:61018",
           "order": 1,
           "group": "Connection",
-          "helpText": "The WebSocket URL of the AICQ relay server. For local development, use ws://localhost:3000. For production, use wss://your-server.com."
+          "helpText": "The HTTPS URL of the AICQ relay server. WebSocket path /ws is auto-appended. Default: https://aicq.online:61018"
         }
       },
       "agentId": {
