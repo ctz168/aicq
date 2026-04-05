@@ -213,9 +213,12 @@ const plugin = definePluginEntry({
         try {
           switch (action) {
             case "request-temp-number": {
+              const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+              const token = serverClient.getAuthToken();
+              if (token) authHeaders["Authorization"] = "Bearer " + token;
               const resp = await fetch(serverUrl + "/api/v1/temp-number/request", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: authHeaders,
                 body: JSON.stringify({ nodeId: aicqAgentId }),
               });
               if (!resp.ok) return { error: "Server error: " + await resp.text() };
@@ -223,7 +226,10 @@ const plugin = definePluginEntry({
               return { success: true, tempNumber: data.number, message: "Temp number: " + data.number };
             }
             case "list": {
-              const resp = await fetch(serverUrl + "/api/v1/friends?nodeId=" + aicqAgentId);
+              const listAuthHeaders: Record<string, string> = {};
+              const listToken = serverClient.getAuthToken();
+              if (listToken) listAuthHeaders["Authorization"] = "Bearer " + listToken;
+              const resp = await fetch(serverUrl + "/api/v1/friends?nodeId=" + aicqAgentId, { headers: listAuthHeaders });
               if (!resp.ok) return { error: "Server error: " + await resp.text() };
               const data = await resp.json() as Record<string, unknown>;
               return { total: (data.count as number) || 0, friends: data.friends || [] };
@@ -235,15 +241,21 @@ const plugin = definePluginEntry({
               const isTempNumber = /^\d{6}$/.test(target);
               let friendId = target;
               if (isTempNumber) {
-                const resolveResp = await fetch(serverUrl + "/api/v1/temp-number/" + target);
+                const resolveAuthHeaders: Record<string, string> = {};
+                const resolveToken = serverClient.getAuthToken();
+                if (resolveToken) resolveAuthHeaders["Authorization"] = "Bearer " + resolveToken;
+                const resolveResp = await fetch(serverUrl + "/api/v1/temp-number/" + target, { headers: resolveAuthHeaders });
                 if (!resolveResp.ok) return { error: "Temp number not found or expired" };
                 const resolveData = await resolveResp.json() as Record<string, unknown>;
                 friendId = resolveData.nodeId as string;
               }
               // Initiate handshake
+              const hsAuthHeaders: Record<string, string> = { "Content-Type": "application/json" };
+              const hsToken = serverClient.getAuthToken();
+              if (hsToken) hsAuthHeaders["Authorization"] = "Bearer " + hsToken;
               const hsResp = await fetch(serverUrl + "/api/v1/handshake/initiate", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: hsAuthHeaders,
                 body: JSON.stringify({ requesterId: aicqAgentId, targetTempNumber: target }),
               });
               if (!hsResp.ok) return { error: "Handshake failed: " + await hsResp.text() };
@@ -253,18 +265,26 @@ const plugin = definePluginEntry({
             case "remove": {
               const target = params?.target;
               if (!target) return { error: "Missing target (friend ID to remove)" };
+              const rmAuthHeaders: Record<string, string> = { "Content-Type": "application/json" };
+              const rmToken = serverClient.getAuthToken();
+              if (rmToken) rmAuthHeaders["Authorization"] = "Bearer " + rmToken;
               const rmResp = await fetch(serverUrl + "/api/v1/friends/" + target, {
                 method: "DELETE",
-                headers: { "Content-Type": "application/json" },
+                headers: rmAuthHeaders,
                 body: JSON.stringify({ nodeId: aicqAgentId }),
               });
               if (!rmResp.ok) return { error: "Failed to remove friend: " + await rmResp.text() };
               return { success: true, message: "Friend " + target + " removed" };
             }
             case "revoke-temp-number": {
-              const resp = await fetch(serverUrl + "/api/v1/temp-number/" + aicqAgentId, {
+              const revokeTarget = params?.target as string;
+              if (!revokeTarget) return { error: "Missing target (temp number to revoke)" };
+              const revokeAuthHeaders: Record<string, string> = { "Content-Type": "application/json" };
+              const revokeToken = serverClient.getAuthToken();
+              if (revokeToken) revokeAuthHeaders["Authorization"] = "Bearer " + revokeToken;
+              const resp = await fetch(serverUrl + "/api/v1/temp-number/" + revokeTarget + "?nodeId=" + aicqAgentId, {
                 method: "DELETE",
-                headers: { "Content-Type": "application/json" },
+                headers: revokeAuthHeaders,
                 body: JSON.stringify({ nodeId: aicqAgentId }),
               });
               if (!resp.ok) return { error: "Failed to revoke temp number" };
@@ -372,21 +392,25 @@ const plugin = definePluginEntry({
       // 2. aicq.friends.list — List all friends with details
       api.registerGatewayMethod("aicq.friends.list", async (params: unknown) => {
         try {
-          const resp = await fetch(serverUrl + "/api/v1/friends?nodeId=" + aicqAgentId);
+          const resp = await fetch(serverUrl + "/api/v1/friends?nodeId=" + aicqAgentId, {
+            headers: serverClient.authHeaders(),
+          });
           if (!resp.ok) return { error: "Server error: " + await resp.text() };
           const data = await resp.json() as Record<string, unknown>;
           const friends = (data.friends || []) as Array<Record<string, unknown>>;
           // Enrich with local store data (permissions, aiName, friendType)
           const enriched = friends.map((f) => {
-            const localFriend = store.getFriend(f.nodeId as string);
+            const friendId = (f.id || f.nodeId) as string;
+            const localFriend = store.getFriend(friendId);
             return {
-              id: f.nodeId,
+              id: friendId,
               publicKeyFingerprint: f.publicKeyFingerprint || (localFriend?.publicKeyFingerprint || ""),
               permissions: f.permissions || localFriend?.permissions || [],
               addedAt: f.addedAt || localFriend?.addedAt?.toISOString() || null,
               lastMessageAt: f.lastMessageAt || localFriend?.lastMessageAt?.toISOString() || null,
               friendType: f.friendType || localFriend?.friendType || null,
               aiName: f.aiName || localFriend?.aiName || null,
+              nodeId: f.nodeId || null,
             };
           });
           return { friends: enriched };
@@ -408,7 +432,9 @@ const plugin = definePluginEntry({
           let friendId = target;
 
           if (isTempNumber) {
-            const resolveResp = await fetch(serverUrl + "/api/v1/temp-number/" + target);
+            const resolveResp = await fetch(serverUrl + "/api/v1/temp-number/" + target, {
+              headers: serverClient.authHeaders(),
+            });
             if (!resolveResp.ok) return { success: false, message: "Temp number not found or expired" };
             const resolveData = await resolveResp.json() as Record<string, unknown>;
             friendId = resolveData.nodeId as string;
@@ -417,7 +443,7 @@ const plugin = definePluginEntry({
           // Initiate handshake
           const hsResp = await fetch(serverUrl + "/api/v1/handshake/initiate", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify({ requesterId: aicqAgentId, targetTempNumber: target }),
           });
           if (!hsResp.ok) return { success: false, message: "Handshake failed: " + await hsResp.text() };
@@ -445,7 +471,7 @@ const plugin = definePluginEntry({
 
           const rmResp = await fetch(serverUrl + "/api/v1/friends/" + friendId, {
             method: "DELETE",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify({ nodeId: aicqAgentId }),
           });
           if (!rmResp.ok) return { success: false, message: "Failed to remove friend: " + await rmResp.text() };
@@ -468,7 +494,9 @@ const plugin = definePluginEntry({
           const friendId = p.friendId as string;
           if (!friendId) return { error: "Missing friendId parameter" };
 
-          const resp = await fetch(serverUrl + "/api/v1/friends/" + friendId + "/permissions?nodeId=" + aicqAgentId);
+          const resp = await fetch(serverUrl + "/api/v1/friends/" + friendId + "/permissions?nodeId=" + aicqAgentId, {
+            headers: serverClient.authHeaders(),
+          });
           if (!resp.ok) return { error: "Server error: " + await resp.text() };
           const data = await resp.json() as Record<string, unknown>;
 
@@ -492,7 +520,7 @@ const plugin = definePluginEntry({
 
           const resp = await fetch(serverUrl + "/api/v1/friends/" + friendId + "/permissions", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify({ nodeId: aicqAgentId, permissions }),
           });
           if (!resp.ok) return { success: false, message: "Failed to update permissions: " + await resp.text() };
@@ -515,7 +543,9 @@ const plugin = definePluginEntry({
       // 7. aicq.friends.requests — List pending friend requests
       api.registerGatewayMethod("aicq.friends.requests", async (params: unknown) => {
         try {
-          const resp = await fetch(serverUrl + "/api/v1/friends/requests?accountId=" + aicqAgentId);
+          const resp = await fetch(serverUrl + "/api/v1/friends/requests?accountId=" + aicqAgentId, {
+            headers: serverClient.authHeaders(),
+          });
           if (!resp.ok) return { error: "Server error: " + await resp.text() };
           const data = await resp.json() as Record<string, unknown>;
 
@@ -540,7 +570,7 @@ const plugin = definePluginEntry({
 
           const resp = await fetch(serverUrl + "/api/v1/friends/requests/" + requestId + "/accept", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify(body),
           });
           if (!resp.ok) return { success: false, message: "Failed to accept request: " + await resp.text() };
@@ -562,7 +592,7 @@ const plugin = definePluginEntry({
 
           const resp = await fetch(serverUrl + "/api/v1/friends/requests/" + requestId + "/reject", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify({}),
           });
           if (!resp.ok) return { success: false, message: "Failed to reject request: " + await resp.text() };
