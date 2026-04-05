@@ -28,7 +28,7 @@ const configFields: ConfigField[] = [
   { key: 'maxGroupsJoin', label: '加群上限', description: '每个账号可加入群组的最大数量' },
   { key: 'maxGroupMembers', label: '群成员上限', description: '单个群组的最大成员数量' },
   { key: 'maxConnections', label: '最大连接数', description: '服务器的最大HTTP连接数' },
-  { key: 'maxWSConnections', label: '最大WebSocket连接数', description: '服务器最大WebSocket连接数' },
+  { key: 'maxWsConnections', label: '最大WebSocket连接数', description: '服务器最大WebSocket连接数' },
   { key: 'tempNumberTtlHours', label: '临时号码有效期', description: '临时号码的有效时长（小时）' },
 ]
 

@@ -141,26 +141,21 @@ export function getDashboardStats(): {
 
 // ─── Node Management ───────────────────────────────────────────────
 
-export interface NodeListItem {
-  id: string;
-  publicKey: string;
-  friendCount: number;
-  lastSeen: number;
-  isOnline: boolean;
-}
-
-export interface NodeListResponse {
-  nodes: NodeListItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
-
 export function getNodeList(params: {
   search?: string;
   page?: number;
   pageSize?: number;
-}): NodeListResponse {
+}): {
+  nodes: {
+    id: string;
+    friendCount: number;
+    lastSeen: string | null;
+    status: 'online' | 'offline';
+  }[];
+  total: number;
+  page: number;
+  pageSize: number;
+} {
   const page = params.page || 1;
   const pageSize = params.pageSize || 20;
   const search = (params.search || '').trim().toLowerCase();
@@ -187,10 +182,9 @@ export function getNodeList(params: {
   return {
     nodes: paged.map((n) => ({
       id: n.id,
-      publicKey: n.publicKey,
       friendCount: n.friends.size,
-      lastSeen: n.lastSeen,
-      isOnline: (now - n.lastSeen) < 5 * 60 * 1000, // online if seen within 5 min
+      lastSeen: n.lastSeen ? new Date(n.lastSeen).toISOString() : null,
+      status: ((now - n.lastSeen) < 5 * 60 * 1000 ? 'online' : 'offline') as 'online' | 'offline',
     })),
     total,
     page,
@@ -198,79 +192,59 @@ export function getNodeList(params: {
   };
 }
 
-export interface FriendInfo {
-  nodeId: string;
-  lastSeen: number;
-  isOnline: boolean;
-  permissions: FriendPermission[];
-}
-
-export interface NodeDetail {
-  id: string;
-  publicKey: string;
-  lastSeen: number;
-  isOnline: boolean;
-  socketId: string | null;
-  gatewayUrl?: string;
-  friends: FriendInfo[];
-}
-
-export function getNodeDetail(nodeId: string): NodeDetail | null {
+export function getNodeDetail(nodeId: string): Record<string, any> | null {
   const node = store.nodes.get(nodeId);
   if (!node) return null;
 
   const now = Date.now();
   const permissionsMap = store.nodePermissions.get(nodeId);
 
-  const friends: FriendInfo[] = Array.from(node.friends).map((friendId) => {
-    const friendNode = store.nodes.get(friendId);
+  const friends = Array.from(node.friends).map((friendId) => {
+    const friendAccount = store.accounts.get(friendId);
     const perms = permissionsMap?.get(friendId) || ['chat'];
     return {
-      nodeId: friendId,
-      lastSeen: friendNode?.lastSeen || 0,
-      isOnline: friendNode ? (now - friendNode.lastSeen) < 5 * 60 * 1000 : false,
-      permissions: perms,
+      friendId,
+      friendType: friendAccount?.type || 'human',
+      permission: perms.join(', '),
+      addedAt: friendAccount ? new Date(friendAccount.createdAt).toISOString() : '',
     };
   });
 
   return {
     id: node.id,
-    publicKey: node.publicKey,
-    lastSeen: node.lastSeen,
-    isOnline: (now - node.lastSeen) < 5 * 60 * 1000,
-    socketId: node.socketId,
-    gatewayUrl: node.gatewayUrl,
+    friendCount: node.friends.size,
+    lastSeen: node.lastSeen ? new Date(node.lastSeen).toISOString() : null,
+    status: ((now - node.lastSeen) < 5 * 60 * 1000 ? 'online' : 'offline') as 'online' | 'offline',
     friends,
   };
 }
 
 // ─── Account Management ────────────────────────────────────────────
 
-export interface AccountListItem {
-  id: string;
-  type: 'human' | 'ai';
-  email?: string;
-  phone?: string;
-  displayName?: string;
-  agentName?: string;
-  status: 'active' | 'disabled' | 'suspended';
-  createdAt: number;
-  lastLoginAt: number;
-  friendCount: number;
-}
-
-export interface AccountListResponse {
-  accounts: AccountListItem[];
-  total: number;
-  page: number;
-  pageSize: number;
+/** Helper: transform an Account to the format the admin frontend expects */
+function formatAccountForFrontend(a: Account) {
+  return {
+    id: a.id,
+    type: a.type,
+    email: a.email || null,
+    phone: a.phone || null,
+    displayName: a.displayName || null,
+    status: a.status,
+    createdAt: new Date(a.createdAt).toISOString(),
+    lastLogin: a.lastLoginAt ? new Date(a.lastLoginAt).toISOString() : null,
+  };
 }
 
 export function getAccountList(params: {
   search?: string;
   page?: number;
   pageSize?: number;
-}): AccountListResponse {
+}): {
+  accounts: ReturnType<typeof formatAccountForFrontend>[];
+  total: number;
+  page: number;
+  pageSize: number;
+} {
   const page = params.page || 1;
   const pageSize = params.pageSize || 20;
   const search = (params.search || '').trim().toLowerCase();
@@ -296,26 +270,16 @@ export function getAccountList(params: {
   const paged = accounts.slice(start, start + pageSize);
 
   return {
-    accounts: paged.map((a) => ({
-      id: a.id,
-      type: a.type,
-      email: a.email,
-      phone: a.phone,
-      displayName: a.displayName,
-      agentName: a.agentName,
-      status: a.status,
-      createdAt: a.createdAt,
-      lastLoginAt: a.lastLoginAt,
-      friendCount: a.friends.length,
-    })),
+    accounts: paged.map((a) => formatAccountForFrontend(a)),
     total,
     page,
     pageSize,
   };
 }
 
-export function getAccountDetail(accountId: string): Account | null {
-  return store.accounts.get(accountId) || null;
+export function getAccountDetail(accountId: string): ReturnType<typeof formatAccountForFrontend> | null {
+  const account = store.accounts.get(accountId);
+  return account ? formatAccountForFrontend(account) : null;
 }
 
 export async function createAccount(params: {
@@ -323,16 +287,17 @@ export async function createAccount(params: {
   phone?: string;
   password?: string;
   displayName?: string;
-  publicKey: string;
-}): Promise<Account> {
-  const { email, phone, password, displayName, publicKey } = params;
+  publicKey?: string;
+}): Promise<ReturnType<typeof formatAccountForFrontend>> {
+  let { email, phone, password, displayName, publicKey } = params;
 
   if (!email && !phone) {
     throw new Error('必须提供邮箱或手机号');
   }
 
+  // Admin-created accounts get a placeholder key; real key is set during normal registration
   if (!publicKey) {
-    throw new Error('必须提供公钥');
+    publicKey = crypto.randomBytes(32).toString('base64');
   }
 
   // Check for existing accounts with same email/phone
@@ -380,7 +345,7 @@ export async function createAccount(params: {
 
   store.setAccount(account);
   console.log(`[admin] Account created: ${account.id} (${email || phone})`);
-  return account;
+  return formatAccountForFrontend(account);
 }
 
 export function deleteAccount(accountId: string): boolean {
@@ -425,6 +390,23 @@ export function deleteAccount(accountId: string): boolean {
   // Remove node record if exists
   store.nodes.delete(accountId);
 
+  // Also delete from ClickHouse (fire-and-forget)
+  (async () => {
+    try {
+      const ch = await getClickHouseClient();
+      await ch.exec({
+        query: 'ALTER TABLE accounts DELETE WHERE id = {id:String}',
+        query_params: { id: accountId },
+      });
+      await ch.exec({
+        query: 'ALTER TABLE nodes DELETE WHERE id = {id:String}',
+        query_params: { id: accountId },
+      });
+    } catch (err) {
+      console.warn('[admin] Failed to delete account from ClickHouse:', err instanceof Error ? err.message : err);
+    }
+  })();
+
   console.log(`[admin] Account deleted: ${accountId}`);
   return true;
 }
@@ -440,7 +422,7 @@ export type AccountUpdateFields = Partial<{
   maxFriends: number;
 }>;
 
-export async function updateAccount(accountId: string, updates: AccountUpdateFields): Promise<Account> {
+export async function updateAccount(accountId: string, updates: AccountUpdateFields): Promise<ReturnType<typeof formatAccountForFrontend>> {
   const account = store.accounts.get(accountId);
   if (!account) {
     throw new Error('账号不存在');
@@ -493,51 +475,53 @@ export async function updateAccount(accountId: string, updates: AccountUpdateFie
 
   store.setAccount(account);
   console.log(`[admin] Account updated: ${accountId}`);
-  return account;
+  return formatAccountForFrontend(account);
 }
 
 // ─── Config Management ─────────────────────────────────────────────
 
+// Whitelisted config fields that can be viewed/modified via admin API
+const ADMIN_CONFIG_WHITELIST = [
+  'port', 'maxFriends', 'maxFriendsHumanToHuman', 'maxFriendsHumanToAI',
+  'maxFriendsAIToHuman', 'maxFriendsAIToAI', 'maxGroupsCreate', 'maxGroupsJoin',
+  'maxGroupMembers', 'maxConnections', 'maxWsConnections', 'tempNumberTtlHours',
+];
+
 export function getConfig(): Record<string, string | number | boolean> {
-  return { ...config };
+  const safe: Record<string, string | number | boolean> = {};
+  for (const key of ADMIN_CONFIG_WHITELIST) {
+    if (key in config) {
+      safe[key] = (config as any)[key];
+    }
+  }
+  return safe;
 }
 
 export function updateConfig(updates: Record<string, string | number | boolean>): Record<string, string | number | boolean> {
   for (const [key, value] of Object.entries(updates)) {
-    if (key === 'jwtSecret') {
-      // Don't allow changing jwtSecret via admin API
-      console.warn('[admin] Attempted to change jwtSecret via admin API, blocked');
+    if (!ADMIN_CONFIG_WHITELIST.includes(key)) {
+      console.warn(`[admin] Attempted to change protected config '${key}', blocked`);
       continue;
     }
-    if (key in config) {
-      (config as any)[key] = value;
-    } else {
-      // Allow adding new config fields
-      (config as any)[key] = value;
-    }
+    (config as any)[key] = value;
   }
 
   console.log('[admin] Config updated:', Object.keys(updates).join(', '));
-  return { ...config };
+  return getConfig();
 }
 
 // ─── Blacklist Management ──────────────────────────────────────────
 
-export interface BlacklistEntry {
-  accountId: string;
-  reason: string;
-  addedAt: number;
-}
-
-export function getBlacklist(): BlacklistEntry[] {
+export function getBlacklist() {
   return Array.from(blacklist.entries()).map(([accountId, entry]) => ({
+    id: accountId, // Use accountId as the unique id for the frontend
     accountId,
     reason: entry.reason,
-    addedAt: entry.addedAt,
+    createdAt: new Date(entry.addedAt).toISOString(),
   }));
 }
 
-export function addToBlacklist(accountId: string, reason: string): BlacklistEntry {
+export function addToBlacklist(accountId: string, reason: string) {
   // Verify account exists
   const account = store.accounts.get(accountId);
   if (!account) {
@@ -567,7 +551,12 @@ export function addToBlacklist(accountId: string, reason: string): BlacklistEntr
   }
 
   console.log(`[admin] Account blacklisted: ${accountId} (${reason})`);
-  return { accountId, ...entry };
+  return {
+    id: accountId,
+    accountId,
+    reason: entry.reason,
+    createdAt: new Date(entry.addedAt).toISOString(),
+  };
 }
 
 export function removeFromBlacklist(accountId: string): boolean {

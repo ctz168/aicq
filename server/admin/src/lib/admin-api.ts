@@ -177,8 +177,8 @@ export interface ConfigData {
   maxGroupsJoin: number
   maxGroupMembers: number
   maxConnections: number
-  maxWSConnections: number
-  tempNumberTTLHours: number
+  maxWsConnections: number
+  tempNumberTtlHours: number
 }
 
 export function getConfig() {
