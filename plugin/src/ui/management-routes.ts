@@ -911,6 +911,116 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         return json(res, { success: true, message: "Section \"" + section + "\" saved" });
       }
 
+      // ── GET /api/config/raw ──
+      if (apiPath === "/config/raw" && method === "GET") {
+        const result = readConfig();
+        if (!result) return json(res, { error: "No config file found" }, 404);
+        const raw = fs.readFileSync(result.configPath, "utf-8");
+        return json(res, {
+          configPath: result.configPath,
+          configSource: path.basename(result.configPath),
+          rawJson: raw,
+          config: result.config,
+        });
+      }
+
+      // ── PUT /api/config/raw ──
+      if (apiPath === "/config/raw" && method === "PUT") {
+        const body = await readBody(req);
+        const rawJson = body.rawJson as string;
+        if (!rawJson) return json(res, { success: false, message: "Missing rawJson" }, 400);
+        let parsed: unknown;
+        try { parsed = JSON.parse(rawJson); } catch (e) {
+          return json(res, { success: false, message: "Invalid JSON: " + (e instanceof Error ? e.message : String(e)) }, 400);
+        }
+        const configPath = findConfigPath();
+        if (!configPath) return json(res, { success: false, message: "No config file found" }, 400);
+        try {
+          fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), "utf-8");
+          logger.info("[API] Config file updated via raw JSON editor");
+          return json(res, { success: true, message: "Config file saved", configPath });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return json(res, { success: false, message: "Write failed: " + msg }, 500);
+        }
+      }
+
+      // ── POST /api/agents ──
+      if (apiPath === "/agents" && method === "POST") {
+        const body = await readBody(req);
+        const agent = body.agent as Record<string, unknown> | undefined;
+        if (!agent || typeof agent !== "object") {
+          return json(res, { success: false, message: "Missing agent object" }, 400);
+        }
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+        const config = result.config;
+        if (!Array.isArray(config.agents)) {
+          config.agents = [];
+        }
+        (config.agents as Array<unknown>).push(agent);
+        const written = writeConfig(config);
+        if (!written) return json(res, { success: false, message: "Failed to write config" }, 500);
+        logger.info("[API] Agent added via UI");
+        return json(res, { success: true, message: "Agent added", index: (config.agents as unknown[]).length - 1 });
+      }
+
+      // ── PUT /api/agents/:index ──
+      if (apiPath.startsWith("/agents/") && method === "PUT") {
+        const idxStr = decodeURIComponent(apiPath.slice("/agents/".length));
+        const idx = parseInt(idxStr, 10);
+        if (isNaN(idx) || idx < 0) return json(res, { success: false, message: "Invalid agent index" }, 400);
+        const body = await readBody(req);
+        const updates = body.agent as Record<string, unknown> | undefined;
+        if (!updates || typeof updates !== "object") {
+          return json(res, { success: false, message: "Missing agent object" }, 400);
+        }
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+        const config = result.config;
+        let agentsArr: Array<Record<string, unknown>>;
+        if (!Array.isArray(config.agents)) {
+          return json(res, { success: false, message: "No agents array in config" }, 400);
+        }
+        agentsArr = config.agents as Array<Record<string, unknown>>;
+        if (idx >= agentsArr.length) {
+          return json(res, { success: false, message: "Agent index out of range" }, 400);
+        }
+        // Merge updates
+        Object.assign(agentsArr[idx], updates);
+        const written = writeConfig(config);
+        if (!written) return json(res, { success: false, message: "Failed to write config" }, 500);
+        logger.info("[API] Agent updated at index " + idx);
+        return json(res, { success: true, message: "Agent updated" });
+      }
+
+      // ── POST /api/config/switch ──
+      if (apiPath === "/config/switch" && method === "POST") {
+        const body = await readBody(req);
+        const target = body.target as string; // "openclaw" or "stableclaw"
+        if (target !== "openclaw" && target !== "stableclaw") {
+          return json(res, { success: false, message: "target must be 'openclaw' or 'stableclaw'" }, 400);
+        }
+        const targetFile = target + ".json";
+        const currentResult = readConfig();
+        if (!currentResult) return json(res, { success: false, message: "No current config file found" }, 400);
+        const currentBasename = path.basename(currentResult.configPath);
+        if (currentBasename === targetFile) {
+          return json(res, { success: false, message: "Already using " + targetFile }, 400);
+        }
+        const targetPath = path.join(path.dirname(currentResult.configPath), targetFile);
+        // Copy current to target (don't delete original)
+        try {
+          const raw = fs.readFileSync(currentResult.configPath, "utf-8");
+          fs.writeFileSync(targetPath, raw, "utf-8");
+          logger.info("[API] Config copied to " + targetFile);
+          return json(res, { success: true, message: "Config copied to " + targetFile, newPath: targetPath });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return json(res, { success: false, message: "Failed: " + msg }, 500);
+        }
+      }
+
       // ── Fallback ──
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Not found: " + apiPath }));
