@@ -168,7 +168,7 @@ log_ok "git $(git --version | cut -d' ' -f3)"
 # ─── 步骤 2: 获取源码 ────────────────────────────────────────────────────
 next_step "获取 AICQ 源码"
 
-if [ -n "$SOURCE_DIR" ] && [ -d "$SOURCE_DIR/aicq-web" ]; then
+if [ -n "$SOURCE_DIR" ] && [ -d "$SOURCE_DIR/client/web" ]; then
   REPO_ROOT="$(cd "$SOURCE_DIR" && pwd)"
   log_info "使用本地源码目录: ${REPO_ROOT}"
   if [ -d "${REPO_ROOT}/.git" ]; then
@@ -176,7 +176,7 @@ if [ -n "$SOURCE_DIR" ] && [ -d "$SOURCE_DIR/aicq-web" ]; then
   fi
   APP_DIR="$REPO_ROOT"
 else
-  if [ -d "${APP_DIR}/aicq-web" ]; then
+  if [ -d "${APP_DIR}/client/web" ]; then
     log_info "检测到已有安装，执行更新..."
     cd "$APP_DIR" && git pull --ff-only 2>/dev/null || log_warn "git pull 失败，使用现有代码"
   else
@@ -188,32 +188,32 @@ else
   REPO_ROOT="$APP_DIR"
 fi
 
-if [ ! -d "${REPO_ROOT}/aicq-web" ]; then
-  log_error "未找到 aicq-web 目录: ${REPO_ROOT}/aicq-web"
+if [ ! -d "${REPO_ROOT}/client/web" ]; then
+  log_error "未找到 client/web 目录: ${REPO_ROOT}/client/web"
   exit 1
 fi
-if [ ! -d "${REPO_ROOT}/aicq-crypto" ]; then
-  log_error "未找到 aicq-crypto 目录: ${REPO_ROOT}/aicq-crypto"
+if [ ! -d "${REPO_ROOT}/shared/crypto" ]; then
+  log_error "未找到 shared/crypto 目录: ${REPO_ROOT}/shared/crypto"
   exit 1
 fi
 log_ok "源码目录就绪: ${REPO_ROOT}"
 
 # ─── 步骤 3: 准备加密库 ─────────────────────────────────────────────────
-next_step "准备 aicq-crypto 加密库"
-cd "${REPO_ROOT}/aicq-crypto"
+next_step "准备 shared/crypto 加密库"
+cd "${REPO_ROOT}/shared/crypto"
 
 if [ ! -d "node_modules" ] || [ ! -d "dist" ]; then
-  log_info "  安装并编译 aicq-crypto..."
+  log_info "  安装并编译 shared/crypto..."
   npm install 2>&1 | tail -1
   npm run build 2>&1 | tail -1
-  log_ok "aicq-crypto 准备完成"
+  log_ok "shared/crypto 准备完成"
 else
-  log_ok "aicq-crypto 已就绪"
+  log_ok "shared/crypto 已就绪"
 fi
 
 # ─── 步骤 4: 安装 Web 依赖 ──────────────────────────────────────────────
-next_step "安装 aicq-web 前端依赖"
-cd "${REPO_ROOT}/aicq-web"
+next_step "安装 client/web 前端依赖"
+cd "${REPO_ROOT}/client/web"
 
 if [ ! -d "node_modules" ]; then
   log_info "  首次安装依赖 (可能需要几分钟)..."
@@ -228,8 +228,8 @@ log_ok "前端依赖安装完成"
 next_step "配置构建参数"
 
 # 创建环境文件
-mkdir -p "${REPO_ROOT}/aicq-web"
-cat > "${REPO_ROOT}/aicq-web/.env.${BUILD_ENV}" << ENVEOF
+mkdir -p "${REPO_ROOT}/client/web"
+cat > "${REPO_ROOT}/client/web/.env.${BUILD_ENV}" << ENVEOF
 # AICQ Web Client 构建环境配置
 # 自动生成时间: $(date '+%Y-%m-%d %H:%M:%S')
 
@@ -252,7 +252,7 @@ log_info "  WS 地址:  wss://${DOMAIN}/ws"
 
 # ─── 步骤 6: TypeScript 类型检查 ────────────────────────────────────────
 next_step "TypeScript 类型检查"
-cd "${REPO_ROOT}/aicq-web"
+cd "${REPO_ROOT}/client/web"
 
 if npx tsc --noEmit 2>&1; then
   log_ok "类型检查通过 (0 errors)"
@@ -262,7 +262,7 @@ fi
 
 # ─── 步骤 7: Vite 生产构建 ──────────────────────────────────────────────
 next_step "Vite 生产构建"
-cd "${REPO_ROOT}/aicq-web"
+cd "${REPO_ROOT}/client/web"
 
 # 清理旧构建
 rm -rf dist
@@ -326,7 +326,7 @@ fi
 
 # 清理并复制新版本
 rm -rf "${DEPLOY_DIR:?}"/*
-cp -r "${REPO_ROOT}/aicq-web/dist/"* "${DEPLOY_DIR}/"
+cp -r "${REPO_ROOT}/client/web/dist/"* "${DEPLOY_DIR}/"
 
 # 设置权限
 if [ "$(id -u)" -eq 0 ]; then

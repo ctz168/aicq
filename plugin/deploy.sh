@@ -152,7 +152,7 @@ log_ok "git $(git --version | cut -d' ' -f3)"
 # ─── 步骤 2: 获取源码 ────────────────────────────────────────────────────
 next_step "获取 AICQ 源码"
 
-if [ -n "$SOURCE_DIR" ] && [ -d "$SOURCE_DIR/aicq-plugin" ]; then
+if [ -n "$SOURCE_DIR" ] && [ -d "$SOURCE_DIR/plugin" ]; then
   REPO_ROOT="$(cd "$SOURCE_DIR" && pwd)"
   log_info "使用本地源码目录: ${REPO_ROOT}"
   if [ -d "${REPO_ROOT}/.git" ]; then
@@ -164,59 +164,60 @@ else
   log_info "从 GitHub 克隆到临时目录..."
   git clone --depth 1 "$REPO_URL" "$TEMP_DIR/aicq" 2>/dev/null
   REPO_ROOT="${TEMP_DIR}/aicq"
+fi
   log_ok "源码克隆完成"
 fi
 
 # 验证关键目录存在
-if [ ! -d "${REPO_ROOT}/aicq-plugin" ]; then
-  log_error "未找到 aicq-plugin 目录: ${REPO_ROOT}/aicq-plugin"
+if [ ! -d "${REPO_ROOT}/plugin" ]; then
+  log_error "未找到 plugin 目录: ${REPO_ROOT}/plugin"
   exit 1
 fi
-if [ ! -d "${REPO_ROOT}/aicq-crypto" ]; then
-  log_error "未找到 aicq-crypto 目录: ${REPO_ROOT}/aicq-crypto"
+if [ ! -d "${REPO_ROOT}/shared/crypto" ]; then
+  log_error "未找到 shared/crypto 目录: ${REPO_ROOT}/shared/crypto"
   exit 1
 fi
 log_ok "源码目录就绪: ${REPO_ROOT}"
 
 # ─── 步骤 3: 安装 aicq-crypto 依赖 ────────────────────────────────────────
-next_step "安装并编译 aicq-crypto 加密库"
-cd "${REPO_ROOT}/aicq-crypto"
+next_step "安装并编译 shared/crypto 加密库"
+cd "${REPO_ROOT}/shared/crypto"
 
 if [ ! -d "node_modules" ]; then
-  log_info "  安装 aicq-crypto 依赖..."
+  log_info "  安装 shared/crypto 依赖..."
   npm install 2>&1 | tail -1
 else
-  log_ok "  aicq-crypto 依赖已存在"
+  log_ok "  shared/crypto 依赖已存在"
 fi
 
-log_info "  编译 aicq-crypto..."
+log_info "  编译 shared/crypto..."
 if npm run build 2>&1; then
-  log_ok "aicq-crypto 编译成功"
+  log_ok "shared/crypto 编译成功"
 else
-  log_error "aicq-crypto 编译失败"
+  log_error "shared/crypto 编译失败"
   exit 1
 fi
 
 # ─── 步骤 4: 安装 aicq-plugin 依赖 ────────────────────────────────────────
-next_step "安装 aicq-plugin 依赖"
-cd "${REPO_ROOT}/aicq-plugin"
+next_step "安装 plugin 依赖"
+cd "${REPO_ROOT}/plugin"
 
 if [ ! -d "node_modules" ]; then
-  log_info "  安装 aicq-plugin 依赖..."
+  log_info "  安装 plugin 依赖..."
   npm install 2>&1 | tail -1
 else
-  log_info "  更新 aicq-plugin 依赖..."
+  log_info "  更新 plugin 依赖..."
   npm install 2>&1 | tail -1
 fi
-log_ok "aicq-plugin 依赖安装完成"
+log_ok "plugin 依赖安装完成"
 
 # ─── 步骤 5: 编译 aicq-plugin ─────────────────────────────────────────────
-next_step "编译 aicq-plugin"
+next_step "编译 plugin"
 
 if npm run build 2>&1; then
-  log_ok "aicq-plugin 编译成功"
+  log_ok "plugin 编译成功"
 else
-  log_error "aicq-plugin 编译失败"
+  log_error "plugin 编译失败"
   exit 1
 fi
 
@@ -229,23 +230,23 @@ mkdir -p "${INSTALL_DIR}"
 
 log_info "  复制插件文件..."
 # 复制编译产物
-cp -r "${REPO_ROOT}/aicq-plugin/dist"                    "${INSTALL_DIR}/dist"
-cp -r "${REPO_ROOT}/aicq-plugin/node_modules"            "${INSTALL_DIR}/node_modules" 2>/dev/null || true
-cp    "${REPO_ROOT}/aicq-plugin/package.json"             "${INSTALL_DIR}/package.json"
-cp    "${REPO_ROOT}/aicq-plugin/openclaw.plugin.json"     "${INSTALL_DIR}/openclaw.plugin.json"
-cp    "${REPO_ROOT}/aicq-plugin/tsconfig.json"            "${INSTALL_DIR}/tsconfig.json" 2>/dev/null || true
+cp -r "${REPO_ROOT}/plugin/dist"                    "${INSTALL_DIR}/dist"
+cp -r "${REPO_ROOT}/plugin/node_modules"            "${INSTALL_DIR}/node_modules" 2>/dev/null || true
+cp    "${REPO_ROOT}/plugin/package.json"             "${INSTALL_DIR}/package.json"
+cp    "${REPO_ROOT}/plugin/openclaw.plugin.json"     "${INSTALL_DIR}/openclaw.plugin.json"
+cp    "${REPO_ROOT}/plugin/tsconfig.json"            "${INSTALL_DIR}/tsconfig.json" 2>/dev/null || true
 
 # 复制 crypto 库作为运行时依赖
 log_info "  打包加密库..."
 mkdir -p "${INSTALL_DIR}/node_modules/@aicq"
-if [ -d "${REPO_ROOT}/aicq-crypto/dist" ]; then
-  cp -r "${REPO_ROOT}/aicq-crypto/dist"          "${INSTALL_DIR}/node_modules/@aicq/crypto/dist"
+if [ -d "${REPO_ROOT}/shared/crypto/dist" ]; then
+  cp -r "${REPO_ROOT}/shared/crypto/dist"          "${INSTALL_DIR}/node_modules/@aicq/crypto/dist"
 fi
-cp "${REPO_ROOT}/aicq-crypto/package.json"       "${INSTALL_DIR}/node_modules/@aicq/crypto/package.json"
+cp "${REPO_ROOT}/shared/crypto/package.json"       "${INSTALL_DIR}/node_modules/@aicq/crypto/package.json"
 
 # 复制 crypto 的依赖 (tweetnacl 等)
-if [ -d "${REPO_ROOT}/aicq-crypto/node_modules" ]; then
-  cp -r "${REPO_ROOT}/aicq-crypto/node_modules/"* "${INSTALL_DIR}/node_modules/" 2>/dev/null || true
+if [ -d "${REPO_ROOT}/shared/crypto/node_modules" ]; then
+  cp -r "${REPO_ROOT}/shared/crypto/node_modules/"* "${INSTALL_DIR}/node_modules/" 2>/dev/null || true
 fi
 
 log_ok "文件复制完成"
