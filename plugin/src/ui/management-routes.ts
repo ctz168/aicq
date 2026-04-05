@@ -490,7 +490,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
       // ── GET /api/friends/requests ──
       if (apiPath === "/friends/requests" && method === "GET") {
         try {
-          const resp = await fetch(serverUrl + "/api/v1/friends/requests?nodeId=" + aicqAgentId);
+          const resp = await fetch(serverUrl + "/api/v1/friends/requests?accountId=" + aicqAgentId);
           if (!resp.ok) return json(res, { error: "Server error: " + await resp.text() }, 502);
           const data = await resp.json() as Record<string, unknown>;
           return json(res, { requests: data.requests || [] });
@@ -515,7 +515,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
           const resp = await fetch(serverUrl + "/api/v1/friends/requests/" + requestId + "/accept", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ permissions: body.permissions || ["chat"] }),
+            body: JSON.stringify({ accountId: aicqAgentId, permissions: body.permissions || ["chat"] }),
           });
           if (!resp.ok) return json(res, { success: false, message: "Failed: " + await resp.text() });
           logger.info("[API] Friend request accepted: " + requestId);
@@ -534,7 +534,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
           const resp = await fetch(serverUrl + "/api/v1/friends/requests/" + requestId + "/reject", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
+            body: JSON.stringify({ accountId: aicqAgentId }),
           });
           if (!resp.ok) return json(res, { success: false, message: "Failed: " + await resp.text() });
           logger.info("[API] Friend request rejected: " + requestId);

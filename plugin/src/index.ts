@@ -515,7 +515,7 @@ const plugin = definePluginEntry({
       // 7. aicq.friends.requests — List pending friend requests
       api.registerGatewayMethod("aicq.friends.requests", async (params: unknown) => {
         try {
-          const resp = await fetch(serverUrl + "/api/v1/friends/requests?nodeId=" + aicqAgentId);
+          const resp = await fetch(serverUrl + "/api/v1/friends/requests?accountId=" + aicqAgentId);
           if (!resp.ok) return { error: "Server error: " + await resp.text() };
           const data = await resp.json() as Record<string, unknown>;
 

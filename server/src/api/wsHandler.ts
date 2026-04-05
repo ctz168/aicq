@@ -131,6 +131,54 @@ function handleMessage(
       break;
     }
 
+    case 'ping': {
+      // Heartbeat ping — respond with pong
+      const id: string | null = getNodeIdBySocket(ws);
+      ws.send(JSON.stringify({
+        type: 'pong',
+        timestamp: Date.now(),
+        ...(id ? { nodeId: id } : {}),
+      }));
+      break;
+    }
+
+    case 'relay': {
+      // Encrypted message relay (used by aicq-chat plugin for E2E encrypted messages)
+      const id: string | null = getNodeIdBySocket(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
+        return;
+      }
+
+      const toId: string = message.targetId;
+      const payload: unknown = message.payload;
+
+      if (!toId || !payload) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Missing targetId or payload' }));
+        return;
+      }
+
+      // Verify sender and receiver are friends
+      const senderNode = store.nodes.get(id);
+      if (!senderNode?.friends.has(toId)) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Can only relay to friends' }));
+        return;
+      }
+
+      // Forward the relay message to the target
+      const relayed = relaySignal(id, toId, {
+        type: 'relay',
+        fromId: id,
+        payload,
+        timestamp: Date.now(),
+      });
+
+      if (!relayed) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Target node is offline' }));
+      }
+      break;
+    }
+
     case 'signal': {
       // WebRTC signaling relay (ICE candidates, SDP offer/answer)
       const id: string | null = getNodeIdBySocket(ws);

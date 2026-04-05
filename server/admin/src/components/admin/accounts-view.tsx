@@ -246,10 +246,10 @@ export function AccountsView() {
             已禁用
           </Badge>
         )
-      case 'blacklisted':
+      case 'suspended':
         return (
           <Badge variant="destructive" className="bg-red-500/10 text-red-600 border-red-500/20">
-            已封禁
+            已暂停
           </Badge>
         )
       default:
@@ -519,7 +519,7 @@ export function AccountsView() {
                 <SelectContent>
                   <SelectItem value="active">正常</SelectItem>
                   <SelectItem value="disabled">禁用</SelectItem>
-                  <SelectItem value="blacklisted">封禁</SelectItem>
+                  <SelectItem value="suspended">暂停</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -45,7 +45,7 @@ async function proxyRequest(
   const { path } = await paramsPromise
   const pathStr = path.join('/')
   const searchParams = request.nextUrl.searchParams.toString()
-  const url = `${AICQ_SERVER_URL}/admin/${pathStr}${searchParams ? '?' + searchParams : ''}`
+  const url = `${AICQ_SERVER_URL}/api/v1/admin/${pathStr}${searchParams ? '?' + searchParams : ''}`
 
   const headers: Record<string, string> = {}
   // Forward Authorization header
