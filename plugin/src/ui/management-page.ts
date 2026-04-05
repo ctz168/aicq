@@ -264,6 +264,20 @@ tbody tr:hover { background: var(--bg3); }
 /* Section desc */
 .section-desc { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
 
+/* Toggle switch */
+.toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: var(--text); user-select: none; text-transform: none !important; letter-spacing: normal !important; font-weight: 400 !important; }
+.toggle-label input[type=checkbox] { display: none; }
+.toggle-slider {
+  width: 40px; height: 22px; background: var(--bg4); border-radius: 11px;
+  position: relative; transition: background var(--transition); flex-shrink: 0;
+}
+.toggle-slider::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+  background: var(--text3); border-radius: 50%; transition: all var(--transition);
+}
+.toggle-label input:checked + .toggle-slider { background: var(--accent); }
+.toggle-label input:checked + .toggle-slider::after { left: 21px; background: #fff; }
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar { position: fixed; left: -260px; z-index: 50; height: 100vh; transition: left var(--transition); }
@@ -798,9 +812,30 @@ async function saveModelConfig() {
 }
 
 // ════════════════════════════════════════════════════════════
-// PAGE: Settings (editable with save)
+// PAGE: Settings (comprehensive with AJAX, tabs, live test)
 // ════════════════════════════════════════════════════════════
 let _settingsSaving = false;
+let _settingsData = null;
+let _settingsTab = 'connection';
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function formatUptime(seconds) {
+  if (!seconds) return '—';
+  const d = Math.floor(seconds / 86400), h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60), s = seconds % 60;
+  let parts = [];
+  if (d > 0) parts.push(d + 'd');
+  if (h > 0) parts.push(h + 'h');
+  if (m > 0) parts.push(m + 'm');
+  parts.push(s + 's');
+  return parts.join(' ');
+}
 
 async function loadSettings() {
   const el = $('#settings-content');
@@ -812,116 +847,503 @@ async function loadSettings() {
     return;
   }
 
-  window._currentSettings = settings;
+  _settingsData = settings;
+
+  // Render settings tabs nav
+  html('#settings-tabs', \\\`
+    <button class="filter-btn \${_settingsTab==='connection'?'active':''}" onclick="_settingsTab='connection';renderSettingsTab()">🔌 Connection</button>
+    <button class="filter-btn \${_settingsTab==='friends'?'active':''}" onclick="_settingsTab='friends';renderSettingsTab()">👥 Friends</button>
+    <button class="filter-btn \${_settingsTab==='security'?'active':''}" onclick="_settingsTab='security';renderSettingsTab()">🔒 Security</button>
+    <button class="filter-btn \${_settingsTab==='advanced'?'active':''}" onclick="_settingsTab='advanced';renderSettingsTab()">⚙️ Advanced</button>
+  \\\`);
+
+  renderSettingsTab();
+}
+
+function renderSettingsTab() {
+  // Update tab buttons
+  html('#settings-tabs', \\\`
+    <button class="filter-btn \${_settingsTab==='connection'?'active':''}" onclick="_settingsTab='connection';renderSettingsTab()">🔌 Connection</button>
+    <button class="filter-btn \${_settingsTab==='friends'?'active':''}" onclick="_settingsTab='friends';renderSettingsTab()">👥 Friends</button>
+    <button class="filter-btn \${_settingsTab==='security'?'active':''}" onclick="_settingsTab='security';renderSettingsTab()">🔒 Security</button>
+    <button class="filter-btn \${_settingsTab==='advanced'?'active':''}" onclick="_settingsTab='advanced';renderSettingsTab()">⚙️ Advanced</button>
+  \\\`);
+
+  switch (_settingsTab) {
+    case 'connection': renderSettingsConnection(); break;
+    case 'friends': renderSettingsFriends(); break;
+    case 'security': renderSettingsSecurity(); break;
+    case 'advanced': renderSettingsAdvanced(); break;
+  }
+}
+
+function sectionSaveBtn(section, id) {
+  return \\\`<button class="btn btn-primary btn-sm" id="btn-save-\${id}" onclick="saveSettingsSection('\${section}', '\${id}')">💾 Save</button>
+    <span id="status-\${id}" style="font-size:12px;color:var(--text3);margin-left:8px"></span>\\\`;
+}
+
+// ── CONNECTION TAB ──
+function renderSettingsConnection() {
+  const s = _settingsData;
+  const el = $('#settings-content');
 
   html(el, \\\`
-    <p class="section-desc">Configure the AICQ plugin local settings. Changes are saved to <strong>\${escHtml(settings.configSource || 'openclaw.json')}</strong> under the <code>plugins.aicq-chat</code> section.</p>
+    <p class="section-desc">Configure server connection and WebSocket settings. Changes require a plugin restart to take full effect.</p>
 
     <div class="card">
       <div class="card-header">
-        <div class="card-title">🔌 Connection</div>
-        <span class="badge badge-\${settings.connected ? 'ok' : 'danger'}">\${settings.connected ? '● Connected' : '○ Disconnected'}</span>
+        <div class="card-title">🌐 Server Connection</div>
+        <span class="badge badge-\${s.connected ? 'ok' : 'danger'}">\${s.connected ? '● Connected' : '○ Disconnected'}</span>
       </div>
       <div class="form-group">
         <label>Server URL</label>
-        <div class="input-prefix">
-          <span class="prefix">🌐</span>
-          <input type="url" id="set-server-url" value="\${escHtml(settings.serverUrl || '')}" placeholder="https://aicq.online:61018">
+        <div style="display:flex;gap:8px;align-items:start">
+          <div style="flex:1">
+            <div class="input-prefix">
+              <span class="prefix">🌐</span>
+              <input type="url" id="set-server-url" value="\${escHtml(s.serverUrl || '')}" placeholder="https://aicq.online:61018">
+            </div>
+            <div class="hint">The HTTPS URL of the AICQ relay server. WebSocket path /ws is auto-appended.</div>
+          </div>
+          <button class="btn btn-ok btn-sm" id="btn-test-conn" onclick="testConnection()" style="white-space:nowrap;margin-top:1px">🔍 Test</button>
         </div>
-        <div class="hint">The HTTPS URL of the AICQ relay server. WebSocket path /ws is auto-appended.</div>
+        <div id="conn-test-result" style="margin-top:8px"></div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-header"><div class="card-title">👥 Friend Limits</div></div>
       <div class="form-row">
         <div class="form-group">
-          <label>Max Friends</label>
-          <input type="number" id="set-max-friends" value="\${settings.maxFriends || 200}" min="1" max="10000" placeholder="200">
-          <div class="hint">Maximum number of encrypted friend connections (1–10000).</div>
+          <label>Connection Timeout (seconds)</label>
+          <input type="number" id="set-connection-timeout" value="\${s.connectionTimeout || 30}" min="5" max="120" placeholder="30">
+          <div class="hint">HTTP request timeout (5–120s). Default: 30s.</div>
         </div>
         <div class="form-group">
-          <label>Auto-Accept Friends</label>
+          <label>WS Auto-Reconnect</label>
           <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-            <label style="text-transform:none;letter-spacing:normal;font-weight:400;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" id="set-auto-accept" \${settings.autoAcceptFriends ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent)">
-              Automatically accept all incoming friend requests
+            <label class="toggle-label">
+              <input type="checkbox" id="set-ws-auto-reconnect" \${s.wsAutoReconnect ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+              <span>Auto-reconnect when disconnected</span>
             </label>
           </div>
-          <div class="hint">When enabled, friend requests are accepted without manual review.</div>
+          <div class="hint">Automatically reconnect WebSocket on disconnection.</div>
         </div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-header"><div class="card-title">🤖 Agent Identity</div></div>
-      <div class="detail-row"><div class="detail-key">Agent ID</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(settings.agentId)}')">\${escHtml(settings.agentId)} 📋</div></div>
-      <div class="detail-row"><div class="detail-key">Public Key Fingerprint</div><div class="detail-val mono">\${escHtml(settings.publicKeyFingerprint || '—')}</div></div>
-      <div class="detail-row"><div class="detail-key">Friends</div><div class="detail-val">\${settings.friendCount || 0}</div></div>
-      <div class="detail-row"><div class="detail-key">Active Sessions</div><div class="detail-val">\${settings.sessionCount || 0}</div></div>
+      <div class="form-group">
+        <label>WS Reconnect Interval (seconds)</label>
+        <input type="number" id="set-ws-reconnect-interval" value="\${s.wsReconnectInterval || 60}" min="5" max="600" placeholder="60">
+        <div class="hint">Interval between reconnection attempts (5–600s). Default: 60s.</div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
+        \${sectionSaveBtn('connection', 'conn')}
+      </div>
     </div>
 
     <div class="card">
       <div class="card-header"><div class="card-title">📁 Config File</div></div>
-      <div class="detail-row"><div class="detail-key">Source</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(settings.configPath || '')}')">\${escHtml(settings.configPath || 'Not found')} 📋</div></div>
+      <div class="detail-row"><div class="detail-key">Source</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(s.configPath || '')}')">\${escHtml(s.configPath || 'Not found')} 📋</div></div>
       <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val">1.0.4</div></div>
-    </div>
-
-    <div class="form-actions" style="justify-content:flex-start;margin-top:8px;padding-top:0;border-top:none">
-      <button class="btn btn-primary" id="btn-save-settings" onclick="saveSettings()">
-        💾 Save Settings
-      </button>
-      <button class="btn btn-default" onclick="loadSettings()">
-        🔄 Discard & Refresh
-      </button>
-      <span id="settings-save-status" style="margin-left:8px;font-size:12px;color:var(--text3)"></span>
+      <div class="detail-row"><div class="detail-key">Uptime</div><div class="detail-val">\${formatUptime(s.uptimeSeconds)}</div></div>
     </div>
   \\\`);
 }
 
+async function testConnection() {
+  const btn = $('#btn-test-conn');
+  const resultEl = $('#conn-test-result');
+  const url = $('#set-server-url')?.value?.trim() || _settingsData.serverUrl;
+
+  if (!url) { toast('Enter a server URL first', 'warn'); return; }
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin:0"></span> Testing...'; }
+  if (resultEl) html(resultEl, '<div style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px"><span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Testing connection to ' + escHtml(url) + '...</div>');
+
+  const r = await api('/settings/test-connection', {
+    method: 'POST',
+    body: JSON.stringify({ serverUrl: url, timeout: 10000 }),
+  });
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '🔍 Test'; }
+
+  if (r.success) {
+    const latencyBadge = r.latency < 200 ? '<span class="badge badge-ok">' + r.latency + 'ms</span>' : r.latency < 1000 ? '<span class="badge badge-warn">' + r.latency + 'ms</span>' : '<span class="badge badge-danger">' + r.latency + 'ms</span>';
+    if (resultEl) html(resultEl, \\\`
+      <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ok)">
+        <span class="dot dot-ok"></span> Connected successfully \${latencyBadge}
+        \${r.serverInfo?.version ? '<span class="tag">v' + escHtml(r.serverInfo.version) + '</span>' : ''}
+      </div>
+    \\\`);
+    toast('Connection OK! Latency: ' + r.latency + 'ms', 'ok');
+  } else {
+    const cls = r.status === 'timeout' ? 'warn' : 'danger';
+    const icon = r.status === 'timeout' ? '⏱️' : '❌';
+    if (resultEl) html(resultEl, \\\`
+      <div style="font-size:12px;color:var(--\${cls});display:flex;align-items:center;gap:8px">
+        \${icon} \${escHtml(r.message || 'Connection failed')}
+        <span class="badge badge-ghost">\${r.latency}ms</span>
+      </div>
+    \\\`);
+    toast(r.message || 'Connection failed', 'err');
+  }
+}
+
+// ── FRIENDS TAB ──
+function renderSettingsFriends() {
+  const s = _settingsData;
+  const el = $('#settings-content');
+
+  html(el, \\\`
+    <p class="section-desc">Configure friend management, permissions, and temporary number settings.</p>
+
+    <div class="stats-grid" style="margin-bottom:20px">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:var(--ok-bg)">👥</div>
+        <div class="stat-label">Friends</div>
+        <div class="stat-value">\${s.friendCount || 0}</div>
+        <div class="stat-sub">of \${s.maxFriends || 200} max</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:var(--info-bg)">🔗</div>
+        <div class="stat-label">Sessions</div>
+        <div class="stat-value">\${s.sessionCount || 0}</div>
+        <div class="stat-sub">Encrypted sessions</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">👥 Friend Limits & Permissions</div></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Max Friends</label>
+          <input type="number" id="set-max-friends" value="\${s.maxFriends || 200}" min="1" max="10000" placeholder="200">
+          <div class="hint">Maximum number of encrypted friend connections (1–10,000).</div>
+        </div>
+        <div class="form-group">
+          <label>Auto-Accept Friends</label>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+            <label class="toggle-label">
+              <input type="checkbox" id="set-auto-accept" \${s.autoAcceptFriends ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+              <span>Automatically accept requests</span>
+            </label>
+          </div>
+          <div class="hint">When enabled, incoming friend requests are accepted without review.</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Default Permissions for New Friends</label>
+        <div style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap">
+          <label class="toggle-label">
+            <input type="checkbox" id="set-perm-chat" \${(s.defaultPermissions || []).includes('chat') ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+            <span>💬 Chat</span>
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" id="set-perm-exec" \${(s.defaultPermissions || []).includes('exec') ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+            <span>🔧 Exec</span>
+          </label>
+        </div>
+        <div class="hint">Default permissions applied when auto-accepting new friend requests.</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
+        \${sectionSaveBtn('friends', 'friends')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">🔢 Temporary Numbers</div></div>
+      <div class="form-group">
+        <label>Temp Number Expiry (seconds)</label>
+        <input type="number" id="set-temp-expiry" value="\${s.tempNumberExpiry || 300}" min="60" max="3600" placeholder="300">
+        <div class="hint">How long a temporary friend number remains valid (60–3600s). Default: 5 minutes.</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
+        \${sectionSaveBtn('temp', 'temp')}
+      </div>
+    </div>
+  \\\`);
+}
+
+// ── SECURITY TAB ──
+function renderSettingsSecurity() {
+  const s = _settingsData;
+  const el = $('#settings-content');
+
+  html(el, \\\`
+    <p class="section-desc">Configure encryption, P2P, and identity security settings.</p>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">🤖 Agent Identity</div></div>
+      <div class="detail-row"><div class="detail-key">Agent ID</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(s.agentId)}')">\${escHtml(s.agentId)} 📋</div></div>
+      <div class="detail-row"><div class="detail-key">Public Key Fingerprint</div><div class="detail-val mono">\${escHtml(s.publicKeyFingerprint || '—')}</div></div>
+      <div style="padding-top:12px;display:flex;gap:8px">
+        <button class="btn btn-danger btn-sm" onclick="showResetIdentityModal()">🗑️ Reset Identity</button>
+        <span style="font-size:12px;color:var(--text3);display:flex;align-items:center">⚠️ This deletes all friends, sessions, and keys permanently</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">🔒 P2P & Encryption</div></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Enable P2P Connections</label>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+            <label class="toggle-label">
+              <input type="checkbox" id="set-enable-p2p" \${s.enableP2P ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+              <span>Allow direct P2P messaging</span>
+            </label>
+          </div>
+          <div class="hint">Enable peer-to-peer encrypted connections when both parties are online.</div>
+        </div>
+        <div class="form-group">
+          <label>Handshake Timeout (seconds)</label>
+          <input type="number" id="set-handshake-timeout" value="\${s.handshakeTimeout || 60}" min="10" max="300" placeholder="60">
+          <div class="hint">Noise-XK handshake timeout (10–300s). Default: 60s.</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
+        \${sectionSaveBtn('security', 'sec')}
+      </div>
+    </div>
+  \\\`);
+}
+
+// ── ADVANCED TAB ──
+function renderSettingsAdvanced() {
+  const s = _settingsData;
+  const el = $('#settings-content');
+
+  html(el, \\\`
+    <p class="section-desc">Advanced settings for file transfer, logging, and configuration management.</p>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">📎 File Transfer</div></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Enable File Transfer</label>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+            <label class="toggle-label">
+              <input type="checkbox" id="set-enable-ft" \${s.enableFileTransfer ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+              <span>Allow file transfers</span>
+            </label>
+          </div>
+          <div class="hint">Enable encrypted file transfer between friends.</div>
+        </div>
+        <div class="form-group">
+          <label>Max File Size</label>
+          <select id="set-max-file-size">
+            <option value="10485760" \${s.maxFileSize <= 10485760 ? 'selected' : ''}>10 MB</option>
+            <option value="52428800" \${s.maxFileSize > 10485760 && s.maxFileSize <= 52428800 ? 'selected' : ''}>50 MB</option>
+            <option value="104857600" \${s.maxFileSize > 52428800 && s.maxFileSize <= 104857600 ? 'selected' : ''}>100 MB</option>
+            <option value="524288000" \${s.maxFileSize > 104857600 && s.maxFileSize <= 524288000 ? 'selected' : ''}>500 MB</option>
+            <option value="1073741824" \${s.maxFileSize > 524288000 ? 'selected' : ''}>1 GB</option>
+          </select>
+          <div class="hint">Maximum file size for encrypted transfers. Current: \${formatBytes(s.maxFileSize)}.</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
+        \${sectionSaveBtn('filetransfer', 'ft')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">📋 Logging</div></div>
+      <div class="form-group">
+        <label>Log Level</label>
+        <select id="set-log-level" style="max-width:300px">
+          <option value="debug" \${s.logLevel === 'debug' ? 'selected' : ''}>🐛 Debug — Verbose output for troubleshooting</option>
+          <option value="info" \${s.logLevel === 'info' ? 'selected' : ''}>ℹ️ Info — General information (default)</option>
+          <option value="warn" \${s.logLevel === 'warn' ? 'selected' : ''}>⚠️ Warn — Warnings and important events</option>
+          <option value="error" \${s.logLevel === 'error' ? 'selected' : ''}>❌ Error — Errors only</option>
+          <option value="none" \${s.logLevel === 'none' ? 'selected' : ''}>🔇 None — Disable all logging</option>
+        </select>
+        <div class="hint">Controls the verbosity of plugin log output.</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--border);margin-top:8px">
+        \${sectionSaveBtn('logging', 'log')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">📦 Import / Export Settings</div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-default btn-sm" onclick="exportSettings()">📥 Export Settings</button>
+        <button class="btn btn-ok btn-sm" onclick="showImportSettingsModal()">📤 Import Settings</button>
+      </div>
+      <div class="hint" style="margin-top:10px">Export current AICQ plugin settings as JSON. Import to restore settings from a backup.</div>
+    </div>
+  \\\`);
+}
+
+// ── Section Save (AJAX) ──
+async function saveSettingsSection(section, id) {
+  const btn = $('#btn-save-' + id);
+  const statusEl = $('#status-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  if (statusEl) { statusEl.textContent = ''; statusEl.style.color = 'var(--text3)'; }
+
+  let data = {};
+  switch (section) {
+    case 'connection':
+      data = {
+        serverUrl: $('#set-server-url')?.value?.trim(),
+        connectionTimeout: parseInt($('#set-connection-timeout')?.value, 10),
+        wsAutoReconnect: $('#set-ws-auto-reconnect')?.checked ?? true,
+        wsReconnectInterval: parseInt($('#set-ws-reconnect-interval')?.value, 10),
+      };
+      break;
+    case 'friends':
+      data = {
+        maxFriends: parseInt($('#set-max-friends')?.value, 10),
+        autoAcceptFriends: $('#set-auto-accept')?.checked ?? false,
+        defaultPermissions: [
+          ...(($('#set-perm-chat')?.checked) ? ['chat'] : []),
+          ...(($('#set-perm-exec')?.checked) ? ['exec'] : []),
+        ],
+      };
+      break;
+    case 'temp':
+      data = { tempNumberExpiry: parseInt($('#set-temp-expiry')?.value, 10) };
+      break;
+    case 'security':
+      data = {
+        enableP2P: $('#set-enable-p2p')?.checked ?? true,
+        handshakeTimeout: parseInt($('#set-handshake-timeout')?.value, 10),
+      };
+      break;
+    case 'filetransfer':
+      data = {
+        enableFileTransfer: $('#set-enable-ft')?.checked ?? true,
+        maxFileSize: parseInt($('#set-max-file-size')?.value, 10),
+      };
+      break;
+    case 'logging':
+      data = { logLevel: $('#set-log-level')?.value || 'info' };
+      break;
+  }
+
+  const r = await api('/settings/section', {
+    method: 'POST',
+    body: JSON.stringify({ section, data }),
+  });
+
+  if (btn) { btn.disabled = false; btn.textContent = '💾 Save'; }
+
+  if (r.success) {
+    toast('Settings saved: ' + section, 'ok');
+    if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--ok)'; }
+    // Refresh settings data
+    const fresh = await api('/settings');
+    if (fresh && !fresh.error) { _settingsData = fresh; }
+  } else {
+    toast(r.message || r.error || 'Save failed', 'err');
+    if (statusEl) { statusEl.textContent = '✗ ' + (r.message || 'Failed'); statusEl.style.color = 'var(--danger)'; }
+  }
+}
+
+// ── Full Save All (legacy support) ──
 async function saveSettings() {
   if (_settingsSaving) return;
   _settingsSaving = true;
 
-  const btn = $('#btn-save-settings');
-  const statusEl = $('#settings-save-status');
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
-  if (statusEl) statusEl.textContent = '';
+  const allData = {
+    serverUrl: $('#set-server-url')?.value?.trim(),
+    maxFriends: parseInt($('#set-max-friends')?.value, 10),
+    autoAcceptFriends: $('#set-auto-accept')?.checked ?? false,
+  };
 
-  const serverUrl = $('#set-server-url')?.value?.trim();
-  const maxFriends = parseInt($('#set-max-friends')?.value, 10);
-  const autoAcceptFriends = $('#set-auto-accept')?.checked ?? false;
+  const r = await api('/settings', { method: 'PUT', body: JSON.stringify(allData) });
+  _settingsSaving = false;
 
-  // Basic validation
-  if (!serverUrl) {
-    toast('Server URL is required', 'warn');
-    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Settings'; }
-    _settingsSaving = false;
-    return;
-  }
-  if (isNaN(maxFriends) || maxFriends < 1 || maxFriends > 10000) {
-    toast('Max Friends must be between 1 and 10000', 'warn');
-    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Settings'; }
-    _settingsSaving = false;
-    return;
-  }
+  if (r.success) { toast('All settings saved!', 'ok'); setTimeout(() => loadSettings(), 800); }
+  else { toast(r.message || r.error || 'Save failed', 'err'); }
+}
 
-  const r = await api('/settings', {
-    method: 'PUT',
-    body: JSON.stringify({ serverUrl, maxFriends, autoAcceptFriends }),
+// ── Reset Identity ──
+function showResetIdentityModal() {
+  $('#reset-confirm-input').value = '';
+  $('#reset-confirm-btn').disabled = true;
+  $('#reset-confirm-btn').textContent = '🗑️ Delete Everything';
+  showModal('modal-reset-identity');
+  setTimeout(() => $('#reset-confirm-input')?.focus(), 100);
+}
+
+function checkResetConfirm() {
+  const v = $('#reset-confirm-input')?.value?.trim();
+  const btn = $('#reset-confirm-btn');
+  if (btn) { btn.disabled = (v !== 'RESET'); btn.textContent = v === 'RESET' ? '🗑️ Confirm Delete' : '🗑️ Delete Everything'; }
+}
+
+async function executeResetIdentity() {
+  const btn = $('#reset-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Resetting...'; }
+
+  const r = await api('/settings/reset-identity', {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true }),
   });
 
-  _settingsSaving = false;
-  if (btn) { btn.disabled = false; btn.textContent = '💾 Save Settings'; }
+  if (btn) { btn.disabled = false; btn.textContent = '🗑️ Delete Everything'; }
 
   if (r.success) {
-    toast('Settings saved successfully!', 'ok');
-    if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--ok)'; }
-    // Reload to reflect new values
+    toast('Identity reset successfully. Please restart the plugin.', 'ok');
+    hideModal('modal-reset-identity');
+    // Reload settings to reflect cleared state
     setTimeout(() => loadSettings(), 1000);
   } else {
-    toast(r.message || r.error || 'Failed to save settings', 'err');
-    if (statusEl) { statusEl.textContent = '✗ Failed'; statusEl.style.color = 'var(--danger)'; }
+    toast(r.message || r.error || 'Reset failed', 'err');
+  }
+}
+
+// ── Export / Import ──
+async function exportSettings() {
+  const r = await api('/settings/export');
+  if (r.error) { toast(r.error, 'err'); return; }
+
+  const json = JSON.stringify(r.settings || r, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'aicq-settings-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Settings exported successfully', 'ok');
+}
+
+function showImportSettingsModal() {
+  $('#import-json-input').value = '';
+  showModal('modal-import-settings');
+  setTimeout(() => $('#import-json-input')?.focus(), 100);
+}
+
+async function executeImportSettings() {
+  const raw = $('#import-json-input')?.value?.trim();
+  if (!raw) { toast('Paste JSON settings first', 'warn'); return; }
+
+  let settings;
+  try { settings = JSON.parse(raw); } catch (e) { toast('Invalid JSON: ' + e.message, 'err'); return; }
+
+  const btn = $('#import-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
+
+  const r = await api('/settings/import', {
+    method: 'POST',
+    body: JSON.stringify({ settings, merge: true }),
+  });
+
+  if (btn) { btn.disabled = false; btn.textContent = '📤 Import'; }
+
+  if (r.success) {
+    toast('Settings imported successfully!', 'ok');
+    hideModal('modal-import-settings');
+    setTimeout(() => loadSettings(), 800);
+  } else {
+    toast(r.message || r.error || 'Import failed', 'err');
   }
 }
 
@@ -1019,7 +1441,10 @@ const HTML = `<!DOCTYPE html>
       <div class="page" id="page-models"><div id="models-content"></div></div>
 
       <!-- Settings -->
-      <div class="page" id="page-settings"><div id="settings-content"></div></div>
+      <div class="page" id="page-settings">
+        <div id="settings-tabs" style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap"></div>
+        <div id="settings-content"></div>
+      </div>
 
     </div>
   </main>
@@ -1092,6 +1517,50 @@ const HTML = `<!DOCTYPE html>
     <div class="modal-header"><h3>🤖 <span id="view-agent-title">Agent</span></h3><button class="modal-close" onclick="hideModal('modal-view-agent')">✕</button></div>
     <div id="view-agent-body"></div>
     <div class="form-actions"><button class="btn btn-default" onclick="hideModal('modal-view-agent')">Close</button></div>
+  </div>
+</div>
+
+<!-- Modal: Reset Identity -->
+<div class="modal-overlay hidden" id="modal-reset-identity" onclick="if(event.target===this)hideModal('modal-reset-identity')">
+  <div class="modal">
+    <div class="modal-header"><h3>🗑️ Reset Agent Identity</h3><button class="modal-close" onclick="hideModal('modal-reset-identity')">✕</button></div>
+    <div style="margin-bottom:16px">
+      <div class="card" style="border-color:var(--danger);background:var(--danger-bg)">
+        <p style="font-size:13px;color:#fca5a5;line-height:1.6">
+          <strong>⚠️ WARNING: This is a destructive operation!</strong><br><br>
+          This will permanently delete:<br>
+          • Your Ed25519 key pair and agent ID<br>
+          • All friend connections and sessions<br>
+          • All pending friend requests<br>
+          • All temporary numbers<br><br>
+          After reset, you must restart the plugin to generate a new identity.
+        </p>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Type RESET to confirm</label>
+      <input id="reset-confirm-input" type="text" placeholder="RESET" oninput="checkResetConfirm()" autocomplete="off" style="border-color:var(--danger)">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-default" onclick="hideModal('modal-reset-identity')">Cancel</button>
+      <button class="btn btn-danger" id="reset-confirm-btn" onclick="executeResetIdentity()" disabled>🗑️ Delete Everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Import Settings -->
+<div class="modal-overlay hidden" id="modal-import-settings" onclick="if(event.target===this)hideModal('modal-import-settings')">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-header"><h3>📤 Import Settings</h3><button class="modal-close" onclick="hideModal('modal-import-settings')">✕</button></div>
+    <div class="form-group">
+      <label>Paste JSON Settings</label>
+      <textarea id="import-json-input" rows="10" placeholder='{"serverUrl": "https://...", "maxFriends": 200, ...}' style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:12px;line-height:1.5"></textarea>
+      <div class="hint">Paste the JSON settings exported from another AICQ instance. Settings will be merged with existing values.</div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-default" onclick="hideModal('modal-import-settings')">Cancel</button>
+      <button class="btn btn-primary" id="import-confirm-btn" onclick="executeImportSettings()">📤 Import</button>
+    </div>
   </div>
 </div>
 

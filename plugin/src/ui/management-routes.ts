@@ -27,6 +27,7 @@ interface ManagementContext {
   aicqAgentId: string;
   logger: Logger;
   html: string;
+  chatChannel?: { cleanup?: () => void };
 }
 
 /** Well-known LLM providers */
@@ -236,7 +237,7 @@ async function readBody(req: Req): Promise<Record<string, unknown>> {
  * Create the main route handler.
  */
 export function createManagementHandler(ctx: ManagementContext): (req: Req, res: Res) => Promise<void> {
-  const { store, identityService, serverClient, serverUrl, aicqAgentId, logger, html } = ctx;
+  const { store, identityService, serverClient, serverUrl, aicqAgentId, logger, html, chatChannel } = ctx;
 
   return async (req: Req, res: Res) => {
     const urlPath = parseApiPath(req.url || "/");
@@ -597,17 +598,45 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         const merged = { ...aicqSection, ...pluginSection };
 
         return json(res, {
+          // Connection settings
           serverUrl: (merged.serverUrl as string) || serverUrl,
+          wsReconnectInterval: (merged.wsReconnectInterval as number) || 60,
+          wsAutoReconnect: merged.wsAutoReconnect !== false,
+          connectionTimeout: (merged.connectionTimeout as number) || 30,
+
+          // Friend settings
           maxFriends: (merged.maxFriends as number) || 200,
           autoAcceptFriends: Boolean(merged.autoAcceptFriends),
+          defaultPermissions: (merged.defaultPermissions as string[]) || ["chat"],
+
+          // Temp number settings
+          tempNumberExpiry: (merged.tempNumberExpiry as number) || 300,
+
+          // File transfer settings
+          maxFileSize: (merged.maxFileSize as number) || 104857600,
+          enableFileTransfer: merged.enableFileTransfer !== false,
+          allowedFileTypes: (merged.allowedFileTypes as string[]) || null,
+
+          // Logging
+          logLevel: (merged.logLevel as string) || "info",
+
+          // Security / encryption
+          enableP2P: merged.enableP2P !== false,
+          handshakeTimeout: (merged.handshakeTimeout as number) || 60,
+
+          // Identity (read-only)
           agentId: aicqAgentId,
           publicKeyFingerprint: identityService.getPublicKeyFingerprint(),
           connected: serverClient.isConnected(),
+
+          // Config file info
           configSource: result ? path.basename(result.configPath) : "none",
           configPath: result?.configPath || null,
+
           // Runtime info
           friendCount: store.getFriendCount(),
           sessionCount: store.sessions.size,
+          uptimeSeconds: Math.floor(process.uptime()),
         });
       }
 
@@ -618,6 +647,17 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         const newServerUrl = body.serverUrl as string | undefined;
         const newMaxFriends = body.maxFriends as number | undefined;
         const newAutoAccept = body.autoAcceptFriends as boolean | undefined;
+        const newWsReconnectInterval = body.wsReconnectInterval as number | undefined;
+        const newWsAutoReconnect = body.wsAutoReconnect as boolean | undefined;
+        const newConnectionTimeout = body.connectionTimeout as number | undefined;
+        const newTempNumberExpiry = body.tempNumberExpiry as number | undefined;
+        const newMaxFileSize = body.maxFileSize as number | undefined;
+        const newEnableFileTransfer = body.enableFileTransfer as boolean | undefined;
+        const newAllowedFileTypes = body.allowedFileTypes as string[] | null | undefined;
+        const newLogLevel = body.logLevel as string | undefined;
+        const newEnableP2P = body.enableP2P as boolean | undefined;
+        const newHandshakeTimeout = body.handshakeTimeout as number | undefined;
+        const newDefaultPermissions = body.defaultPermissions as string[] | undefined;
 
         // Validate
         if (newServerUrl !== undefined && typeof newServerUrl !== "string") {
@@ -628,6 +668,24 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         }
         if (newAutoAccept !== undefined && typeof newAutoAccept !== "boolean") {
           return json(res, { success: false, message: "autoAcceptFriends must be a boolean" }, 400);
+        }
+        if (newWsReconnectInterval !== undefined && (typeof newWsReconnectInterval !== "number" || newWsReconnectInterval < 5 || newWsReconnectInterval > 600)) {
+          return json(res, { success: false, message: "wsReconnectInterval must be between 5 and 600 seconds" }, 400);
+        }
+        if (newConnectionTimeout !== undefined && (typeof newConnectionTimeout !== "number" || newConnectionTimeout < 5 || newConnectionTimeout > 120)) {
+          return json(res, { success: false, message: "connectionTimeout must be between 5 and 120 seconds" }, 400);
+        }
+        if (newTempNumberExpiry !== undefined && (typeof newTempNumberExpiry !== "number" || newTempNumberExpiry < 60 || newTempNumberExpiry > 3600)) {
+          return json(res, { success: false, message: "tempNumberExpiry must be between 60 and 3600 seconds" }, 400);
+        }
+        if (newMaxFileSize !== undefined && (typeof newMaxFileSize !== "number" || newMaxFileSize < 1024 || newMaxFileSize > 1073741824)) {
+          return json(res, { success: false, message: "maxFileSize must be between 1KB and 1GB" }, 400);
+        }
+        if (newLogLevel !== undefined && !["debug", "info", "warn", "error", "none"].includes(newLogLevel)) {
+          return json(res, { success: false, message: "logLevel must be one of: debug, info, warn, error, none" }, 400);
+        }
+        if (newHandshakeTimeout !== undefined && (typeof newHandshakeTimeout !== "number" || newHandshakeTimeout < 10 || newHandshakeTimeout > 300)) {
+          return json(res, { success: false, message: "handshakeTimeout must be between 10 and 300 seconds" }, 400);
         }
 
         const result = readConfig();
@@ -651,14 +709,206 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         if (newServerUrl !== undefined) aicqConfig.serverUrl = newServerUrl;
         if (newMaxFriends !== undefined) aicqConfig.maxFriends = newMaxFriends;
         if (newAutoAccept !== undefined) aicqConfig.autoAcceptFriends = newAutoAccept;
+        if (newWsReconnectInterval !== undefined) aicqConfig.wsReconnectInterval = newWsReconnectInterval;
+        if (newWsAutoReconnect !== undefined) aicqConfig.wsAutoReconnect = newWsAutoReconnect;
+        if (newConnectionTimeout !== undefined) aicqConfig.connectionTimeout = newConnectionTimeout;
+        if (newTempNumberExpiry !== undefined) aicqConfig.tempNumberExpiry = newTempNumberExpiry;
+        if (newMaxFileSize !== undefined) aicqConfig.maxFileSize = newMaxFileSize;
+        if (newEnableFileTransfer !== undefined) aicqConfig.enableFileTransfer = newEnableFileTransfer;
+        if (newAllowedFileTypes !== undefined) aicqConfig.allowedFileTypes = newAllowedFileTypes;
+        if (newLogLevel !== undefined) aicqConfig.logLevel = newLogLevel;
+        if (newEnableP2P !== undefined) aicqConfig.enableP2P = newEnableP2P;
+        if (newHandshakeTimeout !== undefined) aicqConfig.handshakeTimeout = newHandshakeTimeout;
+        if (newDefaultPermissions !== undefined) aicqConfig.defaultPermissions = newDefaultPermissions;
 
         const written = writeConfig(config);
         if (!written) {
           return json(res, { success: false, message: "Failed to write config file" }, 500);
         }
 
-        logger.info("[API] Settings saved: " + JSON.stringify({ serverUrl: newServerUrl, maxFriends: newMaxFriends, autoAcceptFriends: newAutoAccept }));
+        logger.info("[API] Settings saved: " + JSON.stringify(body));
         return json(res, { success: true, message: "Settings saved successfully" });
+      }
+
+      // ── POST /api/settings/test-connection ──
+      if (apiPath === "/settings/test-connection" && method === "POST") {
+        const body = await readBody(req);
+        const testUrl = (body.serverUrl as string) || serverUrl;
+        const startTime = Date.now();
+
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), (body.timeout as number) || 10000);
+
+          const resp = await fetch(testUrl + "/api/v1/health", {
+            method: "GET",
+            signal: controller.signal,
+            headers: { "Content-Type": "application/json" },
+          });
+          clearTimeout(timeout);
+
+          const latency = Date.now() - startTime;
+          let serverInfo: Record<string, unknown> = {};
+          try { serverInfo = await resp.json() as Record<string, unknown>; } catch { /* ignore */ }
+
+          if (resp.ok) {
+            return json(res, {
+              success: true,
+              status: "ok",
+              statusCode: resp.status,
+              latency,
+              serverUrl: testUrl,
+              serverInfo,
+            });
+          } else {
+            return json(res, {
+              success: false,
+              status: "error",
+              statusCode: resp.status,
+              latency,
+              serverUrl: testUrl,
+              message: "Server returned HTTP " + resp.status,
+            });
+          }
+        } catch (err: unknown) {
+          const latency = Date.now() - startTime;
+          const msg = err instanceof Error ? err.message : String(err);
+          const isTimeout = msg.includes("abort") || msg.includes("timeout");
+          return json(res, {
+            success: false,
+            status: isTimeout ? "timeout" : "unreachable",
+            latency,
+            serverUrl: testUrl,
+            message: isTimeout ? "Connection timed out after " + latency + "ms" : "Cannot reach server: " + msg,
+          });
+        }
+      }
+
+      // ── POST /api/settings/reset-identity ──
+      if (apiPath === "/settings/reset-identity" && method === "POST") {
+        const body = await readBody(req);
+        const confirmReset = body.confirm as boolean;
+
+        if (!confirmReset) {
+          return json(res, { success: false, message: "Confirmation required. Set { confirm: true } to proceed." }, 400);
+        }
+
+        try {
+          // Clear local identity data
+          identityService.cleanup();
+          chatChannel?.cleanup?.();
+          serverClient.disconnectWebSocket();
+
+          // Clear store data
+          store.friends.clear();
+          store.sessions.clear();
+          store.pendingHandshakes.clear();
+          store.pendingRequests = [];
+          store.tempNumbers = [];
+          store.save();
+
+          logger.warn("[API] Agent identity reset by user via settings UI");
+          return json(res, {
+            success: true,
+            message: "Identity reset successfully. All friends, sessions, and keys have been deleted. Restart the plugin to generate a new identity.",
+          });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error("[API] Identity reset failed: " + msg);
+          return json(res, { success: false, message: "Failed to reset identity: " + msg }, 500);
+        }
+      }
+
+      // ── GET /api/settings/export ──
+      if (apiPath === "/settings/export" && method === "GET") {
+        const result = readConfig();
+        if (!result) return json(res, { error: "No config file found" }, 400);
+
+        const pluginsSection = result.config.plugins as Record<string, unknown> | undefined;
+        const pluginSection = pluginsSection?.["aicq-chat"] as Record<string, unknown> | undefined;
+
+        return json(res, {
+          exportDate: new Date().toISOString(),
+          pluginVersion: "1.0.4",
+          settings: pluginSection || {},
+          fullConfig: result.config,
+        });
+      }
+
+      // ── POST /api/settings/import ──
+      if (apiPath === "/settings/import" && method === "POST") {
+        const body = await readBody(req);
+        const settings = body.settings as Record<string, unknown> | undefined;
+        const merge = body.merge as boolean | undefined;
+
+        if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+          return json(res, { success: false, message: "Invalid settings object. Provide { settings: {...} }" }, 400);
+        }
+
+        const result = readConfig();
+        if (!result) {
+          return json(res, { success: false, message: "No config file found" }, 400);
+        }
+
+        const config = result.config;
+        if (!config.plugins || typeof config.plugins !== "object") {
+          config.plugins = {};
+        }
+        const plugins = config.plugins as Record<string, unknown>;
+        if (!plugins["aicq-chat"] || typeof plugins["aicq-chat"] !== "object" || !merge) {
+          plugins["aicq-chat"] = {};
+        }
+        const aicqConfig = plugins["aicq-chat"] as Record<string, unknown>;
+
+        // Merge settings
+        Object.assign(aicqConfig, settings);
+
+        const written = writeConfig(config);
+        if (!written) {
+          return json(res, { success: false, message: "Failed to write config" }, 500);
+        }
+
+        logger.info("[API] Settings imported: " + Object.keys(settings).join(", "));
+        return json(res, { success: true, message: "Settings imported successfully" });
+      }
+
+      // ── POST /api/settings/section ── (save a single settings section)
+      if (apiPath === "/settings/section" && method === "POST") {
+        const body = await readBody(req);
+        const section = body.section as string;
+        const data = body.data as Record<string, unknown>;
+
+        if (!section || !data) {
+          return json(res, { success: false, message: "Missing section or data" }, 400);
+        }
+
+        const result = readConfig();
+        if (!result) {
+          return json(res, { success: false, message: "No config file found" }, 400);
+        }
+
+        const config = result.config;
+        if (!config.plugins || typeof config.plugins !== "object") {
+          config.plugins = {};
+        }
+        const plugins = config.plugins as Record<string, unknown>;
+        if (!plugins["aicq-chat"] || typeof plugins["aicq-chat"] !== "object") {
+          plugins["aicq-chat"] = {};
+        }
+        const aicqConfig = plugins["aicq-chat"] as Record<string, unknown>;
+
+        // Write the section data
+        for (const [key, value] of Object.entries(data)) {
+          aicqConfig[key] = value;
+        }
+
+        const written = writeConfig(config);
+        if (!written) {
+          return json(res, { success: false, message: "Failed to write config" }, 500);
+        }
+
+        logger.info("[API] Settings section saved: " + section);
+        return json(res, { success: true, message: "Section \"" + section + "\" saved" });
       }
 
       // ── Fallback ──

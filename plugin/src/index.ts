@@ -662,6 +662,7 @@ const plugin = definePluginEntry({
       aicqAgentId,
       logger,
       html: managementHtml,
+      chatChannel: chatChannel,
     });
 
     // Log available API methods for debugging
