@@ -483,13 +483,16 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
       // ── GET /api/friends ──
       if (apiPath === "/friends" && method === "GET") {
         try {
-          const resp = await fetch(serverUrl + "/api/v1/friends?nodeId=" + aicqAgentId);
+          const resp = await fetch(serverUrl + "/api/v1/friends?nodeId=" + aicqAgentId, {
+            headers: serverClient.authHeaders(),
+          });
           if (!resp.ok) return json(res, { error: "Server error: " + await resp.text() }, 502);
           const data = await resp.json() as Record<string, unknown>;
           const friends = ((data.friends || []) as Array<Record<string, unknown>>).map((f) => {
-            const local = store.getFriend(f.nodeId as string);
+            const friendId = (f.id || f.nodeId) as string;
+            const local = store.getFriend(friendId);
             return {
-              id: f.nodeId,
+              id: friendId,
               publicKeyFingerprint: f.publicKeyFingerprint || local?.publicKeyFingerprint || "",
               permissions: f.permissions || local?.permissions || [],
               addedAt: f.addedAt || local?.addedAt?.toISOString() || null,
@@ -525,7 +528,9 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
 
         if (isTempNumber) {
           try {
-            const resolveResp = await fetch(serverUrl + "/api/v1/temp-number/" + target);
+            const resolveResp = await fetch(serverUrl + "/api/v1/temp-number/" + target, {
+              headers: serverClient.authHeaders(),
+            });
             if (!resolveResp.ok) return json(res, { success: false, message: "Temp number not found or expired" });
             const resolveData = await resolveResp.json() as Record<string, unknown>;
             friendId = resolveData.nodeId as string;
@@ -538,7 +543,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         try {
           const hsResp = await fetch(serverUrl + "/api/v1/handshake/initiate", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify({ requesterId: aicqAgentId, targetTempNumber: target }),
           });
           if (!hsResp.ok) return json(res, { success: false, message: "Handshake failed: " + await hsResp.text() });
@@ -563,7 +568,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
           try {
             const rmResp = await fetch(serverUrl + "/api/v1/friends/" + friendId, {
               method: "DELETE",
-              headers: { "Content-Type": "application/json" },
+              headers: serverClient.authHeaders(),
               body: JSON.stringify({ nodeId: aicqAgentId }),
             });
             if (!rmResp.ok) return json(res, { success: false, message: "Failed to remove friend: " + await rmResp.text() });
@@ -589,7 +594,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         try {
           const resp = await fetch(serverUrl + "/api/v1/friends/" + friendId + "/permissions", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify({ nodeId: aicqAgentId, permissions }),
           });
           if (!resp.ok) return json(res, { success: false, message: "Failed: " + await resp.text() });
@@ -606,7 +611,9 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
       // ── GET /api/friends/requests ──
       if (apiPath === "/friends/requests" && method === "GET") {
         try {
-          const resp = await fetch(serverUrl + "/api/v1/friends/requests?accountId=" + aicqAgentId);
+          const resp = await fetch(serverUrl + "/api/v1/friends/requests?accountId=" + aicqAgentId, {
+            headers: serverClient.authHeaders(),
+          });
           if (!resp.ok) return json(res, { error: "Server error: " + await resp.text() }, 502);
           const data = await resp.json() as Record<string, unknown>;
           return json(res, { requests: data.requests || [] });
@@ -630,7 +637,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         try {
           const resp = await fetch(serverUrl + "/api/v1/friends/requests/" + requestId + "/accept", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify({ accountId: aicqAgentId, permissions: body.permissions || ["chat"] }),
           });
           if (!resp.ok) return json(res, { success: false, message: "Failed: " + await resp.text() });
@@ -649,7 +656,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         try {
           const resp = await fetch(serverUrl + "/api/v1/friends/requests/" + requestId + "/reject", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: serverClient.authHeaders(),
             body: JSON.stringify({ accountId: aicqAgentId }),
           });
           if (!resp.ok) return json(res, { success: false, message: "Failed: " + await resp.text() });

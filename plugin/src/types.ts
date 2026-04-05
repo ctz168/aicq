@@ -106,7 +106,10 @@ export interface FileTransferSession {
 
 /** Friend info returned from server. */
 export interface FriendInfo {
-  nodeId: string;
+  /** Friend node ID — server may return this as `id` or `nodeId`. */
+  id?: string;
+  /** Legacy field name — some server endpoints still use `nodeId`. */
+  nodeId?: string;
   publicKey: string; // base64
   addedAt: string;
 }

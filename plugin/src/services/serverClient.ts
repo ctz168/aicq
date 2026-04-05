@@ -48,6 +48,9 @@ export class ServerClient {
   private logger: Logger;
   private config: Required<ServerClientConfig>;
 
+  /** JWT auth token obtained from server registration/login. */
+  private authToken: string = "";
+
   private ws: WebSocket | null = null;
   private wsReconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
@@ -71,6 +74,32 @@ export class ServerClient {
     this.store = store;
     this.logger = logger;
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /**
+   * Set the JWT auth token for all subsequent requests.
+   */
+  setAuthToken(token: string): void {
+    this.authToken = token;
+    this.logger.info("[Server] Auth token set (" + token.substring(0, 12) + "...)");
+  }
+
+  /**
+   * Get the current auth token.
+   */
+  getAuthToken(): string {
+    return this.authToken;
+  }
+
+  /**
+   * Build common headers including Authorization when token is available.
+   */
+  public authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.authToken) {
+      headers["Authorization"] = "Bearer " + this.authToken;
+    }
+    return headers;
   }
 
   // ----------------------------------------------------------------
@@ -177,6 +206,7 @@ export class ServerClient {
         type: "online",
         nodeId: this.store.agentId,
         publicKey: Buffer.from(this.store.identityKeys.publicKey).toString("base64"),
+        ...(this.authToken ? { token: this.authToken } : {}),
       });
 
       // Start heartbeat
@@ -308,12 +338,17 @@ export class ServerClient {
 
   /**
    * Register this node on the server.
+   * Captures JWT token from response if returned.
    */
   async registerNode(agentId: string, publicKey: Uint8Array): Promise<boolean> {
-    return this.post("/api/v1/node/register", {
+    const res = await this.fetchPost<{ token?: string; ok?: boolean }>("/api/v1/node/register", {
       id: agentId,
       publicKey: Buffer.from(publicKey).toString("base64"),
     });
+    if (res?.token) {
+      this.setAuthToken(res.token);
+    }
+    return res?.ok ?? false;
   }
 
   /**
@@ -462,7 +497,7 @@ export class ServerClient {
 
       const resp = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.authHeaders(),
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -470,6 +505,10 @@ export class ServerClient {
       clearTimeout(timeout);
 
       if (!resp.ok) {
+        // If 401 and we have a token, log a warning
+        if (resp.status === 401 && this.authToken) {
+          this.logger.warn(`[Server] 401 Unauthorized on ${path} — token may be expired`);
+        }
         const text = await resp.text();
         this.logger.error(`[Server] API error ${resp.status} on ${path}: ${text}`);
         return null;
@@ -492,7 +531,10 @@ export class ServerClient {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
 
-      const resp = await fetch(url, { signal: controller.signal });
+      const resp = await fetch(url, {
+        signal: controller.signal,
+        headers: this.authToken ? { Authorization: "Bearer " + this.authToken } : {},
+      });
       clearTimeout(timeout);
 
       if (!resp.ok) {
@@ -519,7 +561,7 @@ export class ServerClient {
 
       const resp = await fetch(url, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: this.authHeaders(),
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
@@ -539,7 +581,7 @@ export class ServerClient {
 
       const resp = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.authHeaders(),
         body: JSON.stringify(body),
         signal: controller.signal,
       });
