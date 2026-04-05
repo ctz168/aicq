@@ -430,7 +430,7 @@ async function loadDashboard() {
         <div class="detail-row"><div class="detail-key">Fingerprint</div><div class="detail-val mono">\${escHtml(identity.publicKeyFingerprint)}</div></div>
         <div class="detail-row"><div class="detail-key">Server URL</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${identity.serverUrl}')">\${escHtml(identity.serverUrl)} 📋</div></div>
         <div class="detail-row"><div class="detail-key">Connection</div><div class="detail-val"><span class="badge badge-\${identity.connected ? 'ok' : 'danger'}">\${identity.connected ? 'Online' : 'Offline'}</span></div></div>
-        <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val"><span class="badge badge-accent">v1.1.0</span></div></div>
+        <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val"><span class="badge badge-accent">v1.1.1</span></div></div>
       </div>
     </div>
     <div class="card" style="margin-top:0">
@@ -1049,7 +1049,7 @@ function renderSettingsConnection() {
     <div class="card">
       <div class="card-header"><div class="card-title">📁 Config File</div></div>
       <div class="detail-row"><div class="detail-key">Source</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${escHtml(s.configPath || '')}')">\${escHtml(s.configPath || 'Not found')} 📋</div></div>
-      <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val">1.1.0</div></div>
+      <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val">1.1.1</div></div>
       <div class="detail-row"><div class="detail-key">Management UI</div><div class="detail-val" id="mgmt-url-display" style="cursor:pointer" onclick="copyText(document.getElementById('mgmt-url-display')?.textContent || '')"></div></div>
       <div class="detail-row"><div class="detail-key">Uptime</div><div class="detail-val">\${formatUptime(s.uptimeSeconds)}</div></div>
     </div>

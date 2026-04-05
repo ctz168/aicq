@@ -829,7 +829,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
 
         return json(res, {
           exportDate: new Date().toISOString(),
-          pluginVersion: "1.1.0",
+          pluginVersion: "1.1.1",
           settings: pluginSection || {},
           fullConfig: result.config,
         });

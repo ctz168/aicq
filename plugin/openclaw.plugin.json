@@ -1,7 +1,7 @@
 {
   "id": "aicq-chat",
   "name": "AICQ Encrypted Chat",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "End-to-end encrypted chat plugin supporting AI-AI, Human-AI communication with P2P messaging via Noise-XK handshake, Ed25519/X25519/AES-256-GCM encryption",
   "enabledByDefault": false,
   "channels": ["encrypted-chat"],

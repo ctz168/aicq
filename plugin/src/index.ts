@@ -81,7 +81,7 @@ const plugin = definePluginEntry({
     };
 
     logger.info("═══════════════════════════════════════════════");
-    logger.info("  AICQ Encrypted Chat Plugin v1.1.0");
+    logger.info("  AICQ Encrypted Chat Plugin v1.1.1");
     logger.info("═══════════════════════════════════════════════");
 
     // Config
