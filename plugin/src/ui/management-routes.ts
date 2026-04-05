@@ -915,6 +915,38 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         return json(res, { success: true, message: "Custom provider '" + (removed.name || customId) + "' deleted" });
       }
 
+      // ── GET /api/openclaw-config ──
+      // Returns the agents, bindings, and channels sections from openclaw.json
+      if (apiPath === "/openclaw-config" && method === "GET") {
+        const result = readConfig();
+        if (!result) return json(res, { error: "No config file found" }, 400);
+        const config = result.config;
+        return json(res, {
+          agents: config.agents || null,
+          bindings: config.bindings || [],
+          channels: config.channels || null,
+          configPath: result.configPath,
+        });
+      }
+
+      // ── PUT /api/openclaw-config ──
+      // Updates agents, bindings, and/or channels sections
+      if (apiPath === "/openclaw-config" && method === "PUT") {
+        const body = await readBody(req);
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+        const config = result.config;
+
+        if (body.agents !== undefined) config.agents = body.agents;
+        if (body.bindings !== undefined) config.bindings = body.bindings;
+        if (body.channels !== undefined) config.channels = body.channels;
+
+        const written = writeConfig(config);
+        if (!written) return json(res, { success: false, message: "Failed to write config" }, 500);
+        logger.info("[API] OpenClaw config updated");
+        return json(res, { success: true, message: "Configuration saved" });
+      }
+
       // ── GET /api/settings ──
       if (apiPath === "/settings" && method === "GET") {
         // Read current plugin settings from config file (config.aicq section)

@@ -619,6 +619,69 @@ const _T = {
   api_key_label: { zh: 'API 密钥', en: 'API Key' },
   model_id_label2: { zh: '模型 ID', en: 'Model ID' },
   base_url_label: { zh: '基础地址', en: 'Base URL' },
+  // OpenClaw Config
+  nav_openclaw: { zh: 'OpenClaw', en: 'OpenClaw' },
+  openclaw_config: { zh: 'OpenClaw 配置', en: 'OpenClaw Configuration' },
+  loading_openclaw: { zh: '正在加载配置...', en: 'Loading configuration...' },
+  openclaw_desc: { zh: '管理 OpenClaw 的智能体配置、路由绑定和频道设置。更改将直接保存到 openclaw.json 配置文件。', en: 'Manage OpenClaw agent configuration, routing bindings, and channel settings. Changes are saved directly to the openclaw.json config file.' },
+  // Agent Defaults
+  agent_defaults: { zh: '🤖 智能体默认设置', en: '🤖 Agent Defaults' },
+  agent_defaults_desc: { zh: '配置所有智能体的默认参数，包括模型选择、并发数、压缩模式等', en: 'Configure default parameters for all agents, including model selection, concurrency, compaction mode, etc.' },
+  compaction_mode: { zh: '压缩模式', en: 'Compaction Mode' },
+  max_concurrent: { zh: '最大并发数', en: 'Max Concurrent' },
+  primary_model: { zh: '主模型', en: 'Primary Model' },
+  fallback_models: { zh: '备用模型', en: 'Fallback Models' },
+  image_model: { zh: '图像模型', en: 'Image Model' },
+  subagent_max_concurrent: { zh: '子智能体最大并发', en: 'Subagent Max Concurrent' },
+  thinking_default: { zh: '默认思考模式', en: 'Thinking Default' },
+  workspace: { zh: '工作空间', en: 'Workspace' },
+  models_registry: { zh: '模型注册表', en: 'Models Registry' },
+  // Agent List
+  oc_agent_list: { zh: '📋 智能体列表', en: '📋 Agent List' },
+  oc_agent_list_desc: { zh: "配置各个智能体的身份、模型和工具权限。每个智能体可以分配不同的模型和工具配置。", en: "Configure each agent's identity, model, and tool permissions. Each agent can be assigned different models and tool configurations." },
+  add_agent_btn: { zh: '➕ 添加智能体', en: '➕ Add Agent' },
+  agent_identity_name: { zh: '身份名称', en: 'Identity Name' },
+  agent_model_primary: { zh: '主模型', en: 'Primary Model' },
+  agent_tools_profile: { zh: '工具配置', en: 'Tools Profile' },
+  agent_workspace: { zh: '工作空间', en: 'Workspace' },
+  no_agents_in_list: { zh: '暂无智能体，点击上方按钮添加', en: 'No agents configured. Click the button above to add one.' },
+  // Bindings
+  bindings_title: { zh: '🔗 路由绑定', en: '🔗 Routing Bindings' },
+  bindings_desc: { zh: '配置消息路由规则，将频道或账号绑定到指定的智能体。支持按频道类型或账号ID匹配。', en: 'Configure message routing rules to bind channels or accounts to specific agents. Supports matching by channel type or account ID.' },
+  add_binding: { zh: '➕ 添加绑定', en: '➕ Add Binding' },
+  binding_agent_id: { zh: '智能体ID', en: 'Agent ID' },
+  binding_channel: { zh: '频道', en: 'Channel' },
+  binding_account_id: { zh: '账号ID', en: 'Account ID' },
+  binding_type: { zh: '类型', en: 'Type' },
+  no_bindings: { zh: '暂无路由绑定', en: 'No routing bindings configured' },
+  // Channels
+  channels_title: { zh: '📡 频道配置', en: '📡 Channel Configuration' },
+  channels_desc: { zh: '配置外部通信频道（如 Telegram）。每个频道可以有多个账号，支持不同的消息策略和权限。', en: 'Configure external communication channels (e.g., Telegram). Each channel can have multiple accounts with different messaging policies and permissions.' },
+  channel_enabled: { zh: '已启用', en: 'Enabled' },
+  channel_disabled: { zh: '已禁用', en: 'Disabled' },
+  group_policy: { zh: '群组策略', en: 'Group Policy' },
+  accounts: { zh: '账号', en: 'Accounts' },
+  add_account: { zh: '➕ 添加账号', en: '➕ Add Account' },
+  bot_token: { zh: 'Bot Token', en: 'Bot Token' },
+  dm_policy: { zh: '私信策略', en: 'DM Policy' },
+  allow_from: { zh: '允许来源', en: 'Allow From' },
+  add_allow_from: { zh: '添加允许来源', en: 'Add Allow From' },
+  no_channels_configured: { zh: '暂无频道配置', en: 'No channels configured' },
+  // OpenClaw Actions
+  save_openclaw_config: { zh: '💾 保存 OpenClaw 配置', en: '💾 Save OpenClaw Config' },
+  openclaw_config_saved: { zh: 'OpenClaw 配置已保存！', en: 'OpenClaw configuration saved!' },
+  confirm_delete_binding: { zh: '确定删除此路由绑定？', en: 'Delete this routing binding?' },
+  binding_deleted: { zh: '路由绑定已删除', en: 'Routing binding deleted' },
+  confirm_delete_oc_agent: { zh: '确定删除智能体 "{name}" 吗？', en: 'Are you sure you want to delete agent "{name}"?' },
+  confirm_delete_account: { zh: '确定删除此账号？', en: 'Are you sure you want to delete this account?' },
+  // Misc
+  add_item: { zh: '➕ 添加', en: '➕ Add' },
+  remove_item: { zh: '🗑️ 删除', en: '🗑️ Delete' },
+  edit_item: { zh: '✏️ 编辑', en: '✏️ Edit' },
+  tab_defaults: { zh: '🤖 默认设置', en: '🤖 Defaults' },
+  tab_agents: { zh: '📋 智能体', en: '📋 Agents' },
+  tab_bindings: { zh: '🔗 绑定', en: '🔗 Bindings' },
+  tab_channels: { zh: '📡 频道', en: '📡 Channels' },
 };
 function t(key) { return (_T[key] && _T[key][_lang]) || key; }
 function translateStatic() { document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if (k && _T[k]) { el.textContent = _T[k][_lang] || el.textContent; } }); document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.getAttribute('data-i18n-ph'); if (k && _T[k]) { el.placeholder = _T[k][_lang] || el.placeholder; } }); }
@@ -742,6 +805,7 @@ function loadPage(page) {
     case 'friends': loadFriends(); break;
     case 'models': loadModels(); break;
     case 'settings': loadSettings(); break;
+    case 'openclaw': loadOpenClawConfig(); break;
   }
 }
 
@@ -2149,6 +2213,416 @@ async function saveJsonConfig() {
 }
 
 // ════════════════════════════════════════════════════════════
+// PAGE: OpenClaw Config
+// ════════════════════════════════════════════════════════════
+let _ocConfig = null;
+let _ocTab = 'defaults';
+
+async function loadOpenClawConfig() {
+  const el = $('#openclaw-content');
+  html(el, '<div class="loading-mask"><div class="spinner"></div>' + t('loading_openclaw') + '</div>');
+  try {
+    const data = await api('/openclaw-config');
+    if (data.error) { html(el, '<div class="card"><p style="color:var(--danger)">' + escHtml(data.error) + '</p></div>'); return; }
+    _ocConfig = data;
+    _ocTab = 'defaults';
+    renderOpenClawConfig(data);
+  } catch (e) {
+    html(el, '<div class="card"><p style="color:var(--danger)">' + escHtml(e.message || 'Failed to load') + '</p></div>');
+  }
+}
+
+function switchOpenClawTab(tab) {
+  _ocTab = tab;
+  $$('.oc-tab').forEach(b => b.classList.toggle('active', b.dataset.ocTab === tab));
+  $$('.oc-panel').forEach(p => { p.style.display = p.id === 'oc-panel-' + tab ? '' : 'none'; });
+}
+
+function renderOpenClawConfig(data) {
+  const el = $('#openclaw-content');
+  const tabBtns = [
+    { id: 'defaults', label: t('tab_defaults') },
+    { id: 'agents', label: t('tab_agents') },
+    { id: 'bindings', label: t('tab_bindings') },
+    { id: 'channels', label: t('tab_channels') },
+  ];
+  let tabsHtml = '<div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">';
+  for (const tb of tabBtns) {
+    tabsHtml += '<button class="btn btn-sm filter-btn oc-tab' + (tb.id === _ocTab ? ' active' : '') + '" data-oc-tab="' + tb.id + '" onclick="switchOpenClawTab(\\'' + tb.id + '\\')">' + tb.label + '</button>';
+  }
+  tabsHtml += '</div>';
+
+  let panelsHtml = '<div id="oc-panel-defaults" class="oc-panel"' + (_ocTab !== 'defaults' ? ' style="display:none"' : '') + '>' + renderOcDefaults(data.agents) + '</div>';
+  panelsHtml += '<div id="oc-panel-agents" class="oc-panel"' + (_ocTab !== 'agents' ? ' style="display:none"' : '') + '>' + renderOcAgentList(data.agents) + '</div>';
+  panelsHtml += '<div id="oc-panel-bindings" class="oc-panel"' + (_ocTab !== 'bindings' ? ' style="display:none"' : '') + '>' + renderOcBindings(data.bindings) + '</div>';
+  panelsHtml += '<div id="oc-panel-channels" class="oc-panel"' + (_ocTab !== 'channels' ? ' style="display:none"' : '') + '>' + renderOcChannels(data.channels) + '</div>';
+
+  html(el, '<div class="section-desc">' + t('openclaw_desc') + '</div>' +
+    '<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div class="card-title">' + t('openclaw_config') + '</div>' +
+    '<button class="btn btn-primary btn-sm" onclick="saveOpenClawConfig()">' + t('save_openclaw_config') + '</button></div>' +
+    tabsHtml + panelsHtml + '</div>');
+}
+
+function renderOcDefaults(agents) {
+  const d = agents?.defaults || {};
+  const model = d.model || {};
+  const imgModel = d.imageModel || {};
+  const subagents = d.subagents || {};
+  const modelsRegistry = d.models || {};
+
+  let fallbacksHtml = '';
+  const fallbacks = model.fallbacks || [];
+  for (let i = 0; i < fallbacks.length; i++) {
+    fallbacksHtml += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input type="text" class="oc-fallback-item" value="' + escHtml(fallbacks[i]) + '" style="flex:1" placeholder="model-id"><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button></div>';
+  }
+  fallbacksHtml += '<button class="btn btn-sm btn-default" onclick="addOcListItem(this,\\'oc-fallback-item\\')">➕ ' + t('add_item') + '</button>';
+
+  let imgFallbacksHtml = '';
+  const imgFallbacks = imgModel.fallbacks || [];
+  for (let i = 0; i < imgFallbacks.length; i++) {
+    imgFallbacksHtml += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input type="text" class="oc-img-fallback-item" value="' + escHtml(imgFallbacks[i]) + '" style="flex:1" placeholder="model-id"><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button></div>';
+  }
+  imgFallbacksHtml += '<button class="btn btn-sm btn-default" onclick="addOcListItem(this,\\'oc-img-fallback-item\\')">➕ ' + t('add_item') + '</button>';
+
+  let modelsRegHtml = '';
+  const modelKeys = Object.keys(modelsRegistry);
+  for (let i = 0; i < modelKeys.length; i++) {
+    const k = modelKeys[i];
+    modelsRegHtml += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input type="text" class="oc-model-reg-key" value="' + escHtml(k) + '" style="width:45%" placeholder="model-id"><span style="color:var(--text3)">→</span><input type="text" class="oc-model-reg-val" value="" style="flex:1" placeholder="{}" disabled><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button></div>';
+  }
+  modelsRegHtml += '<button class="btn btn-sm btn-default" onclick="addOcModelRegItem(this)">➕ ' + t('add_item') + '</button>';
+
+  return '<div class="card" style="margin-bottom:16px"><div class="card-title">' + t('agent_defaults') + '</div><div class="card-desc">' + t('agent_defaults_desc') + '</div>' +
+    '<div class="form-group"><label>' + t('compaction_mode') + '</label><input type="text" id="oc-compaction-mode" value="' + escHtml((d.compaction?.mode) || '') + '" placeholder="safeguard"></div>' +
+    '<div class="form-row">' +
+    '<div class="form-group"><label>' + t('primary_model') + '</label><input type="text" id="oc-primary-model" value="' + escHtml(model.primary || '') + '" placeholder="zerotoken/glm-4-flash"></div>' +
+    '<div class="form-group"><label>' + t('max_concurrent') + '</label><input type="number" id="oc-max-concurrent" value="' + (d.maxConcurrent || '') + '" min="1" max="32"></div>' +
+    '</div>' +
+    '<div class="form-group"><label>' + t('fallback_models') + '</label><div id="oc-fallbacks-list">' + fallbacksHtml + '</div></div>' +
+    '<div class="form-row">' +
+    '<div class="form-group"><label>' + t('image_model') + ' (Primary)</label><input type="text" id="oc-img-model-primary" value="' + escHtml(imgModel.primary || '') + '" placeholder="modelscope/ZhipuAI/GLM-5"></div>' +
+    '<div class="form-group"><label>' + t('subagent_max_concurrent') + '</label><input type="number" id="oc-subagent-max" value="' + (subagents.maxConcurrent || '') + '" min="1" max="32"></div>' +
+    '</div>' +
+    '<div class="form-group"><label>' + t('image_model') + ' (Fallbacks)</label><div id="oc-img-fallbacks-list">' + imgFallbacksHtml + '</div></div>' +
+    '<div class="form-row">' +
+    '<div class="form-group"><label>' + t('thinking_default') + '</label><select id="oc-thinking-default"><option value="off"' + (d.thinkingDefault === 'off' || !d.thinkingDefault ? ' selected' : '') + '>off</option><option value="low"' + (d.thinkingDefault === 'low' ? ' selected' : '') + '>low</option><option value="medium"' + (d.thinkingDefault === 'medium' ? ' selected' : '') + '>medium</option><option value="high"' + (d.thinkingDefault === 'high' ? ' selected' : '') + '>high</option></select></div>' +
+    '<div class="form-group"><label>' + t('workspace') + '</label><input type="text" id="oc-workspace" value="' + escHtml(d.workspace || '') + '" placeholder="~/.openclaw/workspace"></div>' +
+    '</div>' +
+    '<div class="form-group"><label>' + t('models_registry') + '</label><div id="oc-models-reg-list">' + modelsRegHtml + '</div></div>' +
+    '</div>';
+}
+
+function renderOcAgentList(agents) {
+  const list = agents?.list || [];
+  let tableHtml = '';
+  if (list.length === 0) {
+    tableHtml = '<div class="empty"><div class="icon">🤖</div><p>' + t('no_agents_in_list') + '</p></div>';
+  } else {
+    tableHtml = '<table><thead><tr><th>ID</th><th>' + t('agent_identity_name') + '</th><th>' + t('agent_model_primary') + '</th><th>' + t('agent_tools_profile') + '</th><th>' + t('actions') + '</th></tr></thead><tbody>';
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      tableHtml += '<tr><td class="mono">' + escHtml(a.id || '') + '</td><td>' + escHtml(a.identity?.name || '') + '</td><td class="mono" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.model?.primary || '') + '</td><td><span class="badge badge-ghost">' + escHtml(a.tools?.profile || '') + '</span></td>' +
+        '<td class="actions-cell"><button class="btn btn-sm btn-default" onclick="editOcAgent(' + i + ')">✏️</button><button class="btn btn-sm btn-danger" onclick="deleteOcAgent(' + i + ')">🗑️</button></td></tr>';
+    }
+    tableHtml += '</tbody></table>';
+  }
+  return '<div class="card"><div class="card-header"><div><div class="card-title">' + t('oc_agent_list') + '</div><div class="card-desc">' + t('oc_agent_list_desc') + '</div></div>' +
+    '<button class="btn btn-sm btn-primary" onclick="addOcAgent()">' + t('add_agent_btn') + '</button></div>' +
+    '<div id="oc-agents-table">' + tableHtml + '</div></div>';
+}
+
+function renderOcBindings(bindings) {
+  bindings = bindings || [];
+  let tableHtml = '';
+  if (bindings.length === 0) {
+    tableHtml = '<div class="empty"><div class="icon">🔗</div><p>' + t('no_bindings') + '</p></div>';
+  } else {
+    tableHtml = '<table><thead><tr><th>' + t('binding_agent_id') + '</th><th>' + t('binding_channel') + '</th><th>' + t('binding_account_id') + '</th><th>' + t('binding_type') + '</th><th>' + t('actions') + '</th></tr></thead><tbody>';
+    for (let i = 0; i < bindings.length; i++) {
+      const b = bindings[i];
+      tableHtml += '<tr><td class="mono">' + escHtml(b.agentId || '') + '</td><td class="mono">' + escHtml(b.match?.channel || '') + '</td><td class="mono">' + escHtml(b.match?.accountId || '-') + '</td><td><span class="badge badge-ghost">' + escHtml(b.type || 'route') + '</span></td>' +
+        '<td class="actions-cell"><button class="btn btn-sm btn-danger" onclick="deleteOcBinding(' + i + ')">🗑️</button></td></tr>';
+    }
+    tableHtml += '</tbody></table>';
+  }
+  return '<div class="card"><div class="card-header"><div><div class="card-title">' + t('bindings_title') + '</div><div class="card-desc">' + t('bindings_desc') + '</div></div>' +
+    '<button class="btn btn-sm btn-primary" onclick="addOcBinding()">' + t('add_binding') + '</button></div>' +
+    '<div id="oc-bindings-table">' + tableHtml + '</div></div>';
+}
+
+function renderOcChannels(channels) {
+  channels = channels || {};
+  const channelKeys = Object.keys(channels);
+  let html2 = '';
+  if (channelKeys.length === 0) {
+    html2 = '<div class="empty"><div class="icon">📡</div><p>' + t('no_channels_configured') + '</p></div>';
+  } else {
+    for (const ck of channelKeys) {
+      const ch = channels[ck];
+      const accs = ch.accounts || {};
+      const accKeys = Object.keys(accs);
+      const isEnabled = ch.enabled !== false;
+      html2 += '<div class="card" style="margin-bottom:16px">';
+      html2 += '<div class="card-header"><div class="card-title">📡 ' + escHtml(ck) + '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center"><span class="badge ' + (isEnabled ? 'badge-ok' : 'badge-danger') + '">' + (isEnabled ? t('channel_enabled') : t('channel_disabled')) + '</span>' +
+        '<label class="toggle-label"><input type="checkbox" class="oc-ch-enabled" data-channel="' + escHtml(ck) + '"' + (isEnabled ? ' checked' : '') + '><span class="toggle-slider"></span></label></div></div>';
+
+      html2 += '<div class="form-row">';
+      html2 += '<div class="form-group"><label>' + t('group_policy') + '</label><input type="text" class="oc-ch-policy" data-channel="' + escHtml(ck) + '" value="' + escHtml(ch.groupPolicy || '') + '" placeholder="open"></div>';
+      html2 += '</div>';
+
+      html2 += '<div class="form-group"><label>' + t('accounts') + ' (' + accKeys.length + ')</label>';
+      for (const ak of accKeys) {
+        const acc = accs[ak];
+        const allowFrom = acc.allowFrom || [];
+        html2 += '<div class="card" style="margin-bottom:10px;padding:14px;background:var(--bg3)">';
+        html2 += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><strong class="mono">' + escHtml(ak) + '</strong><div class="actions-cell"><button class="btn btn-sm btn-default" onclick="editOcAccount(\\'' + escHtml(ck) + '\\',\\'' + escHtml(ak) + '\\')">✏️</button><button class="btn btn-sm btn-danger" onclick="deleteOcAccount(\\'' + escHtml(ck) + '\\',\\'' + escHtml(ak) + '\\')">🗑️</button></div></div>';
+        html2 += '<div class="form-group"><label>Bot Token</label><input type="password" class="oc-acc-token" data-channel="' + escHtml(ck) + '" data-account="' + escHtml(ak) + '" value="' + escHtml(acc.botToken || '') + '" placeholder="****"></div>';
+        html2 += '<div class="form-group"><label>' + t('dm_policy') + '</label><select class="oc-acc-dm-policy" data-channel="' + escHtml(ck) + '" data-account="' + escHtml(ak) + '"><option value="allowlist"' + (acc.dmPolicy === 'allowlist' ? ' selected' : '') + '>allowlist</option><option value="open"' + (acc.dmPolicy === 'open' ? ' selected' : '') + '>open</option><option value="block"' + (acc.dmPolicy === 'block' ? ' selected' : '') + '>block</option></select></div>';
+        html2 += '<div class="form-group"><label>' + t('allow_from') + '</label>';
+        for (const af of allowFrom) {
+          html2 += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px"><input type="text" class="oc-allow-from" data-channel="' + escHtml(ck) + '" data-account="' + escHtml(ak) + '" value="' + escHtml(af) + '" style="flex:1"><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button></div>';
+        }
+        html2 += '<button class="btn btn-sm btn-default" data-channel="' + escHtml(ck) + '" data-account="' + escHtml(ak) + '" onclick="addOcAllowFrom(this)">➕ ' + t('add_allow_from') + '</button>';
+        html2 += '</div></div>';
+      }
+      html2 += '<button class="btn btn-sm btn-default" onclick="addOcAccount(\\'' + escHtml(ck) + '\\')">➕ ' + t('add_account') + '</button>';
+      html2 += '</div></div>';
+    }
+  }
+  return '<div class="card"><div class="card-header"><div><div class="card-title">' + t('channels_title') + '</div><div class="card-desc">' + t('channels_desc') + '</div></div></div>' +
+    '<div id="oc-channels-content">' + html2 + '</div></div>';
+}
+
+// ── OpenClaw dynamic list helpers ──
+function addOcListItem(btn, inputClass) {
+  const container = btn.parentElement;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  div.innerHTML = '<input type="text" class="' + inputClass + '" value="" style="flex:1" placeholder="model-id"><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button>';
+  container.insertBefore(div, btn);
+  div.querySelector('input').focus();
+}
+
+function addOcModelRegItem(btn) {
+  const container = btn.parentElement;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  div.innerHTML = '<input type="text" class="oc-model-reg-key" value="" style="width:45%" placeholder="model-id"><span style="color:var(--text3)">→</span><input type="text" class="oc-model-reg-val" value="" style="flex:1" placeholder="{}" disabled><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button>';
+  container.insertBefore(div, btn);
+  div.querySelector('.oc-model-reg-key').focus();
+}
+
+function addOcAllowFrom(btn) {
+  const container = btn.parentElement;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px';
+  div.innerHTML = '<input type="text" class="oc-allow-from" data-channel="' + (btn.dataset.channel || '') + '" data-account="' + (btn.dataset.account || '') + '" value="" style="flex:1"><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button>';
+  container.insertBefore(div, btn);
+  div.querySelector('input').focus();
+}
+
+// ── OpenClaw CRUD operations ──
+function addOcAgent() {
+  if (!_ocConfig) return;
+  if (!_ocConfig.agents) _ocConfig.agents = { defaults: _ocConfig.agents?.defaults || {} };
+  if (!Array.isArray(_ocConfig.agents.list)) _ocConfig.agents.list = [];
+  _ocConfig.agents.list.push({ id: 'new-agent-' + Date.now(), identity: { name: '' }, model: { primary: '' }, tools: { profile: 'full' }, workspace: '' });
+  renderOpenClawConfig(_ocConfig);
+  switchOpenClawTab('agents');
+  toast(t('agent_added'), 'ok');
+}
+
+function editOcAgent(idx) {
+  if (!_ocConfig?.agents?.list?.[idx]) return;
+  const a = _ocConfig.agents.list[idx];
+  const newId = prompt('Agent ID:', a.id);
+  if (newId === null) return;
+  const newName = prompt('Identity Name:', a.identity?.name || '');
+  if (newName === null) return;
+  const newModel = prompt('Primary Model:', a.model?.primary || '');
+  if (newModel === null) return;
+  const newTools = prompt('Tools Profile:', a.tools?.profile || '');
+  if (newTools === null) return;
+  const newWorkspace = prompt('Workspace:', a.workspace || '');
+  if (newWorkspace === null) return;
+  a.id = newId;
+  a.identity = { name: newName };
+  a.model = { primary: newModel };
+  a.tools = { profile: newTools };
+  a.workspace = newWorkspace;
+  renderOpenClawConfig(_ocConfig);
+  switchOpenClawTab('agents');
+}
+
+function deleteOcAgent(idx) {
+  if (!_ocConfig?.agents?.list) return;
+  const a = _ocConfig.agents.list[idx];
+  const name = a?.id || a?.identity?.name || '';
+  if (!confirm(t('confirm_delete_oc_agent').replace('{name}', name))) return;
+  _ocConfig.agents.list.splice(idx, 1);
+  renderOpenClawConfig(_ocConfig);
+  switchOpenClawTab('agents');
+  toast(t('agent_deleted'), 'ok');
+}
+
+function addOcBinding() {
+  if (!_ocConfig) return;
+  if (!Array.isArray(_ocConfig.bindings)) _ocConfig.bindings = [];
+  const agentId = prompt('Agent ID:');
+  if (!agentId) return;
+  const channel = prompt('Channel:', '');
+  const accountId = prompt('Account ID (optional):', '');
+  const type = prompt('Type (route/direct):', 'route');
+  const binding = { agentId };
+  if (channel) binding.match = { channel };
+  if (accountId) { if (!binding.match) binding.match = {}; binding.match.accountId = accountId; }
+  if (type) binding.type = type;
+  _ocConfig.bindings.push(binding);
+  renderOpenClawConfig(_ocConfig);
+  switchOpenClawTab('bindings');
+  toast(t('openclaw_config_saved'), 'ok');
+}
+
+function deleteOcBinding(idx) {
+  if (!_ocConfig?.bindings) return;
+  if (!confirm(t('confirm_delete_binding'))) return;
+  _ocConfig.bindings.splice(idx, 1);
+  renderOpenClawConfig(_ocConfig);
+  switchOpenClawTab('bindings');
+  toast(t('binding_deleted'), 'ok');
+}
+
+function addOcAccount(channelKey) {
+  if (!_ocConfig?.channels) return;
+  const ch = _ocConfig.channels[channelKey];
+  if (!ch) return;
+  if (!ch.accounts) ch.accounts = {};
+  const accId = prompt('Account ID:');
+  if (!accId) return;
+  ch.accounts[accId] = { botToken: '', dmPolicy: 'allowlist', allowFrom: [] };
+  renderOpenClawConfig(_ocConfig);
+  switchOpenClawTab('channels');
+  toast(t('openclaw_config_saved'), 'ok');
+}
+
+function editOcAccount(channelKey, accountId) {
+  if (!_ocConfig?.channels?.[channelKey]?.accounts?.[accountId]) return;
+  const acc = _ocConfig.channels[channelKey].accounts[accountId];
+  const token = prompt('Bot Token:', acc.botToken || '');
+  if (token === null) return;
+  acc.botToken = token;
+  renderOpenClawConfig(_ocConfig);
+  switchOpenClawTab('channels');
+}
+
+function deleteOcAccount(channelKey, accountId) {
+  if (!_ocConfig?.channels?.[channelKey]?.accounts) return;
+  if (!confirm(t('confirm_delete_account'))) return;
+  delete _ocConfig.channels[channelKey].accounts[accountId];
+  renderOpenClawConfig(_ocConfig);
+  switchOpenClawTab('channels');
+  toast(t('openclaw_config_saved'), 'ok');
+}
+
+async function saveOpenClawConfig() {
+  if (!_ocConfig) return;
+  // Collect defaults
+  const defaults = _ocConfig.agents?.defaults || {};
+  const model = defaults.model || {};
+  const imgModel = defaults.imageModel || {};
+  const subagents = defaults.subagents || {};
+  const modelsRegistry = defaults.models || {};
+
+  // Collect fallbacks
+  const fallbackItems = $$('.oc-fallback-item');
+  const fallbacks = [];
+  for (const el of fallbackItems) { if (el.value.trim()) fallbacks.push(el.value.trim()); }
+
+  const imgFallbackItems = $$('.oc-img-fallback-item');
+  const imgFallbacks = [];
+  for (const el of imgFallbackItems) { if (el.value.trim()) imgFallbacks.push(el.value.trim()); }
+
+  const modelRegKeys = $$('.oc-model-reg-key');
+  const newModelsReg = {};
+  for (const el of modelRegKeys) { if (el.value.trim()) newModelsReg[el.value.trim()] = {}; }
+
+  const newDefaults = {
+    compaction: { mode: ($('#oc-compaction-mode')?.value || defaults.compaction?.mode || 'safeguard') },
+    model: { primary: $('#oc-primary-model')?.value || model.primary || '', fallbacks },
+    imageModel: { primary: $('#oc-img-model-primary')?.value || imgModel.primary || '', fallbacks: imgFallbacks },
+    maxConcurrent: parseInt($('#oc-max-concurrent')?.value) || defaults.maxConcurrent || 4,
+    subagents: { maxConcurrent: parseInt($('#oc-subagent-max')?.value) || subagents.maxConcurrent || 8 },
+    thinkingDefault: $('#oc-thinking-default')?.value || defaults.thinkingDefault || 'off',
+    workspace: $('#oc-workspace')?.value || defaults.workspace || '',
+    models: newModelsReg,
+  };
+
+  // Collect channels state
+  const channels = _ocConfig.channels || {};
+  const chEnabledEls = $$('.oc-ch-enabled');
+  for (const el of chEnabledEls) {
+    const ck = el.dataset.channel;
+    if (channels[ck]) channels[ck].enabled = el.checked;
+  }
+  const chPolicyEls = $$('.oc-ch-policy');
+  for (const el of chPolicyEls) {
+    const ck = el.dataset.channel;
+    if (channels[ck]) channels[ck].groupPolicy = el.value;
+  }
+  // Collect account data
+  const tokenEls = $$('.oc-acc-token');
+  for (const el of tokenEls) {
+    const ck = el.dataset.channel;
+    const ak = el.dataset.account;
+    if (channels[ck]?.accounts?.[ak]) channels[ck].accounts[ak].botToken = el.value;
+  }
+  const dmPolicyEls = $$('.oc-acc-dm-policy');
+  for (const el of dmPolicyEls) {
+    const ck = el.dataset.channel;
+    const ak = el.dataset.account;
+    if (channels[ck]?.accounts?.[ak]) channels[ck].accounts[ak].dmPolicy = el.value;
+  }
+  const allowFromEls = $$('.oc-allow-from');
+  for (const el of allowFromEls) {
+    const ck = el.dataset.channel;
+    const ak = el.dataset.account;
+    if (channels[ck]?.accounts?.[ak]) {
+      if (!channels[ck].accounts[ak].allowFrom) channels[ck].accounts[ak].allowFrom = [];
+      channels[ck].accounts[ak].allowFrom.push(el.value.trim());
+    }
+  }
+  // Deduplicate allowFrom per account
+  for (const ck of Object.keys(channels)) {
+    const ch = channels[ck];
+    if (!ch.accounts) continue;
+    for (const ak of Object.keys(ch.accounts)) {
+      const af = ch.accounts[ak].allowFrom;
+      if (Array.isArray(af)) ch.accounts[ak].allowFrom = [...new Set(af)].filter(x => x);
+    }
+  }
+
+  const payload = {
+    agents: { defaults: newDefaults, list: _ocConfig.agents?.list || [] },
+    bindings: _ocConfig.bindings || [],
+    channels,
+  };
+
+  try {
+    const r = await api('/openclaw-config', { method: 'PUT', body: JSON.stringify(payload) });
+    if (r.success) {
+      toast(t('openclaw_config_saved'), 'ok');
+      _ocConfig = await api('/openclaw-config');
+      renderOpenClawConfig(_ocConfig);
+    } else {
+      toast(r.message || t('failed_save'), 'err');
+    }
+  } catch (e) {
+    toast(e.message || t('failed_save'), 'err');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
@@ -2208,6 +2682,10 @@ const HTML = `<!DOCTYPE html>
         <div class="nav-group-title">System</div>
         <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">Settings</span></div>
       </div>
+      <div class="nav-group">
+        <div class="nav-group-title">OpenClaw</div>
+        <div class="nav-item" data-page="openclaw"><span class="nav-icon">⚙️</span><span class="nav-label">OpenClaw</span></div>
+      </div>
     </nav>
     <div class="sidebar-footer" onclick="toggleSidebar()">
       <span>◀</span><span class="sidebar-footer-text">Collapse sidebar</span>
@@ -2249,6 +2727,9 @@ const HTML = `<!DOCTYPE html>
         <div id="settings-tabs" style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap"></div>
         <div id="settings-content"></div>
       </div>
+
+      <!-- OpenClaw Config -->
+      <div class="page" id="page-openclaw"><div id="openclaw-content"></div></div>
 
     </div>
   </main>
