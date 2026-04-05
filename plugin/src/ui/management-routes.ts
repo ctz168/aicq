@@ -207,6 +207,7 @@ function getModelProviders(config: Record<string, unknown>) {
   const modelsSection = config.models as Record<string, unknown> | undefined;
   const defaultModel = (modelsSection?.defaultModel as string) || "";
 
+  // --- Built-in providers ---
   const providers = MODEL_PROVIDERS.map((p) => {
     const pc = (providersSection?.[p.configKey] ?? config[p.configKey]) as Record<string, unknown> | undefined;
     const apiKey = (pc?.apiKey as string) || "";
@@ -235,44 +236,91 @@ function getModelProviders(config: Record<string, unknown>) {
       baseUrl,
       models: modelsList,
       modelCount: modelsList.length,
+      isCustom: false,
     };
   });
 
-  const currentModels: Array<Record<string, unknown>> = [];
-  for (const p of MODEL_PROVIDERS) {
-    const pc = (providersSection?.[p.configKey] ?? config[p.configKey]) as Record<string, unknown> | undefined;
-    if (pc?.apiKey) {
-      // Handle multi-model: list all models under this provider
-      const modelsArr = pc.models;
-      if (Array.isArray(modelsArr) && modelsArr.length > 0) {
-        for (const m of modelsArr) {
-          if (typeof m === "object" && m !== null) {
-            const mObj = m as Record<string, unknown>;
-            currentModels.push({
-              provider: p.name,
-              providerId: p.id,
-              modelId: (mObj.id as string) || "",
-              modelName: (mObj.name as string) || "",
-              hasApiKey: true,
-              baseUrl: (pc.baseUrl as string) || (pc.baseURL as string) || p.baseUrlHint,
-              isDefault: defaultModel === (mObj.id as string),
-            });
-          }
-        }
-      } else {
-        currentModels.push({
-          provider: p.name,
-          providerId: p.id,
-          modelId: (pc.model as string) || (pc.defaultModel as string) || p.modelHint,
-          hasApiKey: true,
-          baseUrl: (pc.baseUrl as string) || (pc.baseURL as string) || p.baseUrlHint,
-          isDefault: false,
-        });
+  // --- Custom providers (stored under config.providers.custom[]) ---
+  const customProvidersSection = providersSection?.custom;
+  const customProviders: Array<Record<string, unknown>> = [];
+  if (Array.isArray(customProvidersSection)) {
+    for (let i = 0; i < customProvidersSection.length; i++) {
+      const cp = customProvidersSection[i];
+      if (typeof cp !== "object" || cp === null) continue;
+      const cpObj = cp as Record<string, unknown>;
+      const cApiKey = (cpObj.apiKey as string) || "";
+      const cModelId = (cpObj.modelId as string) || (cpObj.model as string) || "";
+      const cBaseUrl = (cpObj.baseUrl as string) || (cpObj.baseURL as string) || "";
+      const cId = (cpObj.id as string) || ("custom-" + i);
+
+      // Handle multi-model array for custom providers
+      let cModelsList: Array<Record<string, unknown>> = [];
+      const cModelsArr = cpObj.models;
+      if (Array.isArray(cModelsArr)) {
+        cModelsList = cModelsArr.filter((m) => typeof m === "object" && m !== null).map((m) => m as Record<string, unknown>);
       }
+
+      providers.push({
+        id: cId,
+        name: (cpObj.name as string) || cId,
+        description: (cpObj.description as string) || "Custom provider",
+        configured: Boolean(cApiKey || cBaseUrl),
+        apiKey: cApiKey ? cApiKey.substring(0, 6) + "••••••" + cApiKey.slice(-4) : "",
+        apiKeyHasValue: Boolean(cApiKey),
+        apiKeyHint: "sk-...",
+        modelId: cModelsList.length > 0 ? (defaultModel || cModelsList[0]?.id as string || "") : cModelId,
+        modelHint: cModelId || "model-name",
+        baseUrl: cBaseUrl,
+        baseUrlHint: cBaseUrl || "https://...",
+        models: cModelsList,
+        modelCount: cModelsList.length,
+        isCustom: true,
+        customIndex: i,
+      });
     }
   }
 
-  return { providers, currentModels, defaultModel };
+  // --- Build currentModels (all providers with API keys) ---
+  const currentModels: Array<Record<string, unknown>> = [];
+  for (const p of providers) {
+    if (!p.apiKeyHasValue) continue;
+    const pId = p.id as string;
+    const pName = p.name as string;
+    const isCustom = p.isCustom as boolean;
+    const pModels = p.models as Array<Record<string, unknown>>;
+    const pBaseUrl = p.baseUrl as string;
+    const pModelHint = (p as Record<string, unknown>).modelHint as string || "";
+
+    if (pModels && pModels.length > 0) {
+      for (const m of pModels) {
+        if (typeof m === "object" && m !== null) {
+          const mObj = m as Record<string, unknown>;
+          currentModels.push({
+            provider: pName,
+            providerId: pId,
+            modelId: (mObj.id as string) || "",
+            modelName: (mObj.name as string) || "",
+            hasApiKey: true,
+            baseUrl: pBaseUrl,
+            isDefault: defaultModel === (mObj.id as string),
+            isCustom,
+          });
+        }
+      }
+    } else {
+      currentModels.push({
+        provider: pName,
+        providerId: pId,
+        modelId: p.modelId as string || pModelHint,
+        hasApiKey: true,
+        baseUrl: pBaseUrl,
+        isDefault: false,
+        isCustom,
+      });
+    }
+  }
+
+  return { providers, currentModels, defaultModel, customProviders: customProvidersSection || [] };
 }
 
 /**
@@ -751,6 +799,152 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
 
         logger.info("[API] Model config saved for provider: " + providerId);
         return json(res, { success: true, message: "Model configuration saved for " + provider.name });
+      }
+
+      // ── POST /api/models/custom — Add a custom provider ──
+      if (apiPath === "/models/custom" && method === "POST") {
+        const body = await readBody(req);
+        const name = (body.name as string)?.trim();
+        const apiKey = body.apiKey as string;
+        const modelId = body.modelId as string;
+        const baseUrl = body.baseUrl as string;
+        const description = body.description as string;
+
+        if (!name) return json(res, { success: false, message: "Provider name is required" }, 400);
+        if (!apiKey && !modelId && !baseUrl) {
+          return json(res, { success: false, message: "At least one of API Key, Model ID, or Base URL is required" }, 400);
+        }
+
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+
+        const config = result.config;
+        if (!config.providers || typeof config.providers !== "object") {
+          config.providers = {};
+        }
+        const providers = config.providers as Record<string, unknown>;
+
+        if (!Array.isArray(providers.custom)) {
+          providers.custom = [];
+        }
+        const customArr = providers.custom as Array<Record<string, unknown>>;
+
+        // Check for duplicate name or id
+        const newId = "custom-" + crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+        const duplicate = customArr.find((c) => (c.name as string)?.toLowerCase() === name.toLowerCase());
+        if (duplicate) {
+          return json(res, { success: false, message: "A provider with this name already exists" }, 409);
+        }
+
+        const newProvider: Record<string, unknown> = {
+          id: newId,
+          name,
+          createdAt: new Date().toISOString(),
+        };
+        if (apiKey) newProvider.apiKey = apiKey;
+        if (modelId) newProvider.modelId = modelId;
+        if (baseUrl) newProvider.baseUrl = baseUrl;
+        if (description) newProvider.description = description;
+
+        customArr.push(newProvider);
+        const written = writeConfig(config);
+        if (!written) return json(res, { success: false, message: "Failed to write config file" }, 500);
+
+        logger.info("[API] Custom provider added: " + name + " (" + newId + ")");
+        return json(res, { success: true, message: "Custom provider '" + name + "' added", providerId: newId });
+      }
+
+      // ── PUT /api/models/custom/:id — Update a custom provider ──
+      if (apiPath.match(/^\/models\/custom\/[^/]+$/) && method === "PUT") {
+        const customId = decodeURIComponent(apiPath.slice("/models/custom/".length));
+        const body = await readBody(req);
+
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+
+        const config = result.config;
+        const providers = config.providers as Record<string, unknown> | undefined;
+        const customArr = providers?.custom as Array<Record<string, unknown>> | undefined;
+        if (!Array.isArray(customArr)) {
+          return json(res, { success: false, message: "No custom providers found" }, 404);
+        }
+
+        const idx = customArr.findIndex((c) => (c.id as string) === customId);
+        if (idx === -1) {
+          return json(res, { success: false, message: "Custom provider not found" }, 404);
+        }
+
+        const cp = customArr[idx];
+        if (body.name) cp.name = (body.name as string).trim();
+        if (body.apiKey !== undefined) cp.apiKey = body.apiKey;
+        if (body.modelId !== undefined) cp.modelId = body.modelId;
+        if (body.baseUrl !== undefined) cp.baseUrl = body.baseUrl;
+        if (body.description !== undefined) cp.description = body.description;
+
+        const written = writeConfig(config);
+        if (!written) return json(res, { success: false, message: "Failed to write config file" }, 500);
+
+        logger.info("[API] Custom provider updated: " + customId);
+        return json(res, { success: true, message: "Custom provider updated" });
+      }
+
+      // ── DELETE /api/models/custom/:id — Delete a custom provider ──
+      if (apiPath.match(/^\/models\/custom\/[^/]+$/) && method === "DELETE") {
+        const customId = decodeURIComponent(apiPath.slice("/models/custom/".length));
+
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+
+        const config = result.config;
+        const providers = config.providers as Record<string, unknown> | undefined;
+        const customArr = providers?.custom as Array<Record<string, unknown>> | undefined;
+        if (!Array.isArray(customArr)) {
+          return json(res, { success: false, message: "No custom providers found" }, 404);
+        }
+
+        const idx = customArr.findIndex((c) => (c.id as string) === customId);
+        if (idx === -1) {
+          return json(res, { success: false, message: "Custom provider not found" }, 404);
+        }
+
+        const removed = customArr.splice(idx, 1)[0];
+        const written = writeConfig(config);
+        if (!written) return json(res, { success: false, message: "Failed to write config file" }, 500);
+
+        logger.info("[API] Custom provider deleted: " + (removed.name || customId));
+        return json(res, { success: true, message: "Custom provider '" + (removed.name || customId) + "' deleted" });
+      }
+
+      // ── GET /api/openclaw-config ──
+      // Returns the agents, bindings, and channels sections from openclaw.json
+      if (apiPath === "/openclaw-config" && method === "GET") {
+        const result = readConfig();
+        if (!result) return json(res, { error: "No config file found" }, 400);
+        const config = result.config;
+        return json(res, {
+          agents: config.agents || null,
+          bindings: config.bindings || [],
+          channels: config.channels || null,
+          configPath: result.configPath,
+        });
+      }
+
+      // ── PUT /api/openclaw-config ──
+      // Updates agents, bindings, and/or channels sections
+      if (apiPath === "/openclaw-config" && method === "PUT") {
+        const body = await readBody(req);
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+        const config = result.config;
+
+        if (body.agents !== undefined) config.agents = body.agents;
+        if (body.bindings !== undefined) config.bindings = body.bindings;
+        if (body.channels !== undefined) config.channels = body.channels;
+
+        const written = writeConfig(config);
+        if (!written) return json(res, { success: false, message: "Failed to write config" }, 500);
+        logger.info("[API] OpenClaw config updated");
+        return json(res, { success: true, message: "Configuration saved" });
       }
 
       // ── GET /api/settings ──
