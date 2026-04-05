@@ -917,9 +917,11 @@ export class WebClient extends SimpleEventEmitter {
 
   constructor(config: WebClientConfig) {
     super();
-    const wsUrl = config.wsUrl ?? config.serverUrl.replace(/^http/, 'ws') + '/ws';
+    // Ensure serverUrl uses 443 port for HTTPS
+    const serverUrl = config.serverUrl.replace(/:\d+$/, '') + ':443';
+    const wsUrl = config.wsUrl ?? serverUrl.replace(/^http/, 'ws') + '/ws';
     this.store = new BrowserStore();
-    this.api = new BrowserAPIClient(config.serverUrl);
+    this.api = new BrowserAPIClient(serverUrl);
     this.ws = new BrowserWSClient(wsUrl);
   }
 

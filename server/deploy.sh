@@ -42,7 +42,7 @@ set -euo pipefail
 
 # ─── 默认配置 ─────────────────────────────────────────────────────────────
 DOMAIN="aicq.online"
-PORT=3000
+PORT=61018
 MAX_FRIENDS=200
 TEMP_TTL_HOURS=24
 QR_VALIDITY_SECONDS=60

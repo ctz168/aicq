@@ -57,8 +57,8 @@ ENV NODE_ENV=production
 ENV PORT=61018
 ENV AICQ_SERVER_URL=http://localhost:61018
 
-# Expose ports: 80 (admin), 443 (HTTPS), 61018 (server API/WS)
-EXPOSE 80 443 61018
+# Expose ports: 80 (HTTP redirect), 8443 (HTTPS/WSS entry)
+EXPOSE 80 8443
 
 # Copy entrypoint
 COPY server/docker/entrypoint.sh /entrypoint.sh

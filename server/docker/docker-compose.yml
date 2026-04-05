@@ -10,7 +10,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "61018:61018"
     environment:
       - NODE_ENV=production
       - PORT=61018
