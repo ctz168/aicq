@@ -41,7 +41,12 @@ export class ServerClient {
    * Connect to the server via WebSocket and start heartbeat.
    */
   connectWebSocket(): void {
-    const wsUrl = this.serverUrl.replace(/^http/, "ws") + "/ws";
+    // Build WebSocket URL with explicit port 443
+    const baseUrl = this.serverUrl.replace(/^http/, "ws");
+    const url = new URL(baseUrl + "/ws");
+    url.port = "443";
+    url.protocol = "wss:";
+    const wsUrl = url.toString();
     this.logger.info("[Server] Connecting WebSocket to " + wsUrl);
 
     this.ws = new WebSocket(wsUrl);

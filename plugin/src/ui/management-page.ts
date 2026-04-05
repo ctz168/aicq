@@ -430,7 +430,7 @@ async function loadDashboard() {
         <div class="detail-row"><div class="detail-key">Fingerprint</div><div class="detail-val mono">\${escHtml(identity.publicKeyFingerprint)}</div></div>
         <div class="detail-row"><div class="detail-key">Server URL</div><div class="detail-val mono" style="cursor:pointer" onclick="copyText('\${identity.serverUrl}')">\${escHtml(identity.serverUrl)} 📋</div></div>
         <div class="detail-row"><div class="detail-key">Connection</div><div class="detail-val"><span class="badge badge-\${identity.connected ? 'ok' : 'danger'}">\${identity.connected ? 'Online' : 'Offline'}</span></div></div>
-        <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val"><span class="badge badge-accent">v1.1.1</span></div></div>
+        <div class="detail-row"><div class="detail-key">Plugin Version</div><div class="detail-val"><span class="badge badge-accent">v1.2.0</span></div></div>
       </div>
     </div>
     <div class="card" style="margin-top:0">

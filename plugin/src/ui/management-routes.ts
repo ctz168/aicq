@@ -829,7 +829,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
 
         return json(res, {
           exportDate: new Date().toISOString(),
-          pluginVersion: "1.1.1",
+          pluginVersion: "1.2.0",
           settings: pluginSection || {},
           fullConfig: result.config,
         });
@@ -1107,6 +1107,14 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
 
         logger.info("[API] Model config cleared for provider: " + providerId);
         return json(res, { success: true, message: "Model configuration cleared for " + provider.name });
+      }
+
+      // ── GET /api/version ──
+      if (apiPath === "/version" && method === "GET") {
+        return json(res, {
+          version: "1.2.0",
+          name: "AICQ Encrypted Chat",
+        });
       }
 
       // ── Fallback ──

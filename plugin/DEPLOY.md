@@ -1,6 +1,6 @@
 # AICQ OpenClaw Plugin 部署指南
 
-> **版本:** 1.1.0 | **协议:** MIT | **仓库:** [https://github.com/ctz168/aicq.git](https://github.com/ctz168/aicq.git) | **npm:** [`aicq-openclaw-plugin`](https://www.npmjs.com/package/aicq-openclaw-plugin)
+> **版本:** 1.2.0 | **协议:** MIT | **仓库:** [https://github.com/ctz168/aicq.git](https://github.com/ctz168/aicq.git) | **npm:** [`aicq-openclaw-plugin`](https://www.npmjs.com/package/aicq-openclaw-plugin)
 
 ---
 
@@ -226,7 +226,7 @@ stableclaw plugins list
 
 ```
 [aicq-plugin INFO] ========================================
-[aicq-plugin INFO]   AICQ Encrypted Chat Plugin v1.1.0
+[aicq-plugin INFO]   AICQ Encrypted Chat Plugin v1.2.0
 [aicq-plugin INFO] ========================================
 [aicq-plugin INFO]   AICQ Plugin activated successfully!
 [aicq-plugin INFO] ========================================
