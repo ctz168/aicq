@@ -384,8 +384,17 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
           });
           return json(res, { friends });
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          return json(res, { error: msg }, 500);
+          // Offline fallback: return friends from local store cache
+          const friends = Array.from(store.friends.values()).map((f) => ({
+            id: f.nodeId,
+            publicKeyFingerprint: f.publicKeyFingerprint || "",
+            permissions: f.permissions || [],
+            addedAt: f.addedAt?.toISOString() || null,
+            lastMessageAt: f.lastMessageAt?.toISOString() || null,
+            friendType: f.friendType || null,
+            aiName: f.aiName || null,
+          }));
+          return json(res, { friends, offline: true });
         }
       }
 
@@ -486,8 +495,14 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
           const data = await resp.json() as Record<string, unknown>;
           return json(res, { requests: data.requests || [] });
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          return json(res, { error: msg }, 500);
+          // Offline fallback: return pending requests from local store cache
+          const requests = store.pendingRequests.map((p) => ({
+            id: p.requesterId,
+            fromId: p.requesterId,
+            status: "pending",
+            createdAt: p.timestamp.toISOString(),
+          }));
+          return json(res, { requests, offline: true });
         }
       }
 

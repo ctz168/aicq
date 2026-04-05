@@ -278,6 +278,26 @@ tbody tr:hover { background: var(--bg3); }
 .toggle-label input:checked + .toggle-slider { background: var(--accent); }
 .toggle-label input:checked + .toggle-slider::after { left: 21px; background: #fff; }
 
+/* Offline banner */
+.offline-banner {
+  background: linear-gradient(90deg, #7f1d1d, #991b1b);
+  color: #fca5a5;
+  padding: 10px 24px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: fadeIn .2s ease-out;
+}
+.offline-banner .offline-icon {
+  font-size: 16px;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar { position: fixed; left: -260px; z-index: 50; height: 100vh; transition: left var(--transition); }
@@ -294,6 +314,43 @@ const JS = `
 const API = '/api';
 let currentPage = 'dashboard';
 let refreshTimer = null;
+
+// ── Offline detection ──
+let isOffline = false;
+let offlineBannerEl = null;
+
+function updateOnlineStatus() {
+  const wasOffline = isOffline;
+  isOffline = !navigator.onLine;
+  if (isOffline && !wasOffline) {
+    showOfflineBanner();
+  } else if (!isOffline && wasOffline) {
+    hideOfflineBanner();
+    // Reload current page on reconnection
+    loadPage(currentPage);
+  }
+}
+
+function showOfflineBanner() {
+  if (offlineBannerEl) return;
+  offlineBannerEl = document.createElement('div');
+  offlineBannerEl.className = 'offline-banner';
+  offlineBannerEl.innerHTML = '<span class="offline-icon">🔌</span><span>You are offline. Some features may be limited. Data is loaded from local cache.</span>';
+  const mainContent = document.querySelector('.main');
+  if (mainContent) {
+    mainContent.insertBefore(offlineBannerEl, mainContent.firstChild);
+  }
+}
+
+function hideOfflineBanner() {
+  if (offlineBannerEl) {
+    offlineBannerEl.remove();
+    offlineBannerEl = null;
+  }
+}
+
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
 
 // ── jQuery-style helpers ──
 const $ = (sel, ctx) => (ctx || document).querySelector(sel);
@@ -381,7 +438,11 @@ function loadPage(page) {
 async function loadDashboard() {
   const el = $('#dashboard-content');
   html(el, '<div class="loading-mask"><div class="spinner"></div>Loading dashboard...</div>');
-  const [status, friends, identity, mgmtUrl] = await Promise.all([api('/status'), api('/friends'), api('/identity'), api('/mgmt-url')]);
+  const results = await Promise.allSettled([api('/status'), api('/friends'), api('/identity'), api('/mgmt-url')]);
+  const status = results[0].status === 'fulfilled' ? results[0].value : { error: results[0].reason?.message || 'Failed' };
+  const friends = results[1].status === 'fulfilled' ? results[1].value : { friends: [], error: true };
+  const identity = results[2].status === 'fulfilled' ? results[2].value : { agentId: '—', publicKeyFingerprint: '—', serverUrl: '—', connected: false };
+  const mgmtUrl = results[3].status === 'fulfilled' ? results[3].value : { mgmtUrl: window.location.origin };
   if (status.error) { html(el, '<div class="empty"><div class="icon">⚠️</div><p>Failed to connect to AICQ plugin</p></div>'); return; }
   const connCls = status.connected ? 'dot-ok' : 'dot-err';
   const connText = status.connected ? 'Connected' : 'Disconnected';
@@ -631,7 +692,17 @@ let friendsFilter = 'all';
 async function loadFriends() {
   const el = $('#friends-content');
   html(el, '<div class="loading-mask"><div class="spinner"></div>Loading friends...</div>');
-  const [friends, requests, sessions] = await Promise.all([api('/friends'), api('/friends/requests'), api('/sessions')]);
+  const results = await Promise.allSettled([api('/friends'), api('/friends/requests'), api('/sessions')]);
+  const friends = results[0].status === 'fulfilled' ? results[0].value : { friends: [] };
+  const requests = results[1].status === 'fulfilled' ? results[1].value : { requests: [] };
+  const sessions = results[2].status === 'fulfilled' ? results[2].value : { sessions: [] };
+
+  // Show offline banner if friends data came from cache
+  if (friends.offline || friends.error) {
+    showOfflineBanner();
+  } else {
+    hideOfflineBanner();
+  }
 
   // Sub-tabs
   const friendCount = (friends.friends || []).length;
@@ -683,7 +754,7 @@ function renderFriendsList(friends) {
         <button class="filter-btn \${friendsFilter==='human'?'active':''}" onclick="friendsFilter='human';filterFriendTable()">Human</button>
       </div>
       <span style="flex:1"></span>
-      <button class="btn btn-sm btn-primary" onclick="showAddFriendModal()">➕ Add Friend</button>
+      <button class="btn btn-sm btn-primary" onclick="showAddFriendModal()" \${isOffline ? 'disabled title="Unavailable while offline"' : ''}>➕ Add Friend</button>
       <button class="btn btn-sm btn-default" onclick="loadFriends()">🔄</button>
     </div>
     <div class="card" style="padding:0;overflow:hidden">
@@ -1577,6 +1648,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Auto-refresh status every 30s
   refreshTimer = setInterval(() => {
+    updateOnlineStatus();
     if (currentPage === 'dashboard') loadDashboard();
     // Update status dot
     api('/status').then(s => {
@@ -1585,6 +1657,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (dot) { dot.className = 'dot ' + (s.connected ? 'dot-ok' : 'dot-err'); }
         const txt = $('#header-status');
         if (txt) txt.textContent = s.connected ? 'Connected' : 'Disconnected';
+        // Auto-remove offline banner when server reconnects
+        if (s.connected) hideOfflineBanner();
       }
     });
   }, 30000);
