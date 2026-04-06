@@ -56,28 +56,45 @@ const MODEL_PROVIDERS = [
 
 /**
  * Find the config file. Priority: openclaw.json > stableclaw.json.
- * Searches CWD, home dir, and config directories.
+ * Searches CWD, parent directories (up to root), home dir, and config directories.
  */
 function findConfigPath(): string | null {
+  // Helper to walk up directories from cwd looking for a filename
+  function searchUpward(fileName: string): string | null {
+    let dir = process.cwd();
+    for (let i = 0; i < 10; i++) {
+      const candidate = path.join(dir, fileName);
+      try { if (fs.existsSync(candidate)) return candidate; } catch { /* ignore */ }
+      const parent = path.dirname(dir);
+      if (parent === dir) break; // reached filesystem root
+      dir = parent;
+    }
+    return null;
+  }
+
   // openclaw.json candidates first (higher priority)
-  const openclawPaths = [
-    path.join(process.cwd(), "openclaw.json"),
+  const fromCwd = searchUpward("openclaw.json");
+  if (fromCwd) return fromCwd;
+
+  const openclawHomePaths = [
     path.join(os.homedir(), ".config", "openclaw", "openclaw.json"),
     path.join(os.homedir(), ".openclaw", "openclaw.json"),
     path.join(os.homedir(), "openclaw.json"),
   ];
-  for (const p of openclawPaths) {
+  for (const p of openclawHomePaths) {
     try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
   }
 
   // Then stableclaw.json
-  const stableclawPaths = [
-    path.join(process.cwd(), "stableclaw.json"),
+  const fromCwdStable = searchUpward("stableclaw.json");
+  if (fromCwdStable) return fromCwdStable;
+
+  const stableclawHomePaths = [
     path.join(os.homedir(), ".config", "stableclaw", "stableclaw.json"),
     path.join(os.homedir(), ".stableclaw", "stableclaw.json"),
     path.join(os.homedir(), "stableclaw.json"),
   ];
-  for (const p of stableclawPaths) {
+  for (const p of stableclawHomePaths) {
     try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
   }
 
@@ -110,32 +127,80 @@ function writeConfig(config: Record<string, unknown>): boolean {
 /**
  * Extract agents from config file.
  * Handles multiple possible structures:
- * - config.agents (array)
- * - config.agent (single object)
- * - config.models.providers.<id>.models[] (model entries treated as agents)
- * - fallback: any top-level entries that look like agents
+ *
+ * OpenClaw native format:
+ *   - config.agents.list[] (array of agent objects with id, default, workspace, skills)
+ *   - config.agents.defaults (default settings for all agents)
+ *   - config.agent.model.primary (the primary model string, e.g. "anthropic/claude-sonnet-4-6")
+ *   - config.agent (single agent object)
+ *
+ * Legacy / compatible format:
+ *   - config.agents (array)
+ *   - config.models.providers.<id>.models[]
+ *   - fallback: any top-level entries that look like agents
  */
 function extractAgentsFromConfig(config: Record<string, unknown>): Array<Record<string, unknown>> {
   const agents: Array<Record<string, unknown>> = [];
 
-  // Try config.agents as array
-  const agentsVal = config.agents;
-  if (Array.isArray(agentsVal)) {
-    for (const a of agentsVal) {
+  // ── OpenClaw native: config.agents.list[] ──
+  const agentsObj = config.agents;
+  if (typeof agentsObj === "object" && agentsObj !== null && !Array.isArray(agentsObj)) {
+    const agentsRecord = agentsObj as Record<string, unknown>;
+    // Add defaults info if present
+    if (typeof agentsRecord.defaults === "object" && agentsRecord.defaults !== null) {
+      agents.push({
+        _source: "agents-defaults",
+        name: "(Defaults)",
+        ...agentsRecord.defaults as Record<string, unknown>,
+      });
+    }
+    // Add list entries
+    const listArr = agentsRecord.list;
+    if (Array.isArray(listArr)) {
+      for (const a of listArr) {
+        if (typeof a === "object" && a !== null) {
+          agents.push({
+            _source: "agents-list",
+            ...a as Record<string, unknown>,
+          });
+        }
+      }
+    }
+  }
+
+  // ── Legacy: config.agents as array ──
+  if (agents.length === 0 && Array.isArray(config.agents)) {
+    for (const a of config.agents) {
       if (typeof a === "object" && a !== null) {
         agents.push(a as Record<string, unknown>);
       }
     }
   }
 
-  // Try config.agent as single object
+  // ── OpenClaw: config.agent (single object) — extract primary model ──
   const agentVal = config.agent;
   if (typeof agentVal === "object" && agentVal !== null && !Array.isArray(agentVal)) {
-    agents.unshift(agentVal as Record<string, unknown>);
+    const agentRecord = agentVal as Record<string, unknown>;
+    // If the agent object has model info, add it as the primary agent
+    if (agentRecord.model) {
+      const existingPrimary = agents.find((a) => (a.default === true) || (a.isDefault === true));
+      if (!existingPrimary) {
+        agents.unshift({
+          _source: "agent-primary",
+          name: "Primary Agent",
+          default: true,
+          ...agentRecord,
+        });
+      }
+    } else if (agents.length === 0) {
+      agents.unshift({
+        _source: "agent-single",
+        ...agentRecord,
+      });
+    }
   }
 
-  // Extract from models.providers.<providerId>.models[] structure
-  // This handles configs like: { "models": { "providers": { "modelscope": { "models": [...] } } } }
+  // ── Extract from models.providers.<providerId>.models[] structure ──
   const modelsSection = config.models as Record<string, unknown> | undefined;
   const defaultModel = (modelsSection?.defaultModel as string) || "";
   if (modelsSection && typeof modelsSection === "object") {
@@ -150,7 +215,6 @@ function extractAgentsFromConfig(config: Record<string, unknown>): Array<Record<
             const m = modelsArr[mi];
             if (typeof m === "object" && m !== null) {
               const mObj = m as Record<string, unknown>;
-              // Each model entry becomes an "agent"
               const agentEntry: Record<string, unknown> = {
                 _source: "provider-model",
                 _providerId: providerId,
@@ -170,7 +234,7 @@ function extractAgentsFromConfig(config: Record<string, unknown>): Array<Record<
     }
   }
 
-  // If no agents found via specific keys, look for any top-level entries that look like agents
+  // ── Fallback: any top-level entries that look like agents ──
   if (agents.length === 0) {
     for (const [key, val] of Object.entries(config)) {
       if (typeof val === "object" && val !== null && !Array.isArray(val)) {
@@ -187,7 +251,18 @@ function extractAgentsFromConfig(config: Record<string, unknown>): Array<Record<
 
 /**
  * Get model provider config status.
- * Checks multiple locations: config.providers.<id>, config.<id>, config.models.providers.<id>
+ * Supports multiple config formats:
+ *
+ * OpenClaw native:
+ *   - config.agent.model.primary (e.g. "anthropic/claude-sonnet-4-6")
+ *   - config.auth.profiles (API key authentication profiles)
+ *   - config.env (environment variables for API keys)
+ *
+ * Legacy / compatible:
+ *   - config.providers.<id>
+ *   - config.models.providers.<id>
+ *   - config.<id> (top-level provider keys)
+ *
  * Handles both single-model (provider.model) and multi-model (provider.models[]) structures.
  */
 function getModelProviders(config: Record<string, unknown>) {
@@ -197,21 +272,109 @@ function getModelProviders(config: Record<string, unknown>) {
     const model = config.model as Record<string, unknown> | undefined;
     if (model?.providers) providersSection = model.providers as Record<string, unknown>;
   }
-  // Also try config.models.providers (new structure)
+  // Also try config.models.providers
   if (!providersSection || typeof providersSection !== "object") {
     const models = config.models as Record<string, unknown> | undefined;
     if (models?.providers) providersSection = models.providers as Record<string, unknown>;
   }
 
-  // Read defaultModel from config.models.defaultModel
+  // Read defaultModel from config.models.defaultModel or config.agent.model.primary
   const modelsSection = config.models as Record<string, unknown> | undefined;
-  const defaultModel = (modelsSection?.defaultModel as string) || "";
+  let defaultModel = (modelsSection?.defaultModel as string) || "";
+
+  // ── OpenClaw native: parse agent.model.primary ──
+  const agentObj = config.agent as Record<string, unknown> | undefined;
+  const agentModel = agentObj?.model as Record<string, unknown> | string | undefined;
+  if (typeof agentModel === "string" && !defaultModel) {
+    // Format: "provider/model-id" e.g. "anthropic/claude-sonnet-4-6"
+    defaultModel = agentModel;
+  } else if (typeof agentModel === "object" && agentModel) {
+    if (!defaultModel) defaultModel = (agentModel.primary as string) || "";
+  }
+
+  // ── OpenClaw native: extract auth profiles ──
+  const authProfiles: Record<string, { provider: string; mode: string }> = {};
+  const authObj = config.auth as Record<string, unknown> | undefined;
+  if (authObj && typeof authObj === "object") {
+    const profiles = authObj.profiles as Record<string, unknown> | undefined;
+    if (profiles && typeof profiles === "object") {
+      for (const [profileKey, profileVal] of Object.entries(profiles)) {
+        if (typeof profileVal !== "object" || profileVal === null) continue;
+        const pv = profileVal as Record<string, unknown>;
+        authProfiles[profileKey] = {
+          provider: (pv.provider as string) || "",
+          mode: (pv.mode as string) || "",
+        };
+      }
+    }
+  }
+
+  // ── OpenClaw native: extract env vars for API keys ──
+  const envVars: Record<string, string> = {};
+  const envObj = config.env as Record<string, unknown> | undefined;
+  if (envObj && typeof envObj === "object") {
+    const vars = envObj.vars as Record<string, unknown> | undefined;
+    if (vars && typeof vars === "object") {
+      for (const [key, val] of Object.entries(vars)) {
+        if (typeof val === "string") {
+          envVars[key] = val;
+        }
+      }
+    }
+    // Also top-level keys in env that look like API key references
+    for (const [key, val] of Object.entries(envObj)) {
+      if (key === "vars" || key === "shellEnv") continue;
+      if (typeof val === "string" && (key.includes("API_KEY") || key.includes("_KEY") || key.toLowerCase().includes("apikey"))) {
+        envVars[key] = val;
+      }
+    }
+  }
 
   // --- Built-in providers ---
-  const providers = MODEL_PROVIDERS.map((p) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const providers: any[] = MODEL_PROVIDERS.map((p) => {
     const pc = (providersSection?.[p.configKey] ?? config[p.configKey]) as Record<string, unknown> | undefined;
-    const apiKey = (pc?.apiKey as string) || "";
-    const singleModelId = (pc?.model as string) || (pc?.defaultModel as string) || "";
+    let apiKey = (pc?.apiKey as string) || "";
+
+    // Check OpenClaw auth profiles for matching provider API key
+    if (!apiKey) {
+      for (const [profileKey, profile] of Object.entries(authProfiles)) {
+        if (profile.provider === p.configKey && profile.mode === "api_key") {
+          // Auth profiles reference secrets stored in auth-profiles.json, not direct keys
+          // Just note that a profile exists
+          apiKey = "__auth_profile__";
+        }
+      }
+    }
+
+    // Check OpenClaw env vars for matching provider API keys
+    if (apiKey === "" || apiKey === "__auth_profile__") {
+      for (const [envKey, envVal] of Object.entries(envVars)) {
+        if (
+          envKey.toUpperCase().includes(p.configKey.toUpperCase()) ||
+          (p.configKey === "openai" && envKey.toUpperCase().includes("OPENAI")) ||
+          (p.configKey === "anthropic" && envKey.toUpperCase().includes("ANTHROPIC")) ||
+          (p.configKey === "google" && envKey.toUpperCase().includes("GOOGLE")) ||
+          (p.configKey === "groq" && envKey.toUpperCase().includes("GROQ")) ||
+          (p.configKey === "deepseek" && envKey.toUpperCase().includes("DEEPSEEK")) ||
+          (p.configKey === "openrouter" && envKey.toUpperCase().includes("OPENROUTER")) ||
+          (p.configKey === "zhipu" && envKey.toUpperCase().includes("ZHIPU")) ||
+          (p.configKey === "qwen" && envKey.toUpperCase().includes("QWEN")) ||
+          (p.configKey === "moonshot" && envKey.toUpperCase().includes("MOONSHOT")) ||
+          (p.configKey === "doubao" && envKey.toUpperCase().includes("DOUBAO")) ||
+          (p.configKey === "stepfun" && envKey.toUpperCase().includes("STEPFUN"))
+        ) {
+          apiKey = envVal;
+          break;
+        }
+      }
+    }
+
+    // If defaultModel is set (e.g., "anthropic/claude-sonnet-4-6"), check if this provider matches
+    let singleModelId = (pc?.model as string) || (pc?.defaultModel as string) || "";
+    if (!singleModelId && defaultModel && defaultModel.startsWith(p.configKey + "/")) {
+      singleModelId = defaultModel.split("/").slice(1).join("/");
+    }
     const baseUrl = (pc?.baseUrl as string) || (pc?.baseURL as string) || "";
 
     // Handle multi-model array: provider.models[]
@@ -275,8 +438,7 @@ function getModelProviders(config: Record<string, unknown>) {
         models: cModelsList,
         modelCount: cModelsList.length,
         isCustom: true,
-        customIndex: i,
-      });
+      } as Record<string, unknown>);
     }
   }
 
@@ -751,7 +913,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
               const found = (pc.models as Array<Record<string, unknown>>).find((m) => m.id === defaultModel);
               if (found) {
                 defaultProvider = provId;
-                defaultModelName = found.name || found.id || "";
+                defaultModelName = (found.name as string) || (found.id as string) || "";
                 break;
               }
             }

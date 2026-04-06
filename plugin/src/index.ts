@@ -189,9 +189,10 @@ const plugin = definePluginEntry({
       store.cleanupExpiredOfflineMessages();
     }, 60_000);
 
-    // Note: Reconnection is handled internally by ServerClient with exponential backoff.
-    // No need for a separate reconnect interval — ServerClient will auto-reconnect
-    // with delays: 1s → 2s → 4s → 8s → 16s → 32s → 60s (max)
+    // Note: Reconnection is handled internally by ServerClient.
+    // Phase 1: Retries aggressively for ~1 minute (exponential backoff: 1s → 2s → 4s → ... → 60s max).
+    // Phase 2: After 1 minute of failed attempts, enters hourly check mode (one retry per hour).
+    // If a retry succeeds, normal operation resumes immediately.
 
     // ── Register Tool: chat-friend ─────────────────────────────────
     api.registerTool({
