@@ -331,7 +331,8 @@ function getModelProviders(config: Record<string, unknown>) {
   }
 
   // --- Built-in providers ---
-  const providers = MODEL_PROVIDERS.map((p) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const providers: any[] = MODEL_PROVIDERS.map((p) => {
     const pc = (providersSection?.[p.configKey] ?? config[p.configKey]) as Record<string, unknown> | undefined;
     let apiKey = (pc?.apiKey as string) || "";
 
@@ -437,8 +438,7 @@ function getModelProviders(config: Record<string, unknown>) {
         models: cModelsList,
         modelCount: cModelsList.length,
         isCustom: true,
-        customIndex: i,
-      });
+      } as Record<string, unknown>);
     }
   }
 
@@ -913,7 +913,7 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
               const found = (pc.models as Array<Record<string, unknown>>).find((m) => m.id === defaultModel);
               if (found) {
                 defaultProvider = provId;
-                defaultModelName = found.name || found.id || "";
+                defaultModelName = (found.name as string) || (found.id as string) || "";
                 break;
               }
             }
