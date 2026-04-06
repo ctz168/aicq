@@ -3,7 +3,8 @@
  * with the AICQ relay server.
  *
  * Features:
- *   - Exponential backoff reconnection (1s → 2s → 4s → ... → 60s max)
+ *   - Initial connection burst: retries for 1 minute, then stops
+ *   - Hourly reconnection check after initial burst fails
  *   - Connection state tracking (online/offline/reconnecting)
  *   - Offline message flush on reconnection
  *   - Configurable timeouts
@@ -32,6 +33,10 @@ export interface ServerClientConfig {
   heartbeatIntervalMs?: number;
   /** HTTP request timeout in ms (default: 30000). */
   requestTimeoutMs?: number;
+  /** How long (ms) to keep retrying before giving up (default: 60000 = 1 min). */
+  initialRetryWindowMs?: number;
+  /** How often (ms) to check connection after giving up (default: 3600000 = 1 hour). */
+  hourlyCheckIntervalMs?: number;
 }
 
 const DEFAULT_CONFIG: Required<ServerClientConfig> = {
@@ -40,6 +45,8 @@ const DEFAULT_CONFIG: Required<ServerClientConfig> = {
   reconnectBackoffFactor: 2,
   heartbeatIntervalMs: 30000,
   requestTimeoutMs: 30000,
+  initialRetryWindowMs: 60000,
+  hourlyCheckIntervalMs: 3600000,
 };
 
 export class ServerClient {
@@ -63,6 +70,15 @@ export class ServerClient {
   private reconnectDelay: number = DEFAULT_CONFIG.initialReconnectDelay;
   private reconnectAttempts: number = 0;
 
+  /** Timestamp when initial connection burst started. */
+  private connectStartTimestamp: number = 0;
+
+  /** Whether we are in the hourly check mode (past initial retry window). */
+  private hourlyCheckMode: boolean = false;
+
+  /** Timer for hourly reconnection check. */
+  private hourlyCheckTimer: NodeJS.Timeout | null = null;
+
   /** Callbacks for connection state changes. */
   private stateChangeCallbacks: ConnectionStateCallback[] = [];
 
@@ -74,6 +90,14 @@ export class ServerClient {
     this.store = store;
     this.logger = logger;
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /**
+   * Check whether the initial retry window has elapsed.
+   */
+  private isInitialRetryWindowExpired(): boolean {
+    if (this.connectStartTimestamp === 0) return false;
+    return (Date.now() - this.connectStartTimestamp) >= this.config.initialRetryWindowMs;
   }
 
   /**
@@ -152,12 +176,19 @@ export class ServerClient {
 
   /**
    * Connect to the server via WebSocket and start heartbeat.
+   * Strategy: retry aggressively for `initialRetryWindowMs` (default 1 minute),
+   * then stop and switch to hourly checks.
    */
   connectWebSocket(): void {
     // Prevent duplicate connections
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       this.logger.debug("[Server] WebSocket already connecting/connected");
       return;
+    }
+
+    // Record start time on very first attempt
+    if (this.connectStartTimestamp === 0 && !this.hourlyCheckMode) {
+      this.connectStartTimestamp = Date.now();
     }
 
     // Build WebSocket URL
@@ -198,6 +229,9 @@ export class ServerClient {
       this.wsConnected = true;
       this.reconnectDelay = this.config.initialReconnectDelay;
       this.reconnectAttempts = 0;
+      this.connectStartTimestamp = 0;
+      this.hourlyCheckMode = false;
+      this.cancelHourlyCheck();
       this.setConnectionState("online");
       this.logger.info("[Server] WebSocket connected");
 
@@ -238,7 +272,7 @@ export class ServerClient {
   }
 
   /**
-   * Disconnect the WebSocket and stop reconnection.
+   * Disconnect the WebSocket and stop all reconnection attempts.
    */
   disconnectWebSocket(): void {
     this.stopHeartbeat();
@@ -248,6 +282,7 @@ export class ServerClient {
       this.ws = null;
     }
     this.wsConnected = false;
+    this.connectStartTimestamp = 0;
     this.setConnectionState("offline");
   }
 
@@ -281,19 +316,40 @@ export class ServerClient {
   }
 
   // ----------------------------------------------------------------
-  //  Exponential backoff reconnection
+  //  Reconnection: try for 1 min, then hourly
   // ----------------------------------------------------------------
 
   /**
-   * Schedule a reconnection attempt with exponential backoff.
+   * Schedule a reconnection attempt.
    *
-   * Delay formula: min(initialDelay * backoffFactor^attempts, maxDelay)
-   * With jitter: delay * (0.75 + Math.random() * 0.5) to avoid thundering herd
+   * Phase 1 (initial retry window, default 1 minute):
+   *   Retries with exponential backoff (1s → 2s → 4s → ... → 60s max).
+   *   Once the window expires, stops retrying and switches to hourly checks.
+   *
+   * Phase 2 (hourly check mode):
+   *   After the initial burst fails, sets up a timer that retries once
+   *   every hour. If a retry succeeds, hourly mode is cancelled and
+   *   normal operation resumes.
    */
   private scheduleReconnect(): void {
+    // If we are in hourly check mode, do NOT schedule a quick reconnect
+    if (this.hourlyCheckMode) {
+      this.logger.info("[Server] Hourly check mode active — next attempt scheduled automatically");
+      return;
+    }
+
+    // Check if the initial retry window has expired
+    if (this.isInitialRetryWindowExpired()) {
+      this.logger.warn(
+        `[Server] Initial retry window (${this.config.initialRetryWindowMs / 1000}s) expired after ${this.reconnectAttempts} attempts. Switching to hourly check mode.`,
+      );
+      this.enterHourlyCheckMode();
+      return;
+    }
+
     if (this.wsReconnectTimer) return;
 
-    // Add jitter to prevent thundering herd
+    // Exponential backoff with jitter (Phase 1)
     const jitter = 0.75 + Math.random() * 0.5;
     const delay = Math.min(
       this.reconnectDelay * jitter,
@@ -321,6 +377,44 @@ export class ServerClient {
   }
 
   /**
+   * Enter hourly check mode: stop aggressive retries,
+   * set up a single timer that fires once per hour.
+   */
+  private enterHourlyCheckMode(): void {
+    this.hourlyCheckMode = true;
+    this.reconnectDelay = this.config.initialReconnectDelay;
+    this.reconnectAttempts = 0;
+
+    // Cancel any pending quick reconnect
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+
+    this.setConnectionState("offline");
+    this.logger.info(
+      `[Server] Entering hourly check mode — will retry every ${this.config.hourlyCheckIntervalMs / 60000} minutes`,
+    );
+
+    this.hourlyCheckTimer = setTimeout(() => {
+      this.hourlyCheckTimer = null;
+      this.logger.info("[Server] Hourly check: attempting to reconnect...");
+      this.connectWebSocket();
+    }, this.config.hourlyCheckIntervalMs);
+  }
+
+  /**
+   * Cancel the hourly check timer.
+   */
+  private cancelHourlyCheck(): void {
+    if (this.hourlyCheckTimer) {
+      clearTimeout(this.hourlyCheckTimer);
+      this.hourlyCheckTimer = null;
+    }
+    this.hourlyCheckMode = false;
+  }
+
+  /**
    * Cancel a pending reconnection.
    */
   private cancelReconnect(): void {
@@ -328,8 +422,10 @@ export class ServerClient {
       clearTimeout(this.wsReconnectTimer);
       this.wsReconnectTimer = null;
     }
+    this.cancelHourlyCheck();
     this.reconnectDelay = this.config.initialReconnectDelay;
     this.reconnectAttempts = 0;
+    this.connectStartTimestamp = 0;
   }
 
   // ----------------------------------------------------------------
