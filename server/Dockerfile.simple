@@ -1,0 +1,27 @@
+# ─── Simplified Dockerfile for Server only ─────────────────────────────
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy shared crypto lib
+COPY shared/crypto/package.json shared/crypto/tsconfig.json shared/crypto/
+COPY shared/crypto/src/ shared/crypto/src/
+
+# Copy server
+COPY server/package.json server/tsconfig.json server/
+COPY server/src/ server/src/
+
+# Install dependencies and build
+RUN cd shared/crypto && npm install && npm run build
+RUN cd server && npm install && npm run build
+
+# Environment
+ENV NODE_ENV=production
+ENV PORT=61018
+
+# Expose port
+EXPOSE 61018
+
+# Run server
+WORKDIR /app/server
+CMD ["node", "dist/index.js"]
