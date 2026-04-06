@@ -14,7 +14,6 @@ COPY server/src/ server/src/
 # Copy admin (Next.js standalone)
 COPY server/admin/package.json server/admin/tsconfig.json server/admin/next.config.ts server/admin/postcss.config.mjs server/admin/
 COPY server/admin/src/ server/admin/src/
-COPY server/admin/public/ server/admin/public/
 
 # Copy web UI
 COPY client/web/package.json client/web/tsconfig.json client/web/vite.config.ts client/web/

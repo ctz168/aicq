@@ -1,55 +1,23 @@
 services:
-  clickhouse:
-    image: clickhouse/clickhouse-server:24-alpine
-    container_name: aicq-clickhouse
-    restart: unless-stopped
-    ports:
-      - "8123:8123"   # HTTP interface
-      - "9000:9000"   # Native TCP interface
-    environment:
-      CLICKHOUSE_DB: aicq
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: aicq123
-    volumes:
-      - clickhouse-data:/var/lib/clickhouse
-      - clickhouse-logs:/var/log/clickhouse-server
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8123/ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   aicq:
     build:
       context: ../..
       dockerfile: server/Dockerfile
     container_name: aicq
     restart: unless-stopped
-    depends_on:
-      clickhouse:
-        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
     environment:
       - NODE_ENV=production
       - PORT=61018
-      - DOMAIN=localhost
-      - JWT_SECRET=change-this-to-a-secure-random-string-at-least-32-chars
+      - DOMAIN=aicq.online
+      - JWT_SECRET=O3mzIMaj67WCi6cJ1NH8gREf7_5PPIU7UhgYoNlSoMp1bY_l7Gca6rXNJJ6cRHiF
       - AICQ_SERVER_URL=http://localhost:61018
       - MAX_FRIENDS=500
       - TEMP_NUMBER_TTL_HOURS=24
-      - CLICKHOUSE_URL=http://clickhouse:8123
-      - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=aicq123
-      - CLICKHOUSE_DATABASE=aicq
       - MAX_HTTP_CONNECTIONS=10000
       - MAX_WS_CONNECTIONS=20000
-    deploy:
-      resources:
-        limits:
-          memory: 4G
     volumes:
       - aicq-data:/app/data
       - aicq-ssl:/etc/nginx/ssl
@@ -60,7 +28,5 @@ services:
       retries: 3
 
 volumes:
-  clickhouse-data:
-  clickhouse-logs:
   aicq-data:
   aicq-ssl:
