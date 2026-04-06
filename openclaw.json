@@ -1,0 +1,88 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": ".aicq-data",
+      "model": "openai/gpt-4o",
+      "maxConcurrent": 3,
+      "compactionMode": "rolling",
+      "thinkingDefault": false,
+      "subagentMaxConcurrent": 2
+    },
+    "list": [
+      {
+        "id": "assistant",
+        "name": "AICQ Assistant",
+        "default": true,
+        "model": "openai/gpt-4o",
+        "systemPrompt": "You are an encrypted chat assistant. Help users communicate securely.",
+        "workspace": ".aicq-data",
+        "tools": ["chat-friend", "chat-send", "chat-export-key"],
+        "enabled": true
+      },
+      {
+        "id": "translator",
+        "name": "Translator Agent",
+        "model": "anthropic/claude-sonnet-4-20250514",
+        "systemPrompt": "You are a translation assistant. Translate messages between languages accurately.",
+        "workspace": ".aicq-data",
+        "tools": ["chat-send"],
+        "enabled": true
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "type": "acp",
+      "match": { "peer": { "id": "default" } },
+      "agentId": "assistant"
+    }
+  ],
+  "auth": {
+    "profiles": {
+      "openai": {
+        "provider": "openai",
+        "mode": "api_key"
+      },
+      "anthropic": {
+        "provider": "anthropic",
+        "mode": "api_key"
+      }
+    }
+  },
+  "env": {
+    "vars": {
+      "OPENAI_API_KEY": "",
+      "ANTHROPIC_API_KEY": ""
+    }
+  },
+  "models": {
+    "defaultModel": "openai/gpt-4o",
+    "providers": {
+      "openai": {
+        "apiKey": "",
+        "baseUrl": "https://api.openai.com/v1",
+        "models": [
+          { "id": "gpt-4o", "name": "GPT-4o" },
+          { "id": "gpt-4o-mini", "name": "GPT-4o Mini" },
+          { "id": "gpt-4-turbo", "name": "GPT-4 Turbo" }
+        ]
+      },
+      "anthropic": {
+        "apiKey": "",
+        "baseUrl": "https://api.anthropic.com",
+        "models": [
+          { "id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4" },
+          { "id": "claude-opus-4-20250514", "name": "Claude Opus 4" }
+        ]
+      },
+      "deepseek": {
+        "apiKey": "",
+        "baseUrl": "https://api.deepseek.com/v1",
+        "models": [
+          { "id": "deepseek-chat", "name": "DeepSeek V3" },
+          { "id": "deepseek-reasoner", "name": "DeepSeek R1" }
+        ]
+      }
+    }
+  }
+}
