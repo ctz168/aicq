@@ -1674,6 +1674,212 @@ export function createManagementHandler(ctx: ManagementContext): (req: Req, res:
         });
       }
 
+      // ── POST /api/backup/local - Backup config to local file ──
+      if (apiPath === "/backup/local" && method === "POST") {
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+
+        const configDir = path.dirname(result.configPath);
+        const configBasename = path.basename(result.configPath, ".json");
+        const now = new Date();
+        const ts = now.getFullYear().toString() +
+          String(now.getMonth() + 1).padStart(2, "0") +
+          String(now.getDate()).padStart(2, "0") + "-" +
+          String(now.getHours()).padStart(2, "0") +
+          String(now.getMinutes()).padStart(2, "0") +
+          String(now.getSeconds()).padStart(2, "0");
+        const backupFilename = configBasename + "-backup-" + ts + ".json";
+        const backupPath = path.join(configDir, backupFilename);
+
+        // Build backup payload including plugin store data if available
+        const backupData: Record<string, unknown> = {
+          ...result.config,
+          _backupMeta: {
+            source: result.configPath,
+            timestamp: now.toISOString(),
+            version: "1.2.0",
+          },
+        };
+
+        // Try to include plugin store data
+        const storePath = path.join(configDir, ".aicq-data", "plugin-store.json");
+        try {
+          if (fs.existsSync(storePath)) {
+            const storeRaw = fs.readFileSync(storePath, "utf-8");
+            backupData._pluginStore = JSON.parse(storeRaw);
+            logger.info("[API] Plugin store data included in backup");
+          }
+        } catch {
+          // Plugin store not available — non-fatal
+        }
+
+        try {
+          const backupJson = JSON.stringify(backupData, null, 2);
+          fs.writeFileSync(backupPath, backupJson, "utf-8");
+          const stats = fs.statSync(backupPath);
+          logger.info("[API] Local backup created: " + backupPath + " (" + stats.size + " bytes)");
+          return json(res, {
+            success: true,
+            backupPath,
+            backupSize: stats.size,
+            timestamp: now.toISOString(),
+          });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error("[API] Backup failed: " + msg);
+          return json(res, { success: false, message: "Failed to create backup: " + msg }, 500);
+        }
+      }
+
+      // ── POST /api/backup/import - Import/restore config from a backup file ──
+      if (apiPath === "/backup/import" && method === "POST") {
+        const body = await readBody(req);
+        const configPath = body.configPath as string;
+        if (!configPath) return json(res, { success: false, message: "Missing configPath in request body" }, 400);
+
+        // Validate the backup file exists
+        if (!fs.existsSync(configPath)) {
+          return json(res, { success: false, message: "Backup file not found: " + configPath }, 400);
+        }
+
+        // Read and validate the backup file
+        try {
+          const raw = fs.readFileSync(configPath, "utf-8");
+          const backupData = JSON.parse(raw) as Record<string, unknown>;
+
+          // Basic structure validation — should have at least one known config key
+          const knownKeys = ["agents", "bindings", "auth", "env", "models", "agent"];
+          const hasValidStructure = knownKeys.some((k) => k in backupData) || ("_backupMeta" in backupData);
+          if (!hasValidStructure) {
+            return json(res, { success: false, message: "Invalid backup file: does not contain a recognized config structure" }, 400);
+          }
+
+          // Strip backup metadata before writing
+          const cleanConfig = { ...backupData };
+          delete cleanConfig._backupMeta;
+          delete cleanConfig._pluginStore;
+
+          // Write to the current config location
+          const currentConfigPath = findConfigPath();
+          if (!currentConfigPath) {
+            return json(res, { success: false, message: "No active config file found to overwrite" }, 400);
+          }
+
+          fs.writeFileSync(currentConfigPath, JSON.stringify(cleanConfig, null, 2), "utf-8");
+          logger.info("[API] Config restored from backup: " + configPath + " -> " + currentConfigPath);
+          return json(res, { success: true, message: "Config restored from " + path.basename(configPath) });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error("[API] Import failed: " + msg);
+          return json(res, { success: false, message: "Failed to import backup: " + msg }, 500);
+        }
+      }
+
+      // ── POST /api/backup/list - List available local backups ──
+      if (apiPath === "/backup/list" && method === "POST") {
+        const configPath = findConfigPath();
+        if (!configPath) return json(res, { backups: [], message: "No config file found" });
+
+        const configDir = path.dirname(configPath);
+        const backups: Array<{ filename: string; path: string; size: number; modified: string }> = [];
+
+        try {
+          const files = fs.readdirSync(configDir);
+          for (const file of files) {
+            if (file.match(/-backup-\d{8}-\d{6}\.json$/)) {
+              const filePath = path.join(configDir, file);
+              try {
+                const stats = fs.statSync(filePath);
+                backups.push({
+                  filename: file,
+                  path: filePath,
+                  size: stats.size,
+                  modified: stats.mtime.toISOString(),
+                });
+              } catch {
+                // Skip files we can't stat
+              }
+            }
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn("[API] Failed to list backups: " + msg);
+        }
+
+        // Sort newest first
+        backups.sort((a, b) => b.modified.localeCompare(a.modified));
+        logger.info("[API] Listed " + backups.length + " local backup(s)");
+        return json(res, { backups });
+      }
+
+      // ── POST /api/backup/export - Export config as downloadable JSON ──
+      if (apiPath === "/backup/export" && method === "POST") {
+        const result = readConfig();
+        if (!result) return json(res, { success: false, message: "No config file found" }, 400);
+
+        try {
+          const configJson = JSON.stringify(result.config, null, 2);
+          const now = new Date();
+          const ts = now.getFullYear().toString() +
+            String(now.getMonth() + 1).padStart(2, "0") +
+            String(now.getDate()).padStart(2, "0") + "-" +
+            String(now.getHours()).padStart(2, "0") +
+            String(now.getMinutes()).padStart(2, "0") +
+            String(now.getSeconds()).padStart(2, "0");
+          const downloadFilename = "aicq-config-backup-" + ts + ".json";
+
+          corsHeaders(res);
+          res.setHeader("Content-Type", "application/octet-stream");
+          res.setHeader("Content-Disposition", "attachment; filename=\"" + downloadFilename + "\"");
+          res.end(configJson);
+          logger.info("[API] Config exported as download: " + downloadFilename);
+          return;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error("[API] Export failed: " + msg);
+          return json(res, { success: false, message: "Export failed: " + msg }, 500);
+        }
+      }
+
+      // ── POST /api/backup/google-drive-auth - Initiate Google OAuth ──
+      if (apiPath === "/backup/google-drive-auth" && method === "POST") {
+        const redirectUri = encodeURIComponent("http://localhost:3000/api/backup/google-drive/callback");
+        const scope = encodeURIComponent("https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile");
+        const authUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
+          "?client_id=YOUR_CLIENT_ID" +
+          "&redirect_uri=" + redirectUri +
+          "&response_type=code" +
+          "&scope=" + scope +
+          "&access_type=offline" +
+          "&prompt=consent";
+
+        logger.info("[API] Google Drive OAuth initiated");
+        return json(res, {
+          requiresAuth: true,
+          authUrl,
+          instructions: "Google Drive backup requires OAuth2 setup. Replace YOUR_CLIENT_ID with your Google API client ID. " +
+            "Create credentials at https://console.cloud.google.com/apis/credentials and enable the Google Drive API.",
+        });
+      }
+
+      // ── POST /api/backup/google-drive - Upload to Google Drive ──
+      if (apiPath === "/backup/google-drive" && method === "POST") {
+        logger.info("[API] Google Drive backup requested (not yet configured)");
+        return json(res, {
+          error: "Google Drive backup requires OAuth2 setup. Please configure Google API credentials first.",
+          setup: "See https://console.cloud.google.com/apis/credentials",
+        }, 501);
+      }
+
+      // ── POST /api/backup/aicq-cloud - Backup to AICQ cloud ──
+      if (apiPath === "/backup/aicq-cloud" && method === "POST") {
+        logger.info("[API] AICQ cloud backup requested (not yet available)");
+        return json(res, {
+          error: "AICQ cloud backup is not yet available. Please register an AICQ account first.",
+          registerUrl: "https://aicq.online/register",
+        }, 501);
+      }
+
       // ── Fallback ──
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Not found: " + apiPath }));

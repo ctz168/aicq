@@ -682,9 +682,48 @@ const _T = {
   tab_agents: { zh: '📋 智能体', en: '📋 Agents' },
   tab_bindings: { zh: '🔗 绑定', en: '🔗 Bindings' },
   tab_channels: { zh: '📡 频道', en: '📡 Channels' },
+  // Backup
+  nav_backup: { zh: '备份', en: 'Backup' },
+  backup_config: { zh: '💾 备份配置', en: '💾 Backup Configuration' },
+  backup_desc: { zh: '备份和恢复您的AICQ插件配置。支持本地备份、文件导入、Google Drive云端备份和AICQ云端备份。', en: 'Backup and restore your AICQ plugin configuration. Supports local backup, file import, Google Drive cloud backup, and AICQ cloud backup.' },
+  backup_local: { zh: '💾 备份到本地', en: '💾 Backup to Local' },
+  backup_local_desc: { zh: '创建一个带时间戳的配置文件备份副本，保存在配置文件所在目录中。', en: 'Create a timestamped backup copy of the configuration file, saved in the config directory.' },
+  backup_local_btn: { zh: '立即备份', en: 'Backup Now' },
+  backup_local_success: { zh: '本地备份成功！', en: 'Local backup created successfully!' },
+  backup_local_fail: { zh: '本地备份失败', en: 'Local backup failed' },
+  backup_import: { zh: '📂 导入配置', en: '📂 Import Configuration' },
+  backup_import_desc: { zh: '从备份文件恢复配置。将覆盖当前配置。', en: 'Restore configuration from a backup file. This will overwrite the current configuration.' },
+  backup_import_select: { zh: '选择备份文件', en: 'Select Backup File' },
+  backup_import_btn: { zh: '恢复配置', en: 'Restore Config' },
+  backup_import_success: { zh: '配置已从备份恢复！', en: 'Configuration restored from backup!' },
+  backup_import_fail: { zh: '配置恢复失败', en: 'Configuration restore failed' },
+  backup_import_confirm: { zh: '确定要从备份恢复配置吗？这将覆盖当前配置。', en: 'Restore from backup? This will overwrite the current configuration.' },
+  backup_list: { zh: '📋 备份列表', en: '📋 Backup List' },
+  backup_list_desc: { zh: '查看所有本地备份文件。', en: 'View all local backup files.' },
+  backup_list_empty: { zh: '暂无本地备份', en: 'No local backups found' },
+  backup_delete: { zh: '删除', en: 'Delete' },
+  backup_delete_confirm: { zh: '确定删除此备份文件吗？', en: 'Delete this backup file?' },
+  backup_deleted: { zh: '备份已删除', en: 'Backup deleted' },
+  backup_google: { zh: '☁️ 备份到谷歌硬盘', en: '☁️ Backup to Google Drive' },
+  backup_google_desc: { zh: '将配置备份到Google Drive云端存储。需要登录Google账号授权。', en: 'Backup configuration to Google Drive cloud storage. Requires Google account login authorization.' },
+  backup_google_btn: { zh: '连接Google账号', en: 'Connect Google Account' },
+  backup_google_login: { zh: '登录Google账号', en: 'Login to Google' },
+  backup_google_hint: { zh: '点击按钮跳转到Google授权页面，授权后即可使用云端备份功能。', en: 'Click the button to go to the Google authorization page. After authorization, cloud backup will be available.' },
+  backup_google_setup: { zh: '需要配置Google API凭据', en: 'Google API credentials required' },
+  backup_google_setup_desc: { zh: 'Google Drive备份功能需要配置Google Cloud项目API凭据。请参考 Google Cloud Console 文档设置。', en: 'Google Drive backup requires Google Cloud project API credentials. Please refer to Google Cloud Console documentation.' },
+  backup_google_setup_btn: { zh: '查看设置指南', en: 'View Setup Guide' },
+  backup_aicq: { zh: '🔗 备份到AICQ云端', en: '🔗 Backup to AICQ Cloud' },
+  backup_aicq_desc: { zh: '将配置备份到AICQ云端服务器。需要注册AICQ账号。', en: 'Backup configuration to AICQ cloud server. Requires an AICQ account.' },
+  backup_aicq_btn: { zh: '注册AICQ账号', en: 'Register AICQ Account' },
+  backup_aicq_hint: { zh: 'AICQ云端备份功能正在开发中。注册账号后将第一时间通知您。', en: 'AICQ cloud backup is under development. Register an account to be notified when available.' },
+  backup_aicq_coming: { zh: '即将上线', en: 'Coming Soon' },
+  backup_export: { zh: '📤 导出配置文件', en: '📤 Export Config File' },
+  backup_export_btn: { zh: '下载配置', en: 'Download Config' },
+  backup_export_fail: { zh: '导出失败', en: 'Export failed' },
+  size: { zh: '大小', en: 'Size' },
 };
 function t(key) { return (_T[key] && _T[key][_lang]) || key; }
-function translateStatic() { document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if (k && _T[k]) { el.textContent = _T[k][_lang] || el.textContent; } }); document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.getAttribute('data-i18n-ph'); if (k && _T[k]) { el.placeholder = _T[k][_lang] || el.placeholder; } }); }
+function translateStatic() { document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if (k && _T[k]) { el.textContent = _T[k][_lang] || el.textContent; } }); document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.getAttribute('data-i18n-ph'); if (k && _T[k]) { el.placeholder = _T[k][_lang] || el.placeholder; } }); document.querySelectorAll('[data-t]').forEach(el => { const k = el.getAttribute('data-t'); if (k && _T[k]) { el.textContent = _T[k][_lang] || el.textContent; } }); }
 
 // ── Globals ──
 const API = '/api';
@@ -806,6 +845,7 @@ function loadPage(page) {
     case 'models': loadModels(); break;
     case 'settings': loadSettings(); break;
     case 'openclaw': loadOpenClawConfig(); break;
+    case 'backup': loadBackup(); break;
   }
 }
 
@@ -2623,11 +2663,118 @@ async function saveOpenClawConfig() {
 }
 
 // ════════════════════════════════════════════════════════════
+// PAGE: Backup
+// ════════════════════════════════════════════════════════════
+async function loadBackup() {
+  // The backup page content is static HTML with data-t attributes,
+  // so we just need to trigger translation for any dynamic parts
+  translateStatic();
+}
+
+async function doBackupLocal() {
+  const btn = document.getElementById('btn-backup-local');
+  if (btn) { btn.disabled = true; btn.textContent = t('saving'); }
+  try {
+    const resp = await api('/backup/local', { method: 'POST', body: JSON.stringify({}) });
+    if (resp.success) {
+      toast(t('backup_local_success'), 'ok');
+      refreshBackupList();
+    } else {
+      toast(resp.error || t('backup_local_fail'), 'err');
+    }
+  } catch(e) {
+    toast(e.message || t('backup_local_fail'), 'err');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = t('backup_local_btn'); }
+}
+
+async function doExportConfig() {
+  const btn = document.getElementById('btn-backup-export');
+  if (btn) { btn.disabled = true; btn.textContent = t('saving'); }
+  try {
+    const resp = await fetch(API + '/backup/export', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    if (!resp.ok) throw new Error('Export failed');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.download = 'aicq-config-backup-' + ts + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Config exported!', 'ok');
+  } catch(e) {
+    toast(e.message || t('backup_export_fail'), 'err');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = t('backup_export_btn'); }
+}
+
+async function showBackupList() {
+  const card = document.getElementById('backup-list-card');
+  card.style.display = card.style.display === 'none' ? 'block' : 'none';
+  if (card.style.display === 'block') refreshBackupList();
+}
+
+async function refreshBackupList() {
+  const container = document.getElementById('backup-list-content');
+  try {
+    const resp = await api('/backup/list', { method: 'POST', body: JSON.stringify({}) });
+    const backups = resp.backups || [];
+    if (backups.length === 0) {
+      container.innerHTML = '<div class="empty"><div class="icon">📋</div><p>' + t('backup_list_empty') + '</p></div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>' + t('config_file_label') + '</th><th>' + t('size') + '</th><th>' + t('time') + '</th><th>' + t('actions') + '</th></tr></thead><tbody>';
+    for (const b of backups) {
+      const size = (b.size / 1024).toFixed(1) + ' KB';
+      const time = timeAgo(new Date(b.modified));
+      html += '<tr><td class="mono" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">' + escHtml(b.filename) + '</td><td>' + size + '</td><td>' + time + '</td><td class="actions-cell"><button class="btn btn-sm btn-ok" onclick="doImportBackup(\\'' + escHtml(b.path) + '\\')">' + t('backup_import_btn') + '</button></td></tr>';
+    }
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = '<div class="empty"><p>Failed to load backups</p></div>';
+  }
+}
+
+async function doImportBackup(backupPath) {
+  if (!confirm(t('backup_import_confirm'))) return;
+  try {
+    const resp = await api('/backup/import', { method: 'POST', body: JSON.stringify({ configPath: backupPath }) });
+    if (resp.success) {
+      toast(t('backup_import_success'), 'ok');
+      refreshBackupList();
+    } else {
+      toast(resp.error || t('backup_import_fail'), 'err');
+    }
+  } catch(e) {
+    toast(e.message || t('backup_import_fail'), 'err');
+  }
+}
+
+async function doGoogleAuth() {
+  try {
+    const resp = await api('/backup/google-drive-auth', { method: 'POST', body: JSON.stringify({}) });
+    if (resp.authUrl) {
+      window.open(resp.authUrl, '_blank');
+      toast(t('backup_google_login'), 'info');
+    } else {
+      toast(resp.error || t('backup_google_setup'), 'warn');
+    }
+  } catch(e) {
+    toast(e.message || t('backup_google_setup'), 'warn');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   $$('.nav-item').forEach(n => n.addEventListener('click', () => navigate(n.dataset.page)));
   $('.toggle-btn')?.addEventListener('click', toggleSidebar);
+  translateStatic();
 
   // Load dashboard
   navigate('dashboard');
@@ -2681,6 +2828,7 @@ const HTML = `<!DOCTYPE html>
       <div class="nav-group">
         <div class="nav-group-title">System</div>
         <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">Settings</span></div>
+        <div class="nav-item" data-page="backup"><span class="nav-icon">💾</span><span class="nav-label" data-t="nav_backup">Backup</span></div>
       </div>
       <div class="nav-group">
         <div class="nav-group-title">OpenClaw</div>
@@ -2730,6 +2878,92 @@ const HTML = `<!DOCTYPE html>
 
       <!-- OpenClaw Config -->
       <div class="page" id="page-openclaw"><div id="openclaw-content"></div></div>
+
+      <!-- Backup -->
+      <div class="page" id="page-backup">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title" data-t="backup_config"></div>
+          </div>
+          <div class="section-desc" data-t="backup_desc"></div>
+        </div>
+
+        <div class="stats-grid">
+          <!-- Local Backup -->
+          <div class="card" style="cursor:default">
+            <div class="stat-icon" style="background: var(--ok-bg);">💾</div>
+            <div class="stat-label" data-t="backup_local"></div>
+            <div class="stat-sub" data-t="backup_local_desc"></div>
+            <div style="margin-top: 12px;">
+              <button class="btn btn-ok" onclick="doBackupLocal()" id="btn-backup-local">
+                <span data-t="backup_local_btn"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Import Config -->
+          <div class="card" style="cursor:default">
+            <div class="stat-icon" style="background: var(--info-bg);">📂</div>
+            <div class="stat-label" data-t="backup_import"></div>
+            <div class="stat-sub" data-t="backup_import_desc"></div>
+            <div id="backup-import-area" style="margin-top: 12px;">
+              <button class="btn btn-primary" onclick="showBackupList()">
+                <span data-t="backup_import_select"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Google Drive -->
+          <div class="card" style="cursor:default">
+            <div class="stat-icon" style="background: rgba(66,133,244,.08);">☁️</div>
+            <div class="stat-label" data-t="backup_google"></div>
+            <div class="stat-sub" data-t="backup_google_desc"></div>
+            <div style="margin-top: 12px;">
+              <button class="btn btn-warn" onclick="doGoogleAuth()">
+                <span data-t="backup_google_btn"></span>
+              </button>
+              <p style="font-size: 11px; color: var(--text3); margin-top: 8px;" data-t="backup_google_hint"></p>
+            </div>
+          </div>
+
+          <!-- AICQ Cloud -->
+          <div class="card" style="cursor:default">
+            <div class="stat-icon" style="background: var(--accent-bg);">🔗</div>
+            <div class="stat-label" data-t="backup_aicq"></div>
+            <div class="stat-sub" data-t="backup_aicq_desc"></div>
+            <div style="margin-top: 12px;">
+              <button class="btn btn-primary" disabled onclick="alert(t('backup_aicq_coming'))">
+                <span data-t="backup_aicq_btn"></span>
+              </button>
+              <p style="font-size: 11px; color: var(--text3); margin-top: 8px;" data-t="backup_aicq_hint"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Export -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📤 <span data-t="backup_export"></span></div>
+          </div>
+          <p class="section-desc" style="margin-bottom: 12px;">
+            <button class="btn btn-default" onclick="doExportConfig()" id="btn-backup-export">
+              <span data-t="backup_export_btn"></span>
+            </button>
+          </p>
+        </div>
+
+        <!-- Backup List (hidden by default, shown by modal) -->
+        <div class="card" id="backup-list-card" style="display:none;">
+          <div class="card-header">
+            <div class="card-title" data-t="backup_list"></div>
+            <button class="btn btn-sm btn-ghost" onclick="refreshBackupList()">↻️</button>
+          </div>
+          <div class="section-desc" data-t="backup_list_desc"></div>
+          <div id="backup-list-content">
+            <div class="empty"><div class="icon">📋</div><p data-t="backup_list_empty"></p></div>
+          </div>
+        </div>
+      </div>
 
     </div>
   </main>
