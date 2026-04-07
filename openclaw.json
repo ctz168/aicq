@@ -56,7 +56,8 @@
     }
   },
   "models": {
-    "defaultModel": "openai/gpt-4o",
+    "mode": "merge",
+    "defaultModel": "modelscope/step-3.5-flash",
     "providers": {
       "openai": {
         "apiKey": "",
@@ -81,6 +82,45 @@
         "models": [
           { "id": "deepseek-chat", "name": "DeepSeek V3" },
           { "id": "deepseek-reasoner", "name": "DeepSeek R1" }
+        ]
+      },
+      "modelscope": {
+        "baseUrl": "https://api-inference.modelscope.cn/v1",
+        "apiKey": "ms-3eca52df-ea14-481b-9e72-73b988b612f7",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "stepfun-ai/Step-3.5-Flash",
+            "name": "step-3.5-flash",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 200000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "ZhipuAI/GLM-5",
+            "name": "glm5",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 200000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "Minimal/MiniMax-M2.5",
+            "name": "minimax-m2.5",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "moonshotai/Kimi-K2.5",
+            "name": "kimi-k2.5",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          }
         ]
       }
     }
