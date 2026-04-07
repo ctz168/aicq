@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config';
-import { store, startPeriodicCleanup } from './db/memoryStore';
+import { store, startPeriodicCleanup, setClickHouseAvailable, isClickHouseAvailable } from './db/memoryStore';
 import { initClickHouseSchema, closeClickHouse } from './db/clickhouse';
 import apiRoutes from './api/routes';
 import authRoutes from './api/authRoutes';
@@ -18,22 +18,22 @@ import { generalLimiter } from './middleware/rateLimit';
 const app = express();
 app.set('trust proxy', true);
 
-// ─── Middleware ─────────────────────────────────────────────────────
-app.use(helmet());
-app.use(cors());
-app.use(express.json({ limit: '1mb' }));
-app.use(generalLimiter);
-
-// ─── Health Check ──────────────────────────────────────────────────
+// ─── Health Check (before rate limiter) ───────────────────────────
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     domain: config.domain,
     uptime: process.uptime(),
     timestamp: Date.now(),
-    storage: 'clickhouse',
+    storage: isClickHouseAvailable() ? 'clickhouse' : 'memory-only',
   });
 });
+
+// ─── Middleware ─────────────────────────────────────────────────────
+app.use(helmet());
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+app.use(generalLimiter);
 
 // ─── API Routes ────────────────────────────────────────────────────
 app.use('/api/v1', apiRoutes);
@@ -90,16 +90,25 @@ async function startServer() {
     // Load data from ClickHouse into memory
     await store.loadFromClickHouse();
     console.log('[aicq-server] All data loaded from ClickHouse');
+
+    // Mark ClickHouse as available for async writes
+    setClickHouseAvailable(true);
   } catch (err) {
     console.error('[aicq-server] ClickHouse connection/initialization failed:', err instanceof Error ? err.message : err);
     console.error('[aicq-server] Please ensure ClickHouse is running and accessible.');
-    console.error('[aicq-server] Server will start with empty data store. Data will NOT persist without ClickHouse.');
+    console.error('[aicq-server] Server will start with empty data store (memory-only mode). Data will NOT persist without ClickHouse.');
+    // Keep ClickHouse disabled — asyncWrite will silently skip
   }
+
+  // Prevent unhandled promise rejections from crashing the process
+  process.on('unhandledRejection', (reason) => {
+    console.error('[aicq-server] Unhandled promise rejection (non-fatal):', reason);
+  });
 
   server.listen(PORT, () => {
     console.log(`[aicq-server] HTTP + WebSocket server running on port ${PORT}`);
     console.log(`[aicq-server] Domain: ${config.domain}`);
-    console.log(`[aicq-server] Storage: ClickHouse (${config.clickhouseUrl})`);
+    console.log(`[aicq-server] Storage: ClickHouse (${config.clickhouseUrl})${isClickHouseAvailable() ? ' [connected]' : ' [memory-only mode - data will not persist]'}`);
     console.log(`[aicq-server] Max friends per node: ${config.maxFriends}`);
     console.log(`[aicq-server] Temp number TTL: ${config.tempNumberTtlHours}h`);
     console.log(`[aicq-server] Max HTTP connections: ${config.maxConnections}`);

@@ -99,16 +99,32 @@ function handleMessage(
       // Node announces it's online
       const id: string = message.nodeId;
       const token: string = message.token;
-      if (!id || !token) {
-        ws.send(JSON.stringify({ type: 'error', error: 'Missing nodeId or token' }));
+      if (!id && !token) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Authentication failed: missing both "nodeId" and "token". Send { type: "online", nodeId: "<your-id>", token: "<JWT token>" } to authenticate.', code: 'AUTH_MISSING_FIELDS' }));
+        ws.close(1008, 'Authentication failed');
+        return;
+      }
+      if (!id) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Authentication failed: missing "nodeId" field. Provide the node ID that matches the JWT subject (sub).', code: 'AUTH_MISSING_NODE_ID' }));
+        ws.close(1008, 'Authentication failed');
+        return;
+      }
+      if (!token) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Authentication failed: missing "token" field. Provide a valid JWT token obtained from the /api/v1/auth/login endpoint.', code: 'AUTH_MISSING_TOKEN' }));
+        ws.close(1008, 'Authentication failed');
         return;
       }
 
       // Verify JWT token for WebSocket authentication
       const jwtSecret = config.jwtSecret;
       const payload = verifyJWT(token, jwtSecret);
-      if (!payload || payload.sub !== id) {
-        ws.send(JSON.stringify({ type: 'error', error: 'Authentication failed' }));
+      if (!payload) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Authentication failed: JWT token is invalid or expired. Obtain a new token from /api/v1/auth/login.', code: 'AUTH_INVALID_TOKEN' }));
+        ws.close(1008, 'Authentication failed');
+        return;
+      }
+      if (payload.sub !== id) {
+        ws.send(JSON.stringify({ type: 'error', error: `Authentication failed: nodeId "${id}" does not match JWT subject "${payload.sub}". The nodeId must match the account ID used to obtain the token.`, code: 'AUTH_NODE_ID_MISMATCH' }));
         ws.close(1008, 'Authentication failed');
         return;
       }

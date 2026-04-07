@@ -43,8 +43,23 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T | unde
   return undefined;
 }
 
+// ─── ClickHouse availability flag ─────────────────
+let clickHouseAvailable = false;
+
+export function setClickHouseAvailable(available: boolean): void {
+  clickHouseAvailable = available;
+}
+
+export function isClickHouseAvailable(): boolean {
+  return clickHouseAvailable;
+}
+
 // ─── Async fire-and-forget write helper ──────────────
 function asyncWrite(label: string, fn: () => Promise<void>): void {
+  if (!clickHouseAvailable) {
+    // Silently skip writes when ClickHouse is not available
+    return;
+  }
   fn().catch((err) => {
     console.warn(`[store] async write failed (${label}):`, err instanceof Error ? err.message : err);
   });

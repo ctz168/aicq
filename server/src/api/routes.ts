@@ -20,7 +20,7 @@ const router = Router();
  * POST /api/v1/node/register
  * Register a node with its public key.
  */
-router.post('/node/register', generalLimiter, (req: Request, res: Response) => {
+router.post('/node/register', authenticateJWT, generalLimiter, (req: Request, res: Response) => {
   try {
     const { id, publicKey, socketId } = req.body;
 

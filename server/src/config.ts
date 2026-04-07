@@ -1,5 +1,11 @@
 import dotenv from 'dotenv';
+import path from 'path';
 
+// Load .env from project root (supports running from any directory)
+const envPath = path.resolve(__dirname, '../../.env');
+dotenv.config({ path: envPath });
+
+// Also try loading from CWD as fallback (for development flexibility)
 dotenv.config();
 
 // ─── JWT Secret Validation ────────────────────────────────────────

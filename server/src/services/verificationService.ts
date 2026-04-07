@@ -25,6 +25,18 @@ export async function sendVerificationCode(
     throw new Error('请求过于频繁，请60秒后重试');
   }
 
+  // Production mode guard: reject if no real provider is configured
+  if (process.env.NODE_ENV === 'production') {
+    const hasSmtpConfig = !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
+    const hasSmsConfig = !!process.env.SMS_PROVIDER && !!process.env.SMS_API_KEY;
+    if (!hasSmtpConfig && !hasSmsConfig) {
+      throw new Error(
+        '验证码发送服务未配置。生产环境必须配置 SMTP（邮件）或 SMS 服务商。' +
+        '请设置环境变量 SMTP_HOST/SMTP_USER/SMTP_PASS 或 SMS_PROVIDER/SMS_API_KEY 后重启服务。'
+      );
+    }
+  }
+
   const code = generateCode();
   const id = generateId();
   const maxAttempts = 5;
