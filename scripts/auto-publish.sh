@@ -84,19 +84,28 @@ fi
 log "✅ 所有构建产物验证通过"
 
 # ─── Step 3: 检查是否有需要发布的变更 ──────────────────────────────────
-# 检查 plugin/ 目录自上次发布以来的变更
+# 检查各目录自上次发布以来的变更
 LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
 PLUGIN_CHANGES=$(git diff --name-only "$LAST_TAG"..HEAD -- plugin/ 2>/dev/null | wc -l)
 SERVER_CHANGES=$(git diff --name-only "$LAST_TAG"..HEAD -- server/ 2>/dev/null | wc -l)
+CRYPTO_CHANGES=$(git diff --name-only "$LAST_TAG"..HEAD -- shared/crypto/ 2>/dev/null | wc -l)
 CLIENT_CHANGES=$(git diff --name-only "$LAST_TAG"..HEAD -- client/ 2>/dev/null | wc -l)
 
-log "自 ${LAST_TAG} 以来变更: plugin=${PLUGIN_CHANGES}, server=${SERVER_CHANGES}, client=${CLIENT_CHANGES}"
+log "自 ${LAST_TAG} 以来变更: plugin=${PLUGIN_CHANGES}, server=${SERVER_CHANGES}, crypto=${CRYPTO_CHANGES}, client=${CLIENT_CHANGES}"
 
-TOTAL_CHANGES=$((PLUGIN_CHANGES + SERVER_CHANGES + CLIENT_CHANGES))
-if [ "$TOTAL_CHANGES" -eq 0 ]; then
-  log "✅ 无代码变更，跳过发布"
+# 只有 plugin/server/crypto 变更需要发布 npm 包
+# 纯 client/web 变更不影响 plugin 产物，跳过发布
+PUBLISHABLE_CHANGES=$((PLUGIN_CHANGES + SERVER_CHANGES + CRYPTO_CHANGES))
+if [ "$PUBLISHABLE_CHANGES" -eq 0 ]; then
+  if [ "$CLIENT_CHANGES" -gt 0 ]; then
+    log "✅ 仅有 client 变更 (${CLIENT_CHANGES} 个文件)，不影响 plugin，跳过发布"
+  else
+    log "✅ 无代码变更，跳过发布"
+  fi
   exit 0
 fi
+
+TOTAL_CHANGES=$((PUBLISHABLE_CHANGES + CLIENT_CHANGES))
 
 # ─── Step 4: 递增版本号 ────────────────────────────────────────────────
 log "🔄 递增版本号..."
@@ -153,16 +162,33 @@ git push origin "$TAG" 2>&1 | tee -a "$LOG_FILE" || {
   log "⚠️ Tag 推送失败"
 }
 
-# ─── Step 8: 发布到 npm ────────────────────────────────────────────────
+# ─── Step 8: 发布到 npm（使用临时目录避免 workspace 冲突） ────────────────
 log "📦 发布到 npm..."
-cd "$PROJECT_ROOT/plugin"
 
 # 配置 npm token
 npm config set //registry.npmjs.org/:_authToken="${NPM_TOKEN}" 2>&1 | tee -a "$LOG_FILE"
 
-# 发布
-PUBLISH_OUTPUT=$(npm publish 2>&1) || {
-  PUBLISH_EXIT=$?
+# 复制 plugin 产物到临时目录发布（避免 monorepo workspace 冲突）
+PUBLISH_DIR=$(mktemp -d)
+log "使用临时发布目录: ${PUBLISH_DIR}"
+cp -r "$PROJECT_ROOT/plugin/dist" "$PUBLISH_DIR/dist"
+cp "$PROJECT_ROOT/plugin/package.json" "$PUBLISH_DIR/package.json"
+
+# 复制 openclaw.plugin.json 如果存在
+[ -f "$PROJECT_ROOT/plugin/openclaw.plugin.json" ] && \
+  cp "$PROJECT_ROOT/plugin/openclaw.plugin.json" "$PUBLISH_DIR/openclaw.plugin.json"
+
+# 从临时目录发布
+cd "$PUBLISH_DIR"
+PUBLISH_OUTPUT=$(npm publish --ignore-scripts 2>&1)
+PUBLISH_EXIT=$?
+
+# 清理临时目录
+rm -rf "$PUBLISH_DIR"
+
+cd "$PROJECT_ROOT"
+
+if [ "$PUBLISH_EXIT" -ne 0 ]; then
   if [ -z "$PUBLISH_OUTPUT" ]; then PUBLISH_OUTPUT="(no output)"; fi
   err "npm 发布失败！"
   echo "$PUBLISH_OUTPUT" | tee -a "$LOG_FILE"
@@ -178,7 +204,7 @@ PUBLISH_OUTPUT=$(npm publish 2>&1) || {
   git commit -m "🤖 auto: 记录 npm 发布失败 v${NEW_VERSION}" 2>&1 || true
   git push origin main 2>&1 || true
   exit 1
-}
+fi
 
 log "✅ npm 发布成功！"
 echo "$PUBLISH_OUTPUT" | tee -a "$LOG_FILE"
