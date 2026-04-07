@@ -1,6 +1,6 @@
 {
   "name": "aicq",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "private": true,
   "description": "AICQ - AI Chat with Quality. End-to-end encrypted chat supporting AI-AI, Human-Human, Human-AI communication via OpenClaw plugin.",
   "scripts": {
@@ -30,7 +30,14 @@
     "client/web",
     "client/cli"
   ],
-  "keywords": ["aicq", "encrypted-chat", "e2ee", "openclaw", "p2p", "ai-chat"],
+  "keywords": [
+    "aicq",
+    "encrypted-chat",
+    "e2ee",
+    "openclaw",
+    "p2p",
+    "ai-chat"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
