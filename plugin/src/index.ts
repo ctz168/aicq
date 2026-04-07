@@ -161,10 +161,27 @@ const plugin = definePluginEntry({
     const serverUrl = config.serverUrl;
     const aicqAgentId = identityService.getAgentId();
 
-    // WebSocket to AICQ server — with exponential backoff reconnection
-    try { serverClient.connectWebSocket(); } catch (e) {
-      logger.warn("[Init] WS connect failed: " + (e instanceof Error ? e.message : e));
-    }
+    // Authenticate with server before connecting WebSocket
+    // The agent challenge-response flow obtains a JWT token required
+    // by all authenticated API endpoints and the WebSocket "online" message.
+    (async () => {
+      try {
+        logger.info("[Init] Authenticating agent with server...");
+        const authed = await serverClient.authenticateAsAgent();
+        if (authed) {
+          logger.info("[Init] Agent authentication successful");
+        } else {
+          logger.warn("[Init] Agent authentication failed — will retry on reconnect");
+        }
+      } catch (e) {
+        logger.warn("[Init] Agent auth error: " + (e instanceof Error ? e.message : e));
+      }
+
+      // Connect WebSocket regardless of auth result (will be retried on reconnect)
+      try { serverClient.connectWebSocket(); } catch (e) {
+        logger.warn("[Init] WS connect failed: " + (e instanceof Error ? e.message : e));
+      }
+    })();
 
     // Listen for connection state changes
     serverClient.onConnectionStateChange((newState, prevState) => {

@@ -224,7 +224,7 @@ export class ServerClient {
       }
     }, this.config.requestTimeoutMs);
 
-    this.ws.on("open", () => {
+    this.ws.on("open", async () => {
       clearTimeout(connectTimeout);
       this.wsConnected = true;
       this.reconnectDelay = this.config.initialReconnectDelay;
@@ -232,15 +232,28 @@ export class ServerClient {
       this.connectStartTimestamp = 0;
       this.hourlyCheckMode = false;
       this.cancelHourlyCheck();
-      this.setConnectionState("online");
       this.logger.info("[Server] WebSocket connected");
 
-      // Authenticate with the server
+      // Ensure we have a valid auth token before sending "online"
+      // If token is missing or empty, try to authenticate first
+      if (!this.authToken) {
+        this.logger.info("[Server] No auth token — attempting agent authentication...");
+        const authed = await this.authenticateAsAgent();
+        if (!authed) {
+          this.logger.warn("[Server] Agent auth failed on reconnect — closing socket");
+          this.ws?.close(1008, "Auth required");
+          return;
+        }
+      }
+
+      this.setConnectionState("online");
+
+      // Send "online" message with auth token
       this.wsSend({
         type: "online",
         nodeId: this.store.agentId,
         publicKey: Buffer.from(this.store.identityKeys.publicKey).toString("base64"),
-        ...(this.authToken ? { token: this.authToken } : {}),
+        token: this.authToken,
       });
 
       // Start heartbeat
@@ -431,6 +444,65 @@ export class ServerClient {
   // ----------------------------------------------------------------
   //  REST API methods
   // ----------------------------------------------------------------
+
+  /**
+   * Authenticate as an AI Agent using challenge-response.
+   *
+   * Flow:
+   *   1. POST /api/v1/auth/challenge  → get challenge + challengeId
+   *   2. Sign challenge with Ed25519 private key
+   *   3. POST /api/v1/auth/login-agent  → get JWT token
+   *
+   * Returns true if authentication succeeded and token was set.
+   */
+  async authenticateAsAgent(): Promise<boolean> {
+    const publicKeyBase64 = Buffer.from(this.store.identityKeys.publicKey).toString('base64');
+
+    // Step 1: Request challenge
+    const challengeResp = await this.fetchPost<{
+      success?: boolean;
+      challenge?: string;
+      challengeId?: string;
+    }>('/api/v1/auth/challenge', {
+      publicKey: publicKeyBase64,
+    });
+
+    if (!challengeResp?.challenge || !challengeResp?.challengeId) {
+      this.logger.warn('[Server] Failed to request agent challenge');
+      return false;
+    }
+
+    // Step 2: Sign the challenge with Ed25519 private key
+    let signature: Uint8Array;
+    try {
+      const message = Buffer.from(challengeResp.challenge, 'utf8');
+      // Import nacl dynamically since it's bundled by esbuild
+      const nacl = await import('tweetnacl');
+      signature = nacl.sign.detached(message, this.store.identityKeys.secretKey);
+    } catch (err) {
+      this.logger.error('[Server] Failed to sign challenge:', err);
+      return false;
+    }
+
+    // Step 3: Login with signed challenge
+    const loginResp = await this.fetchPost<{
+      success?: boolean;
+      session?: { token?: string; refreshToken?: string; expiresAt?: number };
+    }>('/api/v1/auth/login-agent', {
+      publicKey: publicKeyBase64,
+      signature: Buffer.from(signature).toString('base64'),
+      challengeId: challengeResp.challengeId,
+    });
+
+    if (!loginResp?.session?.token) {
+      this.logger.warn('[Server] Agent login failed — no token in response');
+      return false;
+    }
+
+    this.setAuthToken(loginResp.session.token);
+    this.logger.info('[Server] Agent authenticated successfully');
+    return true;
+  }
 
   /**
    * Register this node on the server.

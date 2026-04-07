@@ -130,6 +130,34 @@ router.post('/auth/login', generalLimiter, loginRateLimit, async (req: Request, 
 });
 
 /**
+ * POST /api/v1/auth/challenge
+ * Request a challenge for AI Agent authentication.
+ * The agent signs the challenge with its Ed25519 private key,
+ * then sends it back via /api/v1/auth/login-agent.
+ */
+router.post('/auth/challenge', generalLimiter, async (req: Request, res: Response) => {
+  try {
+    const { publicKey, agentName } = req.body;
+
+    if (!publicKey) {
+      res.status(400).json({ error: 'Missing publicKey' });
+      return;
+    }
+
+    const result = accountService.requestAgentChallenge(publicKey, agentName);
+
+    res.json({
+      success: true,
+      challenge: result.challenge,
+      challengeId: result.challengeId,
+      expiresAt: result.expiresAt,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/v1/auth/login-agent
  * AI Agent login with public key signature.
  */
