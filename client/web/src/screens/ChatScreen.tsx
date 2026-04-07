@@ -60,10 +60,15 @@ const ChatScreen: React.FC = () => {
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
   const botMenuPanelRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
   const friendId = state.activeFriendId;
   const friend = state.friends.find((f) => f.id === friendId);
+  // Depend on messageVersion to ensure re-render after loadMoreMessages updates the ref
+  const _msgVersion = state.messageVersion;
   const messages = getMessages(friendId || '');
+  void _msgVersion;
   const isTyping = state.typingState[friendId || ''];
   const streamingState = friendId ? getStreamingState(friendId) : null;
 
@@ -154,7 +159,14 @@ const ChatScreen: React.FC = () => {
       try {
         const oldestMsg = messages.length > 0 ? messages[0] : null;
         const result = await loadMoreMessages(friendId, oldestMsg?.timestamp);
-        if (!result.hasMore) setHasMoreMessages(false);
+        if (!result.hasMore) {
+          setHasMoreMessages(false);
+        }
+        // Increase displayCount to include the newly loaded messages
+        // After loadMoreMessages, messagesRef will have more messages (prepended)
+        // so we need to show them by increasing displayCount
+        const newTotal = result.messages.length;
+        setDisplayCount(Math.min(newTotal, displayCount + 30));
       } catch (err) {
         console.error('Failed to load more from cache:', err);
       }
@@ -177,19 +189,14 @@ const ChatScreen: React.FC = () => {
     if (!messagesContainerRef.current) return;
     const container = messagesContainerRef.current;
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
-    const isNearTop = container.scrollTop < 100;
     autoScrollRef.current = isNearBottom;
-
-    // Load more when scrolling to top
-    if (isNearTop && hasMoreMessages && !isLoadingMore && messages.length > displayCount) {
-      handleLoadMore();
-    }
-  }, [hasMoreMessages, isLoadingMore, messages.length, displayCount, handleLoadMore]);
+  }, []);
 
   // Reset display window when switching friends
   useEffect(() => {
     setDisplayCount(50);
     setHasMoreMessages(true);
+    autoScrollRef.current = true;
     // Load total count from IndexedDB to determine if there are more messages
     if (friendId) {
       getMessageCount(friendId).then(count => {
@@ -198,6 +205,37 @@ const ChatScreen: React.FC = () => {
  }).catch(() => {});
     }
   }, [friendId]);
+
+  // IntersectionObserver for infinite scroll - detect when top sentinel is visible
+  useEffect(() => {
+    if (!topSentinelRef.current || !hasMoreMessages) return;
+
+    // Cleanup previous observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMoreMessages && !isLoadingMore) {
+          handleLoadMore();
+        }
+      },
+      {
+        root: messagesContainerRef.current,
+        rootMargin: '100px',
+        threshold: 0,
+      }
+    );
+
+    observer.observe(topSentinelRef.current);
+    observerRef.current = observer;
+
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [hasMoreMessages, isLoadingMore, handleLoadMore]);
 
   // Mark messages as read when opening chat
   useEffect(() => {
@@ -472,14 +510,12 @@ const ChatScreen: React.FC = () => {
       }
     }
 
-    // Add "Load more" indicator at top if hasMoreMessages
-    if (hasMoreMessages && visibleMessages.length > 0) {
-      elements.unshift(
-        <div key="load-more" className="load-more-indicator" onClick={handleLoadMore}>
-          {isLoadingMore ? '加载中...' : '↑ 加载更多消息'}
-        </div>
-      );
-    }
+    // Add top sentinel for IntersectionObserver-based infinite scroll
+    elements.unshift(
+      <div key="load-more" ref={topSentinelRef} className="load-more-indicator" onClick={handleLoadMore}>
+        {isLoadingMore ? '加载中...' : (hasMoreMessages ? '↑ 加载更多消息' : '')}
+      </div>
+    );
 
     return elements;
   }, [visibleMessages, state.userId, handleMessageContextMenu, hasMoreMessages, isLoadingMore]);

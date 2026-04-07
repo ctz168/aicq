@@ -785,8 +785,9 @@ class BrowserWSClient extends SimpleEventEmitter {
 
 class MessageCache {
   private static DB_NAME = 'aicq_messages';
-  private static DB_VERSION = 1;
+  private static DB_VERSION = 2;
   private static STORE_NAME = 'messages';
+  private static GROUP_STORE_NAME = 'group_messages';
   private db: IDBDatabase | null = null;
 
   async init(): Promise<void> {
@@ -798,6 +799,12 @@ class MessageCache {
           const store = db.createObjectStore(MessageCache.STORE_NAME, { keyPath: 'id' });
           store.createIndex('friendId', 'friendId', { unique: false });
           store.createIndex('friendId_timestamp', ['friendId', 'timestamp'], { unique: false });
+        }
+        // Group messages store (added in DB_VERSION 2)
+        if (!db.objectStoreNames.contains(MessageCache.GROUP_STORE_NAME)) {
+          const groupStore = db.createObjectStore(MessageCache.GROUP_STORE_NAME, { keyPath: 'id' });
+          groupStore.createIndex('groupId', 'groupId', { unique: false });
+          groupStore.createIndex('groupId_timestamp', ['groupId', 'timestamp'], { unique: false });
         }
       };
       request.onsuccess = () => {
@@ -814,6 +821,15 @@ class MessageCache {
     const tx = this.db.transaction(MessageCache.STORE_NAME, mode);
     return tx.objectStore(MessageCache.STORE_NAME);
   }
+
+  private async getGroupStore(mode: IDBTransactionMode): Promise<IDBObjectStore> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('IndexedDB not available');
+    const tx = this.db.transaction(MessageCache.GROUP_STORE_NAME, mode);
+    return tx.objectStore(MessageCache.GROUP_STORE_NAME);
+  }
+
+  // ─── Private Chat Messages ─────────────────────────────────
 
   async getMessages(friendId: string, limit?: number, before?: number): Promise<ChatMessage[]> {
     const store = await this.getStore('readonly');
@@ -873,6 +889,65 @@ class MessageCache {
     const store = await this.getStore('readwrite');
     const index = store.index('friendId');
     const request = index.openCursor(IDBKeyRange.only(friendId));
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // ─── Group Chat Messages ──────────────────────────────────
+
+  async getGroupMessages(groupId: string, limit?: number, before?: number): Promise<GroupMessage[]> {
+    const store = await this.getGroupStore('readonly');
+    const index = store.index('groupId_timestamp');
+    const range = before ? IDBKeyRange.bound([groupId, 0], [groupId, before]) : undefined;
+    const request = index.openCursor(range, 'prev');
+    const messages: GroupMessage[] = [];
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor && (limit === undefined || messages.length < limit)) {
+          messages.unshift(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(messages);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getGroupMessageCount(groupId: string): Promise<number> {
+    const store = await this.getGroupStore('readonly');
+    const index = store.index('groupId');
+    const request = index.count(IDBKeyRange.only(groupId));
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async addGroupMessage(message: GroupMessage): Promise<void> {
+    const store = await this.getGroupStore('readwrite');
+    return new Promise((resolve, reject) => {
+      const request = store.put(message);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async clearGroupMessages(groupId: string): Promise<void> {
+    const store = await this.getGroupStore('readwrite');
+    const index = store.index('groupId');
+    const request = index.openCursor(IDBKeyRange.only(groupId));
     return new Promise((resolve, reject) => {
       request.onsuccess = () => {
         const cursor = request.result;
@@ -1895,6 +1970,13 @@ export class WebClient extends SimpleEventEmitter {
     return this.store.getGroupMessages(groupId);
   }
 
+  /**
+   * Store/re-sync group messages to localStorage (used after loading from IndexedDB).
+   */
+  storeGroupMessage(msg: GroupMessage): void {
+    this.store.addGroupMessage(msg.groupId, msg);
+  }
+
   /* ─── Friend Requests ────────────────────────────────────── */
 
   async getFriendRequests(): Promise<{ sent: FriendRequest[]; received: FriendRequest[] }> {
@@ -1967,6 +2049,42 @@ export class WebClient extends SimpleEventEmitter {
       return await this.messageCache.getMessageCount(friendId);
     } catch {
       return this.store.getMessages(friendId).length;
+    }
+  }
+
+  /**
+   * Get paginated group messages from IndexedDB cache.
+   * Returns messages sorted by timestamp ascending.
+   */
+  async getCachedGroupMessages(groupId: string, limit: number = 50, before?: number): Promise<GroupMessage[]> {
+    try {
+      const messages = await this.messageCache.getGroupMessages(groupId, limit, before);
+      if (messages.length > 0) return messages;
+    } catch {
+      // IndexedDB unavailable
+    }
+    return this.store.getGroupMessages(groupId);
+  }
+
+  /**
+   * Get total group message count for a group from IndexedDB cache.
+   */
+  async getCachedGroupMessageCount(groupId: string): Promise<number> {
+    try {
+      return await this.messageCache.getGroupMessageCount(groupId);
+    } catch {
+      return this.store.getGroupMessages(groupId).length;
+    }
+  }
+
+  /**
+   * Add a group message to IndexedDB cache.
+   */
+  async cacheGroupMessage(message: GroupMessage): Promise<void> {
+    try {
+      await this.messageCache.addGroupMessage(message);
+    } catch {
+      // IndexedDB unavailable, silent
     }
   }
 

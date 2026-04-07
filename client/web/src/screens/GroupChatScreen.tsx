@@ -31,6 +31,8 @@ const GroupChatScreen: React.FC = () => {
     refreshGroups,
     transferGroupOwnership,
     muteGroupMember,
+    loadMoreGroupMessages,
+    getGroupMessageCount,
   } = useAICQ();
 
   const [inputText, setInputText] = useState('');
@@ -46,14 +48,22 @@ const GroupChatScreen: React.FC = () => {
   const [muteTargetId, setMuteTargetId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [showAnnouncement, setShowAnnouncement] = useState(false);
+  const [displayCount, setDisplayCount] = useState(50);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const autoScrollRef = useRef(true);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
   const groupId = state.activeGroupId;
   const group = state.groups.find((g) => g.id === groupId);
+  // Depend on messageVersion to ensure re-render after loadMoreGroupMessages
+  const _msgVersion = state.messageVersion;
   const messages = getGroupMessages(groupId || '');
+  void _msgVersion;
   const userId = state.userId;
 
   const isOwner = group?.ownerId === userId;
@@ -72,6 +82,87 @@ const GroupChatScreen: React.FC = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, []);
+
+  // Compute visible messages (slice from end for incremental loading)
+  const visibleMessages = useMemo(() => {
+    if (messages.length <= displayCount) {
+      return messages;
+    }
+    return messages.slice(messages.length - displayCount);
+  }, [messages, displayCount]);
+
+  // Load more messages handler (maintains scroll position)
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !groupId) return;
+    setIsLoadingMore(true);
+    const container = messagesContainerRef.current;
+    const prevScrollHeight = container?.scrollHeight ?? 0;
+
+    if (messages.length <= displayCount) {
+      // All in-memory messages displayed, load more from IndexedDB
+      try {
+        const oldestMsg = messages.length > 0 ? messages[0] : null;
+        const result = await loadMoreGroupMessages(groupId, oldestMsg?.timestamp);
+        if (!result.hasMore) {
+          setHasMoreMessages(false);
+        }
+        const newTotal = result.messages.length;
+        setDisplayCount(Math.min(newTotal, displayCount + 30));
+      } catch (err) {
+        console.error('Failed to load more group messages from cache:', err);
+      }
+    } else {
+      setDisplayCount(prev => Math.min(prev + 30, messages.length));
+    }
+
+    // Restore scroll position after loading more
+    requestAnimationFrame(() => {
+      if (container) {
+        const newScrollHeight = container.scrollHeight;
+        container.scrollTop = newScrollHeight - prevScrollHeight;
+      }
+      setIsLoadingMore(false);
+    });
+  }, [isLoadingMore, messages.length, displayCount, groupId, loadMoreGroupMessages]);
+
+  // Reset display window when switching groups
+  useEffect(() => {
+    setDisplayCount(50);
+    setHasMoreMessages(true);
+    autoScrollRef.current = true;
+    if (groupId) {
+      getGroupMessageCount(groupId).then(count => {
+        const msgs = getGroupMessages(groupId);
+        setHasMoreMessages(msgs.length < count);
+ }).catch(() => {});
+    }
+  }, [groupId]);
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!topSentinelRef.current || !hasMoreMessages) return;
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMoreMessages && !isLoadingMore) {
+          handleLoadMore();
+        }
+      },
+      {
+        root: messagesContainerRef.current,
+        rootMargin: '100px',
+        threshold: 0,
+      }
+    );
+    observer.observe(topSentinelRef.current);
+    observerRef.current = observer;
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [hasMoreMessages, isLoadingMore, handleLoadMore]);
 
   useEffect(() => {
     scrollToBottom();
@@ -213,7 +304,7 @@ const GroupChatScreen: React.FC = () => {
     const elements: React.ReactNode[] = [];
     let lastDate = '';
 
-    for (const msg of messages) {
+    for (const msg of visibleMessages) {
       const msgDate = new Date(msg.timestamp).toDateString();
       if (msgDate !== lastDate) {
         elements.push(
@@ -259,8 +350,15 @@ const GroupChatScreen: React.FC = () => {
       );
     }
 
+    // Add top sentinel for IntersectionObserver-based infinite scroll
+    elements.unshift(
+      <div key="load-more" ref={topSentinelRef} className="load-more-indicator" onClick={handleLoadMore}>
+        {isLoadingMore ? '加载中...' : (hasMoreMessages ? '↑ 加载更多消息' : '')}
+      </div>
+    );
+
     return elements;
-  }, [messages, userId]);
+  }, [visibleMessages, userId, hasMoreMessages, isLoadingMore, handleLoadMore]);
 
   if (!groupId || !group) {
     return (

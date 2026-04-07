@@ -466,6 +466,8 @@ interface AICQContextValue {
   messageQueue: ChatMessage[];
   loadMoreMessages: (friendId: string, before?: number) => Promise<{ messages: ChatMessage[], hasMore: boolean }>;
   getMessageCount: (friendId: string) => Promise<number>;
+  loadMoreGroupMessages: (groupId: string, before?: number) => Promise<{ messages: GroupMessage[], hasMore: boolean }>;
+  getGroupMessageCount: (groupId: string) => Promise<number>;
 }
 
 const AICQContext = createContext<AICQContextValue | null>(null);
@@ -626,7 +628,10 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
 
       // ─── Group events ─────────────────────────────────────────
       client.on('group_message', (msg: GroupMessage) => {
+        // Cache group message to IndexedDB for persistence
+        client.cacheGroupMessage(msg).catch(() => {});
         dispatch({ type: 'ADD_GROUP_MESSAGE', payload: { groupId: msg.groupId, message: msg } });
+        dispatch({ type: 'BUMP_MESSAGE_VERSION' });
       });
 
       client.on('group_created', (group: GroupInfo) => {
@@ -1330,6 +1335,10 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     messagesRef.current.set(friendId, merged);
 
     const totalCount = await client.getCachedMessageCount(friendId);
+
+    // Bump message version to trigger re-render in ChatScreen
+    dispatch({ type: 'BUMP_MESSAGE_VERSION' });
+
     return { messages: merged, hasMore: merged.length < totalCount };
   }, []);
 
@@ -1337,6 +1346,40 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     const client = clientRef.current;
     if (!client) return 0;
     return client.getCachedMessageCount(friendId);
+  }, []);
+
+  const loadMoreGroupMessages = useCallback(async (groupId: string, before?: number): Promise<{ messages: GroupMessage[], hasMore: boolean }> => {
+    const client = clientRef.current;
+    if (!client) return { messages: [], hasMore: false };
+
+    const currentMsgs = client.getGroupMessages(groupId);
+    const oldestTimestamp = before || (currentMsgs.length > 0 ? currentMsgs[0].timestamp : Date.now());
+
+    const olderMsgs = await client.getCachedGroupMessages(groupId, 30, oldestTimestamp);
+    if (olderMsgs.length === 0) return { messages: [], hasMore: false };
+
+    // Prepend older messages, avoiding duplicates
+    const existingIds = new Set(currentMsgs.map(m => m.id));
+    const newMsgs = olderMsgs.filter(m => !existingIds.has(m.id));
+
+    const merged = [...newMsgs, ...currentMsgs];
+    // Update group messages in the store
+    for (const msg of merged) {
+      client.storeGroupMessage(msg);
+    }
+
+    const totalCount = await client.getCachedGroupMessageCount(groupId);
+
+    // Bump message version to trigger re-render
+    dispatch({ type: 'BUMP_MESSAGE_VERSION' });
+
+    return { messages: merged, hasMore: merged.length < totalCount };
+  }, []);
+
+  const getGroupMessageCount = useCallback(async (groupId: string): Promise<number> => {
+    const client = clientRef.current;
+    if (!client) return 0;
+    return client.getCachedGroupMessageCount(groupId);
   }, []);
 
   useEffect(() => {
@@ -1440,6 +1483,8 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     messageQueue: state.messageQueue,
     loadMoreMessages,
     getMessageCount,
+    loadMoreGroupMessages,
+    getGroupMessageCount,
   }), [state]);
 
   return <AICQContext.Provider value={value}>{children}</AICQContext.Provider>;
