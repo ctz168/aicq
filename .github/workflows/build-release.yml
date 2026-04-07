@@ -78,7 +78,7 @@ jobs:
           path: client/web/dist/
 
       - name: Install mobile dependencies
-        run: cd client/mobile && npm ci
+        run: cd client/mobile && npm ci --legacy-peer-deps
 
       - name: Sync Capacitor
         run: cd client/mobile && npx cap sync android
@@ -118,6 +118,7 @@ jobs:
             client/mobile/android/app/build/outputs/apk/debug/*.apk
             client/mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 7
+        if: always()
 
   # ---------------------------------------------------------------------------
   # Job 3: Build Linux AppImage
@@ -143,21 +144,22 @@ jobs:
         run: cd client/desktop && npm ci
 
       - name: Build Linux AppImage
-        run: cd client/desktop && npx electron-builder --linux --appimage
+        run: cd client/desktop && npx electron-builder --linux
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path: dist-electron/AICQ-*.AppImage
+          path: client/dist-electron/AICQ-*.AppImage
           retention-days: 7
+        if: always()
 
   # ---------------------------------------------------------------------------
   # Job 4: Build Windows EXE
   # ---------------------------------------------------------------------------
   build-windows:
     name: Build Windows EXE
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     needs: build-web
     steps:
       - uses: actions/checkout@v4
@@ -179,20 +181,21 @@ jobs:
         run: cd client/desktop && npx electron-builder --win --x64
 
       - name: Create Windows portable ZIP
+        shell: pwsh
         run: |
-          if [ -d dist-electron/win-unpacked ]; then
-            cd dist-electron/win-unpacked
-            zip -r ../AICQ-windows-x64.zip . -x "*.git*"
-          fi
+          if (Test-Path "client/dist-electron/win-unpacked") {
+            Compress-Archive -Path "client/dist-electron/win-unpacked/*" -DestinationPath "client/dist-electron/AICQ-windows-x64.zip"
+          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-exe
           path: |
-            dist-electron/AICQ-Setup-*.exe
-            dist-electron/AICQ-windows-x64.zip
+            client/dist-electron/AICQ-Setup-*.exe
+            client/dist-electron/AICQ-windows-x64.zip
           retention-days: 7
+        if: always()
 
   # ---------------------------------------------------------------------------
   # Job 5: Build macOS DMG (macOS runner only)
@@ -224,8 +227,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: dist-electron/AICQ-*.dmg
+          path: client/dist-electron/AICQ-*.dmg
           retention-days: 7
+        if: always()
 
   # ---------------------------------------------------------------------------
   # Job 6: Create GitHub Release & Upload All Artifacts
@@ -256,29 +260,49 @@ jobs:
         run: |
           mkdir -p final-artifacts
           VERSION="${{ steps.version.outputs.VERSION }}"
+          HAS_FILES=false
 
           # Web
           if [ -d release-artifacts/web-dist ]; then
             cd release-artifacts/web-dist
             zip -r "../../final-artifacts/AICQ-${VERSION}-web.zip" .
             cd ../..
+            HAS_FILES=true
           fi
 
           # Android
-          cp release-artifacts/android-apks/debug/*.apk final-artifacts/AICQ-${VERSION}-android-debug.apk 2>/dev/null || true
-          cp release-artifacts/android-apks/release/app-release-signed.apk final-artifacts/AICQ-${VERSION}-android-release.apk 2>/dev/null || \
-          cp release-artifacts/android-apks/release/app-release.apk final-artifacts/AICQ-${VERSION}-android-release.apk 2>/dev/null || \
-          cp release-artifacts/android-apks/release/*.apk final-artifacts/ 2>/dev/null || true
+          if [ -d release-artifacts/android-apks ]; then
+            cp release-artifacts/android-apks/debug/*.apk final-artifacts/ 2>/dev/null || true
+            cp release-artifacts/android-apks/release/*.apk final-artifacts/ 2>/dev/null || true
+            # Rename to standard names
+            for f in final-artifacts/*.apk; do
+              if echo "$f" | grep -q "debug"; then
+                mv "$f" "final-artifacts/AICQ-${VERSION}-android-debug.apk" 2>/dev/null || true
+              elif echo "$f" | grep -q "release"; then
+                mv "$f" "final-artifacts/AICQ-${VERSION}-android-release.apk" 2>/dev/null || true
+              fi
+            done
+            [ "$(ls -A final-artifacts/*.apk 2>/dev/null)" ] && HAS_FILES=true
+          fi
 
           # Linux
-          cp release-artifacts/linux-appimage/AICQ-*.AppImage final-artifacts/AICQ-${VERSION}-linux.AppImage 2>/dev/null || true
+          if [ -d release-artifacts/linux-appimage ]; then
+            cp release-artifacts/linux-appimage/*.AppImage final-artifacts/AICQ-${VERSION}-linux.AppImage 2>/dev/null || true
+            [ -f "final-artifacts/AICQ-${VERSION}-linux.AppImage" ] && HAS_FILES=true
+          fi
 
           # Windows
-          cp release-artifacts/windows-exe/AICQ-Setup-*.exe final-artifacts/AICQ-${VERSION}-windows-setup.exe 2>/dev/null || true
-          cp release-artifacts/windows-exe/AICQ-windows-x64.zip final-artifacts/AICQ-${VERSION}-windows-x64.zip 2>/dev/null || true
+          if [ -d release-artifacts/windows-exe ]; then
+            cp release-artifacts/windows-exe/*.exe final-artifacts/ 2>/dev/null || true
+            cp release-artifacts/windows-exe/*.zip final-artifacts/AICQ-${VERSION}-windows-x64.zip 2>/dev/null || true
+            [ "$(ls -A final-artifacts/*.exe 2>/dev/null)" ] && HAS_FILES=true
+          fi
 
           # macOS
-          cp release-artifacts/macos-dmg/AICQ-*.dmg final-artifacts/AICQ-${VERSION}-mac.dmg 2>/dev/null || true
+          if [ -d release-artifacts/macos-dmg ]; then
+            cp release-artifacts/macos-dmg/*.dmg final-artifacts/AICQ-${VERSION}-mac.dmg 2>/dev/null || true
+            [ -f "final-artifacts/AICQ-${VERSION}-mac.dmg" ] && HAS_FILES=true
+          fi
 
           # Generate checksums
           cd final-artifacts
@@ -286,6 +310,7 @@ jobs:
 
           echo "=== Release Artifacts ==="
           ls -lh final-artifacts/
+          echo "HAS_FILES=${HAS_FILES}" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
