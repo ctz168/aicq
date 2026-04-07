@@ -160,6 +160,18 @@
 - **修复者**: Super Z
 - **修复时间**: 2026-04-07
 
+### BUG-018: 插件缺少 Agent 认证流程，导致离线模式无法工作 ✅ 已修复
+- **模块**: plugin + server
+- **位置**: `plugin/src/services/serverClient.ts`, `plugin/src/index.ts`, `server/src/api/authRoutes.ts`
+- **描述**: 插件安装后一直处于"加载/重连中"状态，离线模式无法正常工作。根本原因是插件从未执行 agent 认证流程（challenge-response），导致所有 API 调用和 WebSocket 连接因缺少 JWT token 而被服务器拒绝（401/close 1008）。服务端缺少 `POST /api/v1/auth/challenge` endpoint。
+- **修复方案**:
+  1. 服务端新增 `POST /api/v1/auth/challenge` 路由（调用 `accountService.requestAgentChallenge`）
+  2. 插件 `ServerClient` 新增 `authenticateAsAgent()` 方法（challenge → sign → login-agent 完整流程）
+  3. 插件初始化时先调用 `authenticateAsAgent()` 获取 JWT，再连接 WebSocket
+  4. WebSocket 重连时检查 token，如缺失则自动重新认证
+- **修复者**: Super Z
+- **修复时间**: 2026-04-07
+
 ---
 
 ## 📊 ModelScope 模型 API 测试结果
