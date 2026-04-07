@@ -1,6 +1,6 @@
 {
   "name": "@aicq/server",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "AICQ relay server - handshake coordination and P2P discovery",
   "main": "dist/index.js",
   "scripts": {
