@@ -1,4 +1,48 @@
 ---
+Task ID: 9-agent-abort-enhance
+Agent: General-purpose
+Task: 增强聊天功能中的"叫停任务执行"功能
+
+Work Log:
+- 拉取最新代码 (git pull), 分析现有 agent abort 架构: AICQContext.abortAgentFn, ChatScreen.handleAbort, AgentExecutionState 类型
+- 在 AICQContext.tsx 中新增 `abortStreamingFn`: 清除 streamingRef 和 dispatch CLEAR_STREAMING, 如 agent 也在执行则同时 abortAgent
+- 在 AICQContext.tsx 中新增 `addSystemMessage`: 生成 system 类型消息并添加到 messagesRef 和 dispatch ADD_MESSAGE + BUMP_MESSAGE_VERSION
+- 在 AICQContextValue 接口中添加 abortStreaming 和 addSystemMessage 方法签名
+- 在 Provider value 中包含 abortStreaming 和 addSystemMessage
+
+修改文件 ChatScreen.tsx:
+- 从 useAICQ() 解构新增 abortStreaming, addSystemMessage, getAgentExecutionState
+- 新增 state: abortConfirm (停止确认状态), abortCountdown (倒计时), elapsedSeconds (执行时长)
+- 新增 phaseMap: 阶段中文标签和图标映射 (started→准备中⏳, streaming→生成回复中💬, tool_executing→执行工具中🔧, thinking→思考中🧠, completed→已完成✅, error→出错❌, cancelled→已取消🛑)
+- 新增 elapsedSeconds 计时器: useEffect 每秒更新, 基于 agentExecState.startedAt
+- 新增 abortConfirm 倒计时: 第一次点击进入确认态, 3 秒后自动恢复
+- 新增 formatTime 工具: 将秒数格式化为 mm:ss
+- 重写 handleAbort: 执行 abortAgent 后追加系统消息 "🛑 已停止 Agent 执行"
+- 新增 handleAbortClick: 两步确认逻辑 (第一次点击→确认态, 3 秒内第二次点击→真正停止)
+- 新增 handleStreamingAbort: 调用 abortStreaming 并追加系统消息 "🛑 已停止 AI 回复生成"
+- 增强 agent-execution-bar UI: 阶段图标 (带 phase 色彩样式) + 阶段标签 + 实时计时器 + 队列数量
+- 增强 abort 按钮: 普通态/确认态切换 (红色闪烁动画 + 倒计时数字)
+- 新增 streaming-with-controls 容器: 包裹 StreamingMessage + 停止生成按钮
+
+修改文件 App.css (追加约 180 行):
+- .agent-execution-bar: flexbox 布局, 信息区 + 按钮区
+- .agent-execution-phase-icon: 圆形图标, 按 phase 着色区分 (started 蓝/streaming 绿/tool_executing 橙/thinking 紫/error 红)
+- .agent-execution-details: 阶段标签 + 计时器 (等宽数字)
+- .agent-queue-badge: 橙色排队提示
+- .btn-abort-agent: 默认半透明红底, .confirming 态全红 + abortFlash 闪烁动画
+- .streaming-with-controls: flexbox 包裹流式消息 + 停止按钮
+- .btn-stop-streaming: 胶囊形停止按钮, 红色主题
+- .agent-execution-spinner: 保留兼容样式
+
+TypeScript 编译检查通过 (仅剩预存第三方模块错误 @aicq/crypto)
+
+Stage Summary:
+- 3 个文件修改: AICQContext.tsx, ChatScreen.tsx, App.css
+- 4 项功能增强: 执行状态详情显示, 停止确认对话框, 流式消息停止, 停止后系统消息通知
+- 无第三方依赖引入
+
+---
+
 Task ID: 7-restructure
 Agent: Main Agent
 Task: 重组目录结构为三大模块 (服务端/插件/客户端)
@@ -225,3 +269,44 @@ Stage Summary:
 - 97 tests across 12 categories, all passing (0 failures)
 - No source code bugs discovered
 - Mock infrastructure: mockLogger, mockServerClient (with WS message simulation), mockHandshake, mockP2P, mockChannel
+
+---
+Task ID: 8-task-panel-enhance
+Agent: General-purpose
+Task: 完善 Agent 任务规划功能 - 创建计划、编辑标题、切换状态、拖拽排序
+
+Work Log:
+- 读取全部相关文件: TaskProgressPanel.tsx, AICQContext.tsx, types.ts, App.css
+- 在 AICQContext.tsx 中添加两个新 action type: RENAME_TASK_ITEM, REORDER_TASK_ITEM
+- 实现 RENAME_TASK_ITEM reducer: 按 planId + taskId 查找并更新 title 字段
+- 实现 REORDER_TASK_ITEM reducer: 对目标 plan 的 tasks 排序后移除目标项、插入新位置、重新分配 order
+- 在 AICQContextValue 接口中添加 renameTaskItem 和 reorderTaskItem 方法签名
+- 实现 renameTaskItemFn 和 reorderTaskItemFn 并添加到 Provider value
+
+修改文件 AICQContext.tsx:
+- Action type 新增 2 个: RENAME_TASK_ITEM, REORDER_TASK_ITEM
+- Reducer 新增 2 个 case (共约 50 行)
+- 接口新增 2 个方法签名
+- Provider value 新增 2 个方法
+
+修改文件 TaskProgressPanel.tsx (完全重写):
+- 新增手动创建任务计划功能: 无计划时显示"创建任务计划"按钮（仅AI好友可见）
+- 新增内联创建表单: 计划标题输入 + 动态添加/移除初始任务列表
+- 新增编辑任务标题: 双击标题进入编辑模式, Enter/失焦保存, Esc 取消
+- 新增手动状态切换: 点击状态图标循环 pending→in_progress→completed→pending, failed→pending
+- 新增拖拽排序: HTML5 Drag and Drop API, 拖拽手柄(⠿), 拖拽占位符, 放下时更新 order
+- 在操作菜单中添加: 编辑标题、状态切换选项
+- 使用 state.friends 代替直接 friends (修复 TS 类型错误)
+
+修改文件 App.css (追加约 200 行):
+- .task-create-* 系列样式 (创建计划表单)
+- .task-status-toggle (可点击状态图标)
+- .task-edit-title-input (编辑输入框)
+- .task-drag-handle (拖拽手柄)
+- .task-dragging/.task-drag-over (拖拽状态)
+
+Stage Summary:
+- 3 个文件修改: AICQContext.tsx, TaskProgressPanel.tsx, App.css
+- TypeScript 类型检查通过 (0 错误, 排除已有的第三方模块问题)
+- 4 个新功能: 创建计划、编辑标题、切换状态、拖拽排序
+- 无第三方依赖引入

@@ -3288,3 +3288,481 @@ input:disabled {
   color: var(--red);
   background: rgba(248, 81, 73, 0.06);
 }
+
+/* ─── Task Plan: Create Plan ─────────────────────────────── */
+
+.task-create-panel {
+  padding: 8px 0;
+}
+
+.task-create-plan-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.task-create-plan-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.task-create-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.task-create-form-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-tertiary);
+}
+
+.task-create-form-icon {
+  font-size: 16px;
+}
+
+.task-create-form-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.task-create-form-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task-create-title-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.task-create-title-input:focus {
+  border-color: var(--accent);
+}
+
+.task-create-title-input::placeholder {
+  color: var(--text-muted);
+}
+
+.task-create-initial-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-create-tasks-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.task-create-initial-task-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-create-task-index {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  min-width: 20px;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.task-create-task-input {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.task-create-task-input:focus {
+  border-color: var(--accent);
+}
+
+.task-create-task-input::placeholder {
+  color: var(--text-muted);
+}
+
+.task-create-task-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.task-create-task-remove:hover {
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--red);
+}
+
+.task-create-add-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  align-self: flex-start;
+}
+
+.task-create-add-task:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(88, 166, 255, 0.06);
+}
+
+.task-create-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.task-create-cancel {
+  padding: 6px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.task-create-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.task-create-confirm {
+  padding: 6px 14px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.task-create-confirm:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.task-create-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Task Plan: Add New Plan Button ──────────────────────── */
+
+.task-add-plan-btn {
+  border-style: dashed !important;
+  margin-top: 8px;
+}
+
+/* ─── Task: Status Toggle ─────────────────────────────────── */
+
+.task-status-toggle {
+  cursor: pointer;
+  transition: transform 0.15s;
+  user-select: none;
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+.task-status-toggle:hover {
+  transform: scale(1.2);
+}
+
+.task-status-toggle:active {
+  transform: scale(0.9);
+}
+
+/* ─── Task: Edit Title ────────────────────────────────────── */
+
+.task-edit-title-input {
+  flex: 1;
+  padding: 2px 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  min-width: 0;
+  box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.3);
+}
+
+/* ─── Task: Drag Handle ───────────────────────────────────── */
+
+.task-drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  user-select: none;
+  padding: 0 2px;
+}
+
+.task-progress-item:hover .task-drag-handle {
+  opacity: 0.5;
+}
+
+.task-drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--text-secondary);
+}
+
+.task-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* ─── Task: Dragging State ────────────────────────────────── */
+
+.task-dragging {
+  opacity: 0.4;
+  transform: scale(0.98);
+}
+
+.task-drag-over {
+  border-top: 2px solid var(--accent) !important;
+  margin-top: -2px;
+  position: relative;
+}
+
+/* ─── Agent Execution Bar ────────────────────────────────── */
+
+.agent-execution-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.agent-execution-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-execution-phase-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  transition: all 0.3s;
+}
+
+.agent-execution-phase-icon.started {
+  background: #58a6ff18;
+  border-color: #58a6ff44;
+}
+
+.agent-execution-phase-icon.streaming {
+  background: #3fb95018;
+  border-color: #3fb95044;
+}
+
+.agent-execution-phase-icon.tool_executing {
+  background: #d2992218;
+  border-color: #d2992244;
+}
+
+.agent-execution-phase-icon.thinking {
+  background: #a371f718;
+  border-color: #a371f744;
+}
+
+.agent-execution-phase-icon.completed {
+  background: #3fb95022;
+  border-color: #3fb95044;
+}
+
+.agent-execution-phase-icon.error,
+.agent-execution-phase-icon.cancelled {
+  background: #f8514922;
+  border-color: #f8514944;
+}
+
+.agent-execution-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.agent-execution-phase {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-execution-timer {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-queue-badge {
+  font-size: 11px;
+  background: #d2992222;
+  color: var(--orange);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-abort-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: #f8514918;
+  border: 1px solid #f8514933;
+  border-radius: 6px;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-abort-agent:hover {
+  background: #f8514928;
+  border-color: #f8514955;
+}
+
+.btn-abort-agent.confirming {
+  background: var(--red);
+  border-color: var(--red);
+  color: white;
+  animation: abortFlash 0.6s ease-in-out infinite;
+}
+
+@keyframes abortFlash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ─── Streaming with Stop Button ──────────────────────────── */
+
+.streaming-with-controls {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.streaming-with-controls .message-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-stop-streaming {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #f8514918;
+  border: 1px solid #f8514933;
+  border-radius: 16px;
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 8px;
+}
+
+.btn-stop-streaming:hover {
+  background: #f8514933;
+  border-color: #f8514955;
+}
+
+/* ─── Agent Execution Spinner ────────────────────────────── */
+
+.agent-execution-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text-muted);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}

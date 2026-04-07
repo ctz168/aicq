@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import type { AgentExecutionState } from '../types';
 import { useAICQ } from '../context/AICQContext';
 import MessageBubble, { DateSeparator } from '../components/MessageBubble';
 import StreamingMessage from '../components/StreamingMessage';
@@ -26,7 +27,10 @@ const ChatScreen: React.FC = () => {
     markMessagesRead,
     getStreamingState,
     abortAgent,
+    abortStreaming,
+    addSystemMessage,
     isAgentExecuting,
+    getAgentExecutionState,
     messageQueue,
     loadMoreMessages,
     getMessageCount,
@@ -34,6 +38,9 @@ const ChatScreen: React.FC = () => {
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [abortConfirm, setAbortConfirm] = useState(false);
+  const [abortCountdown, setAbortCountdown] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [showBotMenu, setShowBotMenu] = useState(false);
   const [botMenuFilter, setBotMenuFilter] = useState('');
@@ -64,7 +71,53 @@ const ChatScreen: React.FC = () => {
   const isAiFriend = friend?.friendType === 'ai';
 
   const agentExecuting = isAiFriend ? isAgentExecuting(friendId || '') : false;
+  const agentExecState: AgentExecutionState | null = isAiFriend ? getAgentExecutionState(friendId || '') : null;
   const queuedCount = messageQueue.filter(m => m.toId === friendId).length;
+
+  // Phase display mapping
+  const phaseMap: Record<string, { label: string; icon: string }> = useMemo(() => ({
+    started: { label: '准备中', icon: '\u23F3' },
+    streaming: { label: '生成回复中', icon: '\uD83D\uDCAC' },
+    tool_executing: { label: '执行工具中', icon: '\uD83D\uDD27' },
+    thinking: { label: '思考中', icon: '\uD83E\uDDE0' },
+    completed: { label: '已完成', icon: '\u2705' },
+    error: { label: '出错', icon: '\u274C' },
+    cancelled: { label: '已取消', icon: '\uD83D\uDED1' },
+  }), []);
+
+  // Elapsed time counter
+  useEffect(() => {
+    if (!agentExecuting || !agentExecState?.startedAt) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const startTime = agentExecState.startedAt;
+    const tick = () => setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [agentExecuting, agentExecState?.startedAt]);
+
+  // Abort confirmation countdown
+  useEffect(() => {
+    if (!abortConfirm) {
+      setAbortCountdown(0);
+      return;
+    }
+    setAbortCountdown(3);
+    const timer = setTimeout(() => {
+      setAbortConfirm(false);
+      setAbortCountdown(0);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [abortConfirm]);
+
+  // Format elapsed time as mm:ss
+  const formatTime = useCallback((seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }, []);
 
   // Scroll to bottom on new messages (only if already near bottom)
   const scrollToBottom = useCallback((force = false) => {
@@ -78,7 +131,7 @@ const ChatScreen: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages.length, isTyping, streamingState?.content, scrollToBottom]);
+  }, [messages.length, isTyping, streamingState?.content, scrollToBottom, elapsedSeconds]);
 
   // Compute visible messages (slice from the end for incremental loading)
   const visibleMessages = useMemo(() => {
@@ -348,15 +401,36 @@ const ChatScreen: React.FC = () => {
     }
   }, [friendId, sendImage, sendVideo, sendFile]);
 
-  // Handle agent abort (stop button)
+  // Handle agent abort
   const handleAbort = useCallback(async () => {
     if (!friendId) return;
     try {
       await abortAgent(friendId);
+      addSystemMessage(friendId, '\uD83D\uDED1 已停止 Agent 执行');
     } catch (err) {
       console.error('[ChatScreen] Abort failed:', err);
     }
-  }, [friendId, abortAgent]);
+  }, [friendId, abortAgent, addSystemMessage]);
+
+  // Handle agent abort with confirmation
+  const handleAbortClick = useCallback(() => {
+    if (abortConfirm) {
+      // Second click within 3s - actually abort
+      handleAbort();
+      setAbortConfirm(false);
+      setAbortCountdown(0);
+    } else {
+      // First click - enter confirmation state
+      setAbortConfirm(true);
+    }
+  }, [abortConfirm, handleAbort]);
+
+  // Handle streaming abort
+  const handleStreamingAbort = useCallback(() => {
+    if (!friendId) return;
+    abortStreaming(friendId);
+    addSystemMessage(friendId, '\uD83D\uDED1 已停止 AI 回复生成');
+  }, [friendId, abortStreaming, addSystemMessage]);
 
   // Build message list with date separators
   const messageElements = useMemo(() => {
@@ -467,13 +541,25 @@ const ChatScreen: React.FC = () => {
 
         {/* Active streaming from AI */}
         {streamingState && !streamingState.isComplete && (
-          <StreamingMessage
-            key={`active-stream-${streamingState.messageId}`}
-            content={streamingState.content}
-            isOwn={false}
-            isComplete={false}
-            error={streamingState.error}
-          />
+          <div className="streaming-with-controls">
+            <StreamingMessage
+              key={`active-stream-${streamingState.messageId}`}
+              content={streamingState.content}
+              isOwn={false}
+              isComplete={false}
+              error={streamingState.error}
+            />
+            <button
+              className="btn-stop-streaming"
+              onClick={handleStreamingAbort}
+              title="停止生成"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              停止生成
+            </button>
+          </div>
         )}
 
         {/* SubAgent Panel for AI friends */}
@@ -530,17 +616,28 @@ const ChatScreen: React.FC = () => {
       {agentExecuting && (
         <div className="agent-execution-bar">
           <div className="agent-execution-info">
-            <div className="agent-execution-spinner" />
-            <span className="agent-execution-text">Agent 正在执行中...</span>
+            <div className={`agent-execution-phase-icon ${agentExecState?.phase || 'started'}`}>
+              {(agentExecState?.phase && phaseMap[agentExecState.phase]) ? phaseMap[agentExecState.phase].icon : '⏳'}
+            </div>
+            <div className="agent-execution-details">
+              <span className="agent-execution-phase">
+                {(agentExecState?.phase && phaseMap[agentExecState.phase]) ? phaseMap[agentExecState.phase].label : '执行中'}
+              </span>
+              <span className="agent-execution-timer">{formatTime(elapsedSeconds)}</span>
+            </div>
             {queuedCount > 0 && (
               <span className="agent-queue-badge">{queuedCount} 条消息排队中</span>
             )}
           </div>
-          <button className="btn-abort-agent" onClick={handleAbort} title="停止执行">
+          <button
+            className={`btn-abort-agent ${abortConfirm ? 'confirming' : ''}`}
+            onClick={handleAbortClick}
+            title={abortConfirm ? '再次点击确认停止' : '停止执行'}
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="6" width="12" height="12" rx="2" />
             </svg>
-            停止
+            {abortConfirm ? `确认停止？(${abortCountdown})` : '停止'}
           </button>
         </div>
       )}

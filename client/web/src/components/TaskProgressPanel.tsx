@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useAICQ } from '../context/AICQContext';
 import type { TaskPlan, TaskItem } from '../types';
 
@@ -22,7 +22,19 @@ interface TaskProgressPanelProps {
 }
 
 const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
-  const { getTaskPlans, clearTaskPlan, addTaskItem, deleteTaskItem, syncTaskPlan } = useAICQ();
+  const {
+    getTaskPlans,
+    clearTaskPlan,
+    addTaskItem,
+    deleteTaskItem,
+    syncTaskPlan,
+    updateTaskItem,
+    createTaskPlan,
+    renameTaskItem,
+    reorderTaskItem,
+  } = useAICQ();
+
+  const state = useAICQ().state;
   const [expanded, setExpanded] = useState(true);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const [addingToPlanId, setAddingToPlanId] = useState<string | null>(null);
@@ -33,7 +45,26 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
   const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({});
   const addInputRef = useRef<HTMLInputElement>(null);
 
+  // ─── Create plan state ───────────────────────────────────
+  const [isCreatingPlan, setIsCreatingPlan] = useState(false);
+  const [planTitle, setPlanTitle] = useState('');
+  const [initialTasks, setInitialTasks] = useState<string[]>(['']);
+  const planTitleRef = useRef<HTMLInputElement>(null);
+
+  // ─── Edit task title state ────────────────────────────────
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // ─── Drag state ───────────────────────────────────────────
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+
   const plans = useMemo(() => getTaskPlans(friendId), [getTaskPlans, friendId]);
+
+  // Get the friend info to check if it's an AI friend
+  const friend = useMemo(() => state.friends.find(f => f.id === friendId), [state.friends, friendId]);
+  const isAIFriend = friend?.friendType === 'ai';
 
   // Aggregate all task items from all plans for this friend
   const allTasks = useMemo(() => {
@@ -53,6 +84,21 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
       addInputRef.current.focus();
     }
   }, [addingToPlanId]);
+
+  // Auto-focus edit input
+  useEffect(() => {
+    if (editingTaskId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingTaskId]);
+
+  // Auto-focus plan title input
+  useEffect(() => {
+    if (isCreatingPlan && planTitleRef.current) {
+      planTitleRef.current.focus();
+    }
+  }, [isCreatingPlan]);
 
   // Close actions popup on outside click or scroll
   useEffect(() => {
@@ -79,9 +125,256 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
     };
   }, [showActions]);
 
-  // Don't render if no plans exist at all
-  // (But still render if plans exist with 0 tasks, so user can add tasks)
-  if (plans.length === 0) return null;
+  // ─── Manual plan creation ────────────────────────────────
+  const handleCreatePlan = useCallback(() => {
+    const title = planTitle.trim();
+    if (!title) return;
+    const tasks = initialTasks
+      .map(t => t.trim())
+      .filter(Boolean)
+      .map((t, i) => ({
+        title: t,
+        status: 'pending' as const,
+        order: i,
+      }));
+    if (tasks.length === 0) return;
+    const plan = createTaskPlan(friendId, title, tasks);
+    setIsCreatingPlan(false);
+    setPlanTitle('');
+    setInitialTasks(['']);
+    setExpanded(true);
+    setExpandedPlanId(plan.id);
+  }, [planTitle, initialTasks, createTaskPlan, friendId]);
+
+  const handleAddInitialTask = useCallback(() => {
+    setInitialTasks(prev => [...prev, '']);
+  }, []);
+
+  const handleRemoveInitialTask = useCallback((index: number) => {
+    setInitialTasks(prev => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
+  const handleUpdateInitialTask = useCallback((index: number, value: string) => {
+    setInitialTasks(prev => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }, []);
+
+  // ─── Status toggle logic ─────────────────────────────────
+  const handleStatusToggle = useCallback((planId: string, taskId: string, currentStatus: TaskItem['status']) => {
+    let newStatus: TaskItem['status'];
+    switch (currentStatus) {
+      case 'pending':
+        newStatus = 'in_progress';
+        break;
+      case 'in_progress':
+        newStatus = 'completed';
+        break;
+      case 'completed':
+        newStatus = 'pending';
+        break;
+      case 'failed':
+        newStatus = 'pending';
+        break;
+      default:
+        newStatus = 'pending';
+    }
+    updateTaskItem(planId, taskId, { status: newStatus });
+  }, [updateTaskItem]);
+
+  // ─── Edit task title ─────────────────────────────────────
+  const startEditingTask = useCallback((taskId: string, currentTitle: string) => {
+    setEditingTaskId(taskId);
+    setEditingTitle(currentTitle);
+    setShowActions(null);
+  }, []);
+
+  const saveEditingTask = useCallback((planId: string) => {
+    if (editingTaskId && editingTitle.trim()) {
+      renameTaskItem(planId, editingTaskId, editingTitle.trim());
+    }
+    setEditingTaskId(null);
+    setEditingTitle('');
+  }, [editingTaskId, editingTitle, renameTaskItem]);
+
+  const cancelEditingTask = useCallback(() => {
+    setEditingTaskId(null);
+    setEditingTitle('');
+  }, []);
+
+  // ─── Drag & Drop handlers ────────────────────────────────
+  const handleDragStart = useCallback((e: React.DragEvent, taskId: string) => {
+    setDraggedTaskId(taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', taskId);
+    // Add dragging class after a small delay so the ghost image isn't affected
+    setTimeout(() => {
+      const el = document.querySelector(`[data-task-id="${taskId}"]`);
+      if (el) el.classList.add('task-dragging');
+    }, 0);
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent, taskId: string) => {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    const el = document.querySelector(`[data-task-id="${taskId}"]`);
+    if (el) el.classList.remove('task-dragging');
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, taskId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (taskId !== draggedTaskId) {
+      setDragOverTaskId(taskId);
+    }
+  }, [draggedTaskId]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if we're leaving the task item itself
+    const target = e.currentTarget as HTMLElement;
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!target.contains(relatedTarget)) {
+      setDragOverTaskId(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, planId: string, targetTaskId: string) => {
+    e.preventDefault();
+    setDragOverTaskId(null);
+    if (!draggedTaskId || draggedTaskId === targetTaskId) return;
+    // Find the target task's order in the sorted list
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) return;
+    const sortedTasks = [...plan.tasks].sort((a, b) => a.order - b.order);
+    const targetIndex = sortedTasks.findIndex(t => t.id === targetTaskId);
+    if (targetIndex >= 0) {
+      reorderTaskItem(planId, draggedTaskId, targetIndex);
+    }
+    setDraggedTaskId(null);
+  }, [draggedTaskId, plans, reorderTaskItem]);
+
+  // ─── No plans: show create plan button ───────────────────
+  if (plans.length === 0 && !isCreatingPlan) {
+    if (!isAIFriend) return null;
+    return (
+      <div className="task-progress-panel task-create-panel">
+        <button
+          className="task-create-plan-btn"
+          onClick={() => setIsCreatingPlan(true)}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          创建任务计划
+        </button>
+      </div>
+    );
+  }
+
+  // ─── Creating plan form ──────────────────────────────────
+  if (isCreatingPlan) {
+    return (
+      <div className="task-progress-panel task-create-panel">
+        <div className="task-create-form">
+          <div className="task-create-form-header">
+            <span className="task-create-form-icon">📋</span>
+            <span className="task-create-form-title">创建任务计划</span>
+          </div>
+          <div className="task-create-form-body">
+            <input
+              ref={planTitleRef}
+              className="task-create-title-input"
+              type="text"
+              placeholder="计划标题..."
+              value={planTitle}
+              onChange={(e) => setPlanTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleCreatePlan();
+                } else if (e.key === 'Escape') {
+                  setIsCreatingPlan(false);
+                  setPlanTitle('');
+                  setInitialTasks(['']);
+                }
+              }}
+              maxLength={100}
+            />
+            <div className="task-create-initial-tasks">
+              <span className="task-create-tasks-label">初始任务列表：</span>
+              {initialTasks.map((task, index) => (
+                <div key={index} className="task-create-initial-task-row">
+                  <span className="task-create-task-index">{index + 1}.</span>
+                  <input
+                    className="task-create-task-input"
+                    type="text"
+                    placeholder={`任务 ${index + 1}...`}
+                    value={task}
+                    onChange={(e) => handleUpdateInitialTask(index, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddInitialTask();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setIsCreatingPlan(false);
+                        setPlanTitle('');
+                        setInitialTasks(['']);
+                      }
+                    }}
+                    maxLength={200}
+                  />
+                  {initialTasks.length > 1 && (
+                    <button
+                      className="task-create-task-remove"
+                      onClick={() => handleRemoveInitialTask(index)}
+                      title="移除"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button className="task-create-add-task" onClick={handleAddInitialTask}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                添加任务
+              </button>
+            </div>
+          </div>
+          <div className="task-create-form-footer">
+            <button
+              className="task-create-cancel"
+              onClick={() => {
+                setIsCreatingPlan(false);
+                setPlanTitle('');
+                setInitialTasks(['']);
+              }}
+            >
+              取消
+            </button>
+            <button
+              className="task-create-confirm"
+              onClick={handleCreatePlan}
+              disabled={!planTitle.trim() || initialTasks.filter(t => t.trim()).length === 0}
+            >
+              创建计划
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -157,14 +450,68 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
   const renderTaskItem = (task: TaskItem, planId: string) => {
     const isConfirmingDelete = confirmDeleteId?.taskId === task.id;
     const canDelete = task.status !== 'in_progress'; // Don't allow deleting in-progress tasks
+    const isEditing = editingTaskId === task.id;
+    const isDragging = draggedTaskId === task.id;
+    const isDragOver = dragOverTaskId === task.id && !isDragging;
 
     return (
       <div
         key={task.id}
-        className={`task-progress-item ${task.status} ${task.status === 'in_progress' ? 'active' : ''}`}
+        data-task-id={task.id}
+        className={`task-progress-item ${task.status} ${task.status === 'in_progress' ? 'active' : ''} ${isDragging ? 'task-dragging' : ''} ${isDragOver ? 'task-drag-over' : ''}`}
+        draggable={!!draggedTaskId || false}
+        onDragStart={(e) => handleDragStart(e, task.id)}
+        onDragEnd={(e) => handleDragEnd(e, task.id)}
+        onDragOver={(e) => handleDragOver(e, task.id)}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e, planId, task.id)}
       >
-        <span className="task-progress-item-icon">{statusIcons[task.status]}</span>
-        <span className="task-progress-item-title">{task.title}</span>
+        {/* Drag handle */}
+        <span
+          className="task-drag-handle"
+          title="拖拽排序"
+          onMouseDown={() => setDraggedTaskId(task.id)}
+          onMouseUp={() => setDraggedTaskId(null)}
+        >
+          ⠿
+        </span>
+        {/* Status icon - clickable for toggle */}
+        <span
+          className="task-progress-item-icon task-status-toggle"
+          title="点击切换状态"
+          onClick={() => handleStatusToggle(planId, task.id, task.status)}
+        >
+          {statusIcons[task.status]}
+        </span>
+        {/* Task title - double-click to edit */}
+        {isEditing ? (
+          <input
+            ref={editInputRef}
+            className="task-edit-title-input"
+            type="text"
+            value={editingTitle}
+            onChange={(e) => setEditingTitle(e.target.value)}
+            onBlur={() => saveEditingTask(planId)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                saveEditingTask(planId);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEditingTask();
+              }
+            }}
+            maxLength={200}
+          />
+        ) : (
+          <span
+            className="task-progress-item-title"
+            title="双击编辑标题"
+            onDoubleClick={() => startEditingTask(task.id, task.title)}
+          >
+            {task.title}
+          </span>
+        )}
         <span className="task-progress-item-status">{statusLabels[task.status]}</span>
         <button
           className="task-item-actions-btn"
@@ -180,7 +527,88 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
         {/* Actions popup - position:fixed to avoid overflow clipping */}
         {showActions === task.id && (
           <div className="task-action-popup" style={popupStyle}>
-            {canDelete && (
+            {/* Edit title action */}
+            <button
+              className="task-action-item"
+              onClick={(e) => {
+                e.stopPropagation();
+                startEditingTask(task.id, task.title);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              编辑标题
+            </button>
+            {/* Status toggle actions */}
+            {task.status === 'pending' && (
+              <button
+                className="task-action-item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStatusToggle(planId, task.id, task.status);
+                  setShowActions(null);
+                }}
+              >
+                <span>🔄</span>
+                标记为进行中
+              </button>
+            )}
+            {task.status === 'in_progress' && (
+              <>
+                <button
+                  className="task-action-item"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateTaskItem(planId, task.id, { status: 'completed' });
+                    setShowActions(null);
+                  }}
+                >
+                  <span>✅</span>
+                  标记为已完成
+                </button>
+                <button
+                  className="task-action-item"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateTaskItem(planId, task.id, { status: 'failed' });
+                    setShowActions(null);
+                  }}
+                >
+                  <span>❌</span>
+                  标记为失败
+                </button>
+              </>
+            )}
+            {task.status === 'completed' && (
+              <button
+                className="task-action-item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStatusToggle(planId, task.id, task.status);
+                  setShowActions(null);
+                }}
+              >
+                <span>⬜</span>
+                重置为待处理
+              </button>
+            )}
+            {task.status === 'failed' && (
+              <button
+                className="task-action-item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStatusToggle(planId, task.id, task.status);
+                  setShowActions(null);
+                }}
+              >
+                <span>⬜</span>
+                重置为待处理
+              </button>
+            )}
+            {/* Delete action */}
+            {canDelete ? (
               <button
                 className={`task-action-item ${isConfirmingDelete ? 'danger-confirm' : ''}`}
                 onClick={(e) => {
@@ -205,8 +633,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
                   </>
                 )}
               </button>
-            )}
-            {!canDelete && (
+            ) : (
               <span className="task-action-disabled">执行中，无法删除</span>
             )}
           </div>
@@ -397,6 +824,17 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ friendId }) => {
                   </div>
                 );
               })}
+              {/* Create new plan button */}
+              <button
+                className="task-add-btn task-add-plan-btn"
+                onClick={() => setIsCreatingPlan(true)}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                创建新计划
+              </button>
             </div>
           )}
           {plans.length <= 1 && (

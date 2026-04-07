@@ -128,6 +128,8 @@ type Action =
   | { type: 'UPDATE_TASK_ITEM'; payload: { planId: string; taskId: string; updates: Partial<TaskItem> } }
   | { type: 'ADD_TASK_ITEM'; payload: { planId: string; task: TaskItem } }
   | { type: 'DELETE_TASK_ITEM'; payload: { planId: string; taskId: string } }
+  | { type: 'RENAME_TASK_ITEM'; payload: { planId: string; taskId: string; newTitle: string } }
+  | { type: 'REORDER_TASK_ITEM'; payload: { planId: string; taskId: string; newOrder: number } }
   | { type: 'SET_AGENT_EXECUTION'; payload: { friendId: string; state: AgentExecutionState } }
   | { type: 'CLEAR_AGENT_EXECUTION'; payload: string }
   | { type: 'ADD_TO_QUEUE'; payload: ChatMessage }
@@ -322,6 +324,48 @@ function reducer(state: AICQState, action: Action): AICQState {
         }),
       };
     }
+    case 'RENAME_TASK_ITEM': {
+      const { planId, taskId, newTitle } = action.payload;
+      return {
+        ...state,
+        taskPlans: state.taskPlans.map(plan => {
+          if (plan.id !== planId) return plan;
+          return {
+            ...plan,
+            tasks: plan.tasks.map(task =>
+              task.id === taskId ? { ...task, title: newTitle, updatedAt: Date.now() } : task
+            ),
+            updatedAt: Date.now(),
+          };
+        }),
+      };
+    }
+    case 'REORDER_TASK_ITEM': {
+      const { planId, taskId, newOrder } = action.payload;
+      return {
+        ...state,
+        taskPlans: state.taskPlans.map(plan => {
+          if (plan.id !== planId) return plan;
+          // Find the target task and its current order
+          const targetTask = plan.tasks.find(t => t.id === taskId);
+          if (!targetTask || targetTask.order === newOrder) return plan;
+          // Reorder: shift other tasks' orders
+          const sortedTasks = [...plan.tasks].sort((a, b) => a.order - b.order);
+          // Remove the target task from the sorted list
+          const filtered = sortedTasks.filter(t => t.id !== taskId);
+          // Insert at new position
+          const clampedOrder = Math.max(0, Math.min(newOrder, filtered.length));
+          filtered.splice(clampedOrder, 0, { ...targetTask });
+          // Reassign order values
+          const reordered = filtered.map((t, i) => ({ ...t, order: i }));
+          return {
+            ...plan,
+            tasks: reordered,
+            updatedAt: Date.now(),
+          };
+        }),
+      };
+    }
     case 'SET_AGENT_EXECUTION': {
       const { friendId, state: execState } = action.payload;
       return {
@@ -412,7 +456,11 @@ interface AICQContextValue {
   deleteTaskItem: (planId: string, taskId: string) => void;
   syncTaskPlan: (planId: string, friendId: string) => void;
   clearTaskPlan: (planId: string) => void;
+  renameTaskItem: (planId: string, taskId: string, newTitle: string) => void;
+  reorderTaskItem: (planId: string, taskId: string, newOrder: number) => void;
   abortAgent: (friendId: string) => Promise<void>;
+  abortStreaming: (friendId: string) => void;
+  addSystemMessage: (friendId: string, content: string) => void;
   getAgentExecutionState: (friendId: string) => AgentExecutionState | null;
   isAgentExecuting: (friendId: string) => boolean;
   messageQueue: ChatMessage[];
@@ -1203,6 +1251,14 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'REMOVE_TASK_PLAN', payload: planId });
   }, []);
 
+  const renameTaskItemFn = useCallback((planId: string, taskId: string, newTitle: string) => {
+    dispatch({ type: 'RENAME_TASK_ITEM', payload: { planId, taskId, newTitle } });
+  }, []);
+
+  const reorderTaskItemFn = useCallback((planId: string, taskId: string, newOrder: number) => {
+    dispatch({ type: 'REORDER_TASK_ITEM', payload: { planId, taskId, newOrder } });
+  }, []);
+
   const abortAgentFn = useCallback(async (friendId: string) => {
     const client = clientRef.current;
     if (!client) return;
@@ -1217,6 +1273,35 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('[AICQ] Abort agent failed:', err);
     }
+  }, []);
+
+  const abortStreamingFn = useCallback((friendId: string) => {
+    // Clear streaming state for the friend
+    delete streamingRef.current[friendId];
+    dispatch({ type: 'CLEAR_STREAMING', payload: friendId });
+
+    // If agent is executing, also abort the agent
+    const execState = agentExecutionRef.current[friendId];
+    if (execState?.isExecuting) {
+      abortAgentFn(friendId);
+    }
+  }, [abortAgentFn]);
+
+  const addSystemMessage = useCallback((friendId: string, content: string) => {
+    const msg: ChatMessage = {
+      id: `sys-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      fromId: friendId,
+      toId: '',
+      type: 'system',
+      content,
+      timestamp: Date.now(),
+      status: 'delivered',
+    };
+    const msgs = messagesRef.current.get(friendId) || [];
+    msgs.push(msg);
+    messagesRef.current.set(friendId, msgs);
+    dispatch({ type: 'ADD_MESSAGE', payload: { friendId, message: msg } });
+    dispatch({ type: 'BUMP_MESSAGE_VERSION' });
   }, []);
 
   const getAgentExecutionState = useCallback((friendId: string): AgentExecutionState | null => {
@@ -1345,7 +1430,11 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     deleteTaskItem: deleteTaskItemFn,
     syncTaskPlan: syncTaskPlanFn,
     clearTaskPlan: clearTaskPlanFn,
+    renameTaskItem: renameTaskItemFn,
+    reorderTaskItem: reorderTaskItemFn,
     abortAgent: abortAgentFn,
+    abortStreaming: abortStreamingFn,
+    addSystemMessage,
     getAgentExecutionState,
     isAgentExecuting,
     messageQueue: state.messageQueue,
