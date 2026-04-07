@@ -221,7 +221,7 @@ jobs:
         run: cd client/desktop && npm ci
 
       - name: Build macOS DMG
-        run: cd client/desktop && npx electron-builder --mac --dmg
+        run: cd client/desktop && npx electron-builder --mac
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -264,9 +264,7 @@ jobs:
 
           # Web
           if [ -d release-artifacts/web-dist ]; then
-            cd release-artifacts/web-dist
-            zip -r "../../final-artifacts/AICQ-${VERSION}-web.zip" .
-            cd ../..
+            (cd release-artifacts/web-dist && zip -r "../../final-artifacts/AICQ-${VERSION}-web.zip" .)
             HAS_FILES=true
           fi
 
@@ -274,15 +272,15 @@ jobs:
           if [ -d release-artifacts/android-apks ]; then
             cp release-artifacts/android-apks/debug/*.apk final-artifacts/ 2>/dev/null || true
             cp release-artifacts/android-apks/release/*.apk final-artifacts/ 2>/dev/null || true
-            # Rename to standard names
             for f in final-artifacts/*.apk; do
+              [ -f "$f" ] || continue
               if echo "$f" | grep -q "debug"; then
                 mv "$f" "final-artifacts/AICQ-${VERSION}-android-debug.apk" 2>/dev/null || true
               elif echo "$f" | grep -q "release"; then
                 mv "$f" "final-artifacts/AICQ-${VERSION}-android-release.apk" 2>/dev/null || true
               fi
             done
-            [ "$(ls -A final-artifacts/*.apk 2>/dev/null)" ] && HAS_FILES=true
+            [ "$(ls final-artifacts/*.apk 2>/dev/null)" ] && HAS_FILES=true
           fi
 
           # Linux
@@ -295,7 +293,7 @@ jobs:
           if [ -d release-artifacts/windows-exe ]; then
             cp release-artifacts/windows-exe/*.exe final-artifacts/ 2>/dev/null || true
             cp release-artifacts/windows-exe/*.zip final-artifacts/AICQ-${VERSION}-windows-x64.zip 2>/dev/null || true
-            [ "$(ls -A final-artifacts/*.exe 2>/dev/null)" ] && HAS_FILES=true
+            [ "$(ls final-artifacts/*.exe 2>/dev/null)" ] && HAS_FILES=true
           fi
 
           # macOS
@@ -305,11 +303,10 @@ jobs:
           fi
 
           # Generate checksums
-          cd final-artifacts
-          sha256sum * > "AICQ-${VERSION}-checksums.txt" 2>/dev/null || true
+          (cd final-artifacts && sha256sum * > "AICQ-${VERSION}-checksums.txt" 2>/dev/null || true)
 
           echo "=== Release Artifacts ==="
-          ls -lh final-artifacts/
+          ls -lh final-artifacts/ || echo "(no artifacts found)"
           echo "HAS_FILES=${HAS_FILES}" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
