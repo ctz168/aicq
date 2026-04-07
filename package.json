@@ -1,6 +1,6 @@
 {
   "name": "aicq",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "private": true,
   "description": "AICQ - AI Chat with Quality. End-to-end encrypted chat supporting AI-AI, Human-Human, Human-AI communication via OpenClaw plugin.",
   "scripts": {

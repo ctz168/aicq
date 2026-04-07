@@ -83,32 +83,11 @@ jobs:
       - name: Sync Capacitor
         run: cd client/mobile && npx cap sync android
 
-      - name: Build Debug APK
-        run: cd client/mobile/android && chmod +x ./gradlew && ./gradlew assembleDebug --no-daemon
-
-      - name: Build Release APK (unsigned)
-        run: cd client/mobile/android && ./gradlew assembleRelease --no-daemon || echo "Release build failed (may need signing)"
-        continue-on-error: true
-
-      - name: Sign Release APK (if keystore available)
-        if: env.KEYSTORE_BASE64 != ''
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Build Android APKs
         run: |
-          echo "${KEYSTORE_BASE64}" | base64 -d > client/mobile/android/aicq-release.keystore
           cd client/mobile/android
-          ${ANDROID_HOME}/build-tools/34.0.0/zipalign -v -p 4 \
-            app/build/outputs/apk/release/app-release-unsigned.apk \
-            app/build/outputs/apk/release/app-release-aligned.apk
-          ${ANDROID_HOME}/build-tools/34.0.0/apksigner sign --ks aicq-release.keystore \
-            --ks-pass "pass:${KEYSTORE_PASSWORD}" \
-            --ks-key-alias "${KEY_ALIAS}" \
-            --key-pass "pass:${KEY_PASSWORD}" \
-            --out app/build/outputs/apk/release/app-release-signed.apk \
-            app/build/outputs/apk/release/app-release-aligned.apk
+          chmod +x ./gradlew
+          ./gradlew assembleDebug assembleRelease --no-daemon
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
