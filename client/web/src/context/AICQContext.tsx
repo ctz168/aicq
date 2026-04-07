@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useCallback, useRef, useEffect, useMemo } from 'react';
 import { WebClient } from '../services/webClient';
+import { getWebRTCService, destroyWebRTCService, type CallType, type IncomingCall } from '../services/WebRTCService';
 import type {
   FriendInfo,
   ChatMessage,
@@ -468,6 +469,14 @@ interface AICQContextValue {
   getMessageCount: (friendId: string) => Promise<number>;
   loadMoreGroupMessages: (groupId: string, before?: number) => Promise<{ messages: GroupMessage[], hasMore: boolean }>;
   getGroupMessageCount: (groupId: string) => Promise<number>;
+  /** WebRTC call methods */
+  startCall: (friendId: string, callType: CallType) => Promise<void>;
+  acceptCall: () => Promise<void>;
+  rejectCall: () => void;
+  hangupCall: () => void;
+  incomingCall: IncomingCall | null;
+  callState: string;
+  callPeerId: string;
 }
 
 const AICQContext = createContext<AICQContextValue | null>(null);
@@ -487,6 +496,13 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
   const typingStateRef = useRef<TypingState>({});
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const activeFriendIdRef = useRef<string | null>(null);
+
+  // ─── WebRTC Call State ─────────────────────────────────
+  const webrtcRef = useRef(getWebRTCService());
+  const incomingCallRef = useRef<IncomingCall | null>(null);
+  const [, forceUpdate] = useReducer(x => x + 1, 0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const connect = useCallback(async (serverUrl: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -690,6 +706,49 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
             icon: '/favicon.ico',
           });
         }
+      });
+
+      // ─── WebRTC Call Signaling ───────────────────────────
+      client.on('signal', (msg: any) => {
+        const signalData = msg.data || msg;
+        const signalType = signalData.type;
+
+        // Only handle call-related signals
+        if (!signalType?.startsWith('call_')) return;
+
+        const webrtc = webrtcRef.current;
+        if (!webrtc) return;
+
+        webrtc.handleSignal(signalType, signalData).catch(err => {
+          console.error('[AICQ] Call signal error:', err);
+        });
+
+        // Handle incoming call notification
+        if (signalType === 'call_offer' && !signalData.iceRestart) {
+          incomingCallRef.current = {
+            callerId: signalData.fromId || msg.fromId || '',
+            callerName: signalData.callerName || 'Unknown',
+            callType: signalData.callType || 'audio',
+            timestamp: Date.now(),
+          };
+          forceUpdate();
+        }
+
+        // Handle call end signals - clear incoming call
+        if (signalType === 'call_reject' || signalType === 'call_hangup') {
+          incomingCallRef.current = null;
+          forceUpdate();
+        }
+      });
+
+      // ─── Setup WebRTC signal sender ──────────────────────
+      webrtcRef.current.setSignalHandler((targetId: string, signal: Record<string, any>) => {
+        client.sendCallSignal(targetId, signal);
+      });
+
+      // Track WebRTC state changes for UI re-rendering
+      webrtcRef.current.setStateHandler(() => {
+        forceUpdate();
       });
 
       client.on('subagent_chunk', (msg: any) => {
@@ -1382,6 +1441,37 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     return client.getCachedGroupMessageCount(groupId);
   }, []);
 
+  // ─── WebRTC Call Methods ──────────────────────────────────
+
+  const startCall = useCallback(async (friendId: string, callType: CallType): Promise<void> => {
+    const friend = stateRef.current?.friends.find((f: FriendInfo) => f.id === friendId);
+    const peerName = friend?.aiName || friend?.fingerprint?.slice(0, 12) || 'Unknown';
+    await webrtcRef.current.startCall(friendId, callType, peerName);
+    forceUpdate();
+  }, []);
+
+  const acceptCall = useCallback(async (): Promise<void> => {
+    const incoming = incomingCallRef.current;
+    if (!incoming) return;
+    await webrtcRef.current.acceptCall(incoming.callerId, incoming.callType);
+    incomingCallRef.current = null;
+    forceUpdate();
+  }, []);
+
+  const rejectCall = useCallback((): void => {
+    const incoming = incomingCallRef.current;
+    if (!incoming) return;
+    webrtcRef.current.rejectCall(incoming.callerId);
+    incomingCallRef.current = null;
+    forceUpdate();
+  }, []);
+
+  const hangupCall = useCallback((): void => {
+    webrtcRef.current.hangup();
+    forceUpdate();
+  }, []);
+
+
   useEffect(() => {
     // Keep refs in sync with reducer state (avoid stale closures in connect handlers)
     taskPlansRef.current = state.taskPlans;
@@ -1485,6 +1575,13 @@ export function AICQProvider({ children }: { children: React.ReactNode }) {
     getMessageCount,
     loadMoreGroupMessages,
     getGroupMessageCount,
+    startCall,
+    acceptCall,
+    rejectCall,
+    hangupCall,
+    incomingCall: incomingCallRef.current,
+    callState: webrtcRef.current.callState,
+    callPeerId: webrtcRef.current.peerId,
   }), [state]);
 
   return <AICQContext.Provider value={value}>{children}</AICQContext.Provider>;

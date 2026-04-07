@@ -2025,6 +2025,14 @@ export class WebClient extends SimpleEventEmitter {
     return this.api.getGroupMessageHistory(groupId, limit, before);
   }
 
+  /**
+   * Send a WebRTC signaling message to a peer via the relay server.
+   * Used for call offer/answer/ICE candidate exchange.
+   */
+  sendCallSignal(toId: string, signalData: Record<string, any>): void {
+    this.ws.send('signal', { to: toId, data: signalData });
+  }
+
   /* ─── IndexedDB Message Cache Access ────────────────────────── */
 
   /**
