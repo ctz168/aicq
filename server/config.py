@@ -186,6 +186,14 @@ class Config:
     HOST: str = _env_str("HOST", "0.0.0.0")
     DEBUG: bool = _env_bool("DEBUG", False)
 
+    # ── HTTPS / Website ────────────────────────────────────────────────
+    HTTPS_PORT: int = _env_int("HTTPS_PORT", 443)
+    HTTPS_ENABLED: bool = _env_bool("HTTPS_ENABLED", True)
+    SSL_CERT_PATH: str = _env_str("SSL_CERT_PATH", "")
+    SSL_KEY_PATH: str = _env_str("SSL_KEY_PATH", "")
+    WEBSITE_PORT: int = _env_int("WEBSITE_PORT", 443)
+    WEBSITE_HOST: str = _env_str("WEBSITE_HOST", "0.0.0.0")
+
     # ── Auth ────────────────────────────────────────────────────────────
     JWT_SECRET: str = _resolve_jwt_secret()
     JWT_ACCESS_TOKEN_EXPIRY: int = _env_int("JWT_ACCESS_TOKEN_EXPIRY", 3600)
@@ -331,6 +339,13 @@ class Config:
             cls.HOST = _env_str("HOST", "0.0.0.0")
             cls.DEBUG = _env_bool("DEBUG", False)
 
+            cls.HTTPS_PORT = _env_int("HTTPS_PORT", 443)
+            cls.HTTPS_ENABLED = _env_bool("HTTPS_ENABLED", True)
+            cls.SSL_CERT_PATH = _env_str("SSL_CERT_PATH", "")
+            cls.SSL_KEY_PATH = _env_str("SSL_KEY_PATH", "")
+            cls.WEBSITE_PORT = _env_int("WEBSITE_PORT", 443)
+            cls.WEBSITE_HOST = _env_str("WEBSITE_HOST", "0.0.0.0")
+
             cls.JWT_SECRET = _env_str("JWT_SECRET", "") or cls.JWT_SECRET
             cls.JWT_ACCESS_TOKEN_EXPIRY = _env_int("JWT_ACCESS_TOKEN_EXPIRY", 3600)
             cls.JWT_REFRESH_TOKEN_EXPIRY = _env_int("JWT_REFRESH_TOKEN_EXPIRY", 2_592_000)
@@ -421,6 +436,13 @@ _ALL_CONFIG_KEYS: tuple[str, ...] = (
     "DOMAIN",
     "HOST",
     "DEBUG",
+    # HTTPS / Website
+    "HTTPS_PORT",
+    "HTTPS_ENABLED",
+    "SSL_CERT_PATH",
+    "SSL_KEY_PATH",
+    "WEBSITE_PORT",
+    "WEBSITE_HOST",
     # Auth
     "JWT_SECRET",
     "JWT_ACCESS_TOKEN_EXPIRY",

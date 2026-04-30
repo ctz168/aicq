@@ -1231,12 +1231,26 @@ async function handleLogin(e) {
   try {
     // If we know admin is not initialized, go straight to init
     if (window._adminNotInitialized) {
-      const data = await api('POST', '/init', { password: pwd });
+      // Use direct fetch for init (no auth needed) to avoid api() 401 redirect loop
+      const resp = await fetch(API + '/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pwd }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error || data.message || JSON.stringify(data));
+      }
       token = data.token;
       localStorage.setItem('aicq_admin_token', token);
       document.getElementById('loginPassword').value = '';
       toast('管理员密码设置成功', 'success');
       window._adminNotInitialized = false;
+      // Update UI back to login mode
+      document.getElementById('loginMode').textContent = '登录';
+      document.getElementById('loginBtnText').textContent = '登 录';
+      document.getElementById('loginPassword').placeholder = '请输入管理员密码';
+      document.querySelector('label[for="loginPassword"]').textContent = '管理员密码';
       showApp();
     } else {
       // Try login first
@@ -1250,11 +1264,26 @@ async function handleLogin(e) {
     // If login failed because admin not initialized, try init
     if (!window._adminNotInitialized && err.message && (err.message.includes('not initialized') || err.message.includes('Admin not'))) {
       try {
-        const data = await api('POST', '/init', { password: pwd });
+        // Use direct fetch for init (no auth needed)
+        const resp = await fetch(API + '/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || data.message || JSON.stringify(data));
+        }
         token = data.token;
         localStorage.setItem('aicq_admin_token', token);
         document.getElementById('loginPassword').value = '';
         toast('管理员密码设置成功', 'success');
+        window._adminNotInitialized = false;
+        // Update UI back to login mode
+        document.getElementById('loginMode').textContent = '登录';
+        document.getElementById('loginBtnText').textContent = '登 录';
+        document.getElementById('loginPassword').placeholder = '请输入管理员密码';
+        document.querySelector('label[for="loginPassword"]').textContent = '管理员密码';
         showApp();
       } catch (initErr) {
         toast(initErr.message, 'error');

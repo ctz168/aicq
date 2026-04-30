@@ -26,6 +26,8 @@ import asyncio
 import json
 import logging
 import os
+import ssl
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -1269,27 +1271,18 @@ def setup_handshake_routes(app: web.Application) -> None:
 
 
 def setup_admin_routes(app: web.Application) -> None:
-    """Register admin API routes."""
+    """Register admin API routes.
+
+    All admin routes are handled by the modular ``admin_routes`` module
+    which includes setup-status, init, login, stats, node/account
+    management, configuration, blacklist, service control, and database
+    inspection.  We no longer register duplicate inline handlers here —
+    that caused routing conflicts on ``/api/v1/admin/init`` and
+    ``/api/v1/admin/login``.
+    """
     from routes.admin_routes import setup_routes as _setup_admin_mod_routes
-    # Use the modular admin routes which include setup-status
     _setup_admin_mod_routes(app)
-    # Also register inline handlers for compatibility
-    prefix = "/api/v1/admin"
-    app.router.add_post(f"{prefix}/init", api_admin_init)
-    app.router.add_post(f"{prefix}/login", api_admin_login)
-    app.router.add_get(f"{prefix}/stats", api_admin_stats)
-    app.router.add_get(f"{prefix}/nodes", api_admin_list_nodes)
-    app.router.add_get(f"{prefix}/nodes/{{node_id}}", api_admin_get_node)
-    app.router.add_get(f"{prefix}/accounts", api_admin_list_accounts)
-    app.router.add_post(f"{prefix}/accounts", api_admin_create_account)
-    app.router.add_put(f"{prefix}/accounts/{{account_id}}", api_admin_update_account)
-    app.router.add_delete(f"{prefix}/accounts/{{account_id}}", api_admin_delete_account)
-    app.router.add_get(f"{prefix}/config", api_admin_get_config)
-    app.router.add_post(f"{prefix}/config", api_admin_update_config)
-    app.router.add_get(f"{prefix}/blacklist", api_admin_get_blacklist)
-    app.router.add_post(f"{prefix}/blacklist", api_admin_add_blacklist)
-    app.router.add_delete(f"{prefix}/blacklist/{{entry_id}}", api_admin_remove_blacklist)
-    logger.debug("Admin routes registered under %s", prefix)
+    logger.debug("Admin routes registered via admin_routes module")
 
 
 def setup_verification_routes(app: web.Application) -> None:
@@ -1492,6 +1485,105 @@ def create_app() -> web.Application:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  HTTPS / Website application
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _generate_self_signed_cert() -> tuple[str, str]:
+    """Generate a self-signed SSL certificate for development.
+
+    Returns a tuple of (cert_path, key_path).
+    """
+    cert_dir = Path(__file__).resolve().parent / "ssl"
+    cert_dir.mkdir(exist_ok=True)
+
+    cert_path = str(cert_dir / "cert.pem")
+    key_path = str(cert_dir / "key.pem")
+
+    if Path(cert_path).exists() and Path(key_path).exists():
+        logger.info("Reusing existing self-signed certificate from %s", cert_dir)
+        return cert_path, key_path
+
+    logger.info("Generating self-signed SSL certificate in %s", cert_dir)
+    try:
+        subprocess.run(
+            [
+                "openssl", "req", "-x509", "-newkey", "rsa:2048",
+                "-keyout", key_path,
+                "-out", cert_path,
+                "-days", "365",
+                "-nodes",
+                "-subj", "/CN=aicq.local",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        logger.info("Self-signed certificate generated successfully")
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        logger.warning("Failed to generate self-signed cert: %s", exc)
+        return "", ""
+
+    return cert_path, key_path
+
+
+def _build_ssl_context(cert_path: str, key_path: str) -> ssl.SSLContext:
+    """Build an SSL context from the given certificate and key paths."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert_path, key_path)
+    return ctx
+
+
+async def website_health_check(request: web.Request) -> web.Response:
+    """GET /health — Health check for the website app (shares DB with main app)."""
+    start_time: float = request.app.get("start_time", time.time())
+    uptime = int(time.time() - start_time)
+    return web.json_response({
+        "status": "ok",
+        "uptime": uptime,
+        "storage": "sqlite",
+    })
+
+
+def create_website_app(main_app: web.Application) -> web.Application:
+    """Build and return a lightweight aiohttp Application for the public website.
+
+    This app serves static files and the landing page, but does NOT expose
+    admin or API routes.  It is intended to be run on the HTTPS port.
+    """
+    from middleware.cors_middleware import cors_middleware as _cors
+
+    website = web.Application(middlewares=[_cors])
+
+    # Share the database and start_time with the main app
+    website["db"] = main_app["db"]
+    website["start_time"] = main_app.get("start_time", time.time())
+
+    # Health check
+    website.router.add_get("/health", website_health_check)
+
+    # Serve landing page
+    static_dir = Path(__file__).resolve().parent / "static"
+    if static_dir.is_dir():
+        async def serve_index(request: web.Request) -> web.FileResponse:
+            idx = static_dir / "index.html"
+            if idx.exists():
+                return web.FileResponse(idx)
+            return web.Response(text="<h1>AICQ Server</h1>", content_type="text/html")
+
+        async def serve_admin(request: web.Request) -> web.FileResponse:
+            adm = static_dir / "admin.html"
+            if adm.exists():
+                return web.FileResponse(adm)
+            return web.Response(text="<h1>Admin Panel</h1>", content_type="text/html")
+
+        website.router.add_get("/", serve_index)
+        website.router.add_get("/admin", serve_admin)
+        website.router.add_static("/static", str(static_dir), name="static")
+
+    return website
+
+
 def main() -> None:
     """Entry point — configure logging, create the app, and run."""
     _configure_logging()
@@ -1504,6 +1596,73 @@ def main() -> None:
     )
 
     app = create_app()
+
+    # ── Determine if we should start the HTTPS website alongside ──────
+    ssl_ctx: Optional[ssl.SSLContext] = None
+    website_app: Optional[web.Application] = None
+
+    if Config.HTTPS_ENABLED:
+        cert_path = Config.SSL_CERT_PATH
+        key_path = Config.SSL_KEY_PATH
+
+        # Auto-generate self-signed cert if none provided
+        if not cert_path or not key_path:
+            cert_path, key_path = _generate_self_signed_cert()
+
+        if cert_path and key_path:
+            try:
+                ssl_ctx = _build_ssl_context(cert_path, key_path)
+                logger.info("SSL context created from %s / %s", cert_path, key_path)
+            except Exception as exc:
+                logger.warning("Failed to create SSL context: %s — falling back to HTTP", exc)
+                ssl_ctx = None
+
+    # ── Use web.run_app with on_startup for both apps ─────────────────
+    # web.run_app only runs a single app, so we use a runner approach
+    # for the website.  We hook into on_startup to start the website.
+
+    async def _start_website(main_app_instance: web.Application) -> None:
+        """Start the HTTPS website as a secondary site."""
+        if not Config.HTTPS_ENABLED:
+            return
+
+        nonlocal ssl_ctx, website_app
+        website_app = create_website_app(main_app_instance)
+
+        website_host = Config.WEBSITE_HOST or Config.HOST
+        website_port = Config.WEBSITE_PORT or Config.HTTPS_PORT or 443
+
+        runner = web.AppRunner(website_app)
+        await runner.setup()
+
+        if ssl_ctx:
+            site = web.TCPSite(
+                runner, website_host, website_port, ssl_context=ssl_ctx,
+            )
+            logger.info(
+                "HTTPS website starting on https://%s:%s", website_host, website_port,
+            )
+        else:
+            site = web.TCPSite(runner, website_host, website_port)
+            logger.info(
+                "HTTP website starting on http://%s:%s (no SSL)", website_host, website_port,
+            )
+
+        await site.start()
+
+        # Store runner for cleanup
+        main_app_instance["_website_runner"] = runner
+
+    async def _stop_website(main_app_instance: web.Application) -> None:
+        """Stop the HTTPS website on shutdown."""
+        runner: Optional[web.AppRunner] = main_app_instance.get("_website_runner")
+        if runner is not None:
+            await runner.cleanup()
+            logger.info("HTTPS website stopped")
+
+    app.on_startup.append(_start_website)
+    app.on_cleanup.insert(0, _stop_website)
+
     web.run_app(
         app,
         host=Config.HOST,

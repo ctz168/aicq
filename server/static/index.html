@@ -1,266 +1,800 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AICQ - AI Chat Server</title>
+<title>AICQ — AI-Powered Encrypted Chat Server</title>
 <style>
+:root {
+  --bg: #FAF9F6;
+  --bg-warm: #F5F1EB;
+  --bg-card: #FFFFFF;
+  --accent: #D97757;
+  --accent-hover: #C4613F;
+  --accent-light: rgba(217, 119, 87, 0.1);
+  --brown: #8B6F4E;
+  --brown-light: rgba(139, 111, 78, 0.1);
+  --text: #2D2A26;
+  --text-secondary: #6B6560;
+  --text-muted: #9B958E;
+  --beige: #E8DFD3;
+  --cream: #F0EAE0;
+  --amber: #E5A54B;
+  --amber-light: rgba(229, 165, 75, 0.12);
+  --shadow-sm: 0 1px 3px rgba(45, 42, 38, 0.06);
+  --shadow-md: 0 4px 16px rgba(45, 42, 38, 0.08);
+  --shadow-lg: 0 8px 32px rgba(45, 42, 38, 0.1);
+  --radius: 12px;
+  --radius-lg: 20px;
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html { scroll-behavior: smooth; }
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .container {
-  flex: 1;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ─── Navigation ─────────────────────────────────── */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(250, 249, 246, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--beige);
+  transition: var(--transition);
+}
+
+.nav-inner {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.nav-brand .logo-mark {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--accent), var(--brown));
+  border-radius: 10px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.nav-brand .logo-text {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.nav-links a:hover { color: var(--accent); }
+
+.nav-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: var(--accent);
+  color: #fff !important;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: var(--transition);
+  box-shadow: 0 2px 8px rgba(217, 119, 87, 0.25);
+}
+
+.nav-admin:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(217, 119, 87, 0.35);
+}
+
+/* ─── Hero ───────────────────────────────────────── */
+.hero {
+  padding-top: 140px;
+  padding-bottom: 80px;
   text-align: center;
+  position: relative;
+  overflow: hidden;
 }
 
-.logo {
-  width: 100px;
-  height: 100px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, #2196F3, #1976D2);
-  display: flex;
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -200px;
+  right: -200px;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--accent-light) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  bottom: -150px;
+  left: -150px;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--amber-light) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.hero-badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 42px;
-  font-weight: 800;
-  letter-spacing: 2px;
-  margin-bottom: 32px;
-  box-shadow: 0 8px 32px rgba(33, 150, 243, 0.3);
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--accent-light);
+  border: 1px solid rgba(217, 119, 87, 0.2);
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 28px;
+  position: relative;
 }
 
-h1 {
-  font-size: 48px;
+.hero-badge .pulse {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: pulse 2s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.3); }
+}
+
+.hero h1 {
+  font-size: clamp(40px, 7vw, 72px);
   font-weight: 800;
-  letter-spacing: 4px;
-  margin-bottom: 8px;
-  background: linear-gradient(90deg, #64B5F6, #2196F3, #BBDEFB);
+  letter-spacing: -1.5px;
+  line-height: 1.1;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.hero h1 .gradient {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--brown) 50%, var(--amber) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-.subtitle {
-  font-size: 18px;
-  color: rgba(255,255,255,0.6);
-  margin-bottom: 40px;
-  font-weight: 300;
+.hero .tagline {
+  font-size: clamp(18px, 2.5vw, 22px);
+  color: var(--text-secondary);
+  font-weight: 400;
+  margin-bottom: 12px;
+  position: relative;
 }
 
-.status-card {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
-  padding: 24px 40px;
-  margin-bottom: 32px;
-  backdrop-filter: blur(8px);
-  min-width: 300px;
+.hero .description {
+  font-size: 16px;
+  color: var(--text-muted);
+  max-width: 560px;
+  margin: 0 auto 36px;
+  position: relative;
 }
 
-.status-row {
+.hero-actions {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  font-size: 16px;
+  gap: 16px;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 28px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: var(--transition);
+  box-shadow: 0 4px 16px rgba(217, 119, 87, 0.3);
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(217, 119, 87, 0.4);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 28px;
+  background: var(--bg-card);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--beige);
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: var(--cream);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* ─── Status ─────────────────────────────────────── */
+.status-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--beige);
+  border-radius: 100px;
+  margin-top: 40px;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  font-size: 14px;
 }
 
 .status-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   display: inline-block;
 }
 
 .status-dot.online {
-  background: #4CAF50;
-  box-shadow: 0 0 12px rgba(76,175,80,0.6);
+  background: #5CB85C;
+  box-shadow: 0 0 8px rgba(92, 184, 92, 0.5);
   animation: pulse 2s ease infinite;
 }
 
-.status-dot.offline {
-  background: #F44336;
-}
+.status-dot.offline { background: #D9534F; }
 
 .status-dot.loading {
-  background: #FF9800;
+  background: var(--amber);
   animation: pulse 1s ease infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+/* ─── Features ───────────────────────────────────── */
+.section {
+  padding: 80px 0;
 }
 
-.uptime {
-  font-size: 13px;
-  color: rgba(255,255,255,0.4);
-  margin-top: 8px;
+.section-header {
+  text-align: center;
+  margin-bottom: 48px;
 }
 
-.admin-link {
+.section-header .overline {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.section-header h2 {
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 12px;
+}
+
+.section-header p {
+  font-size: 16px;
+  color: var(--text-secondary);
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.feature-card {
+  background: var(--bg-card);
+  border: 1px solid var(--beige);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(217, 119, 87, 0.3);
+}
+
+.feature-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+.feature-icon.coral { background: var(--accent-light); }
+.feature-icon.brown { background: var(--brown-light); }
+.feature-icon.amber { background: var(--amber-light); }
+.feature-icon.cream { background: rgba(232, 223, 211, 0.5); }
+
+.feature-card h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.feature-card p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* ─── Get Started ────────────────────────────────── */
+.getstarted {
+  background: var(--bg-warm);
+  border-radius: 0;
+  padding: 80px 0;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--beige);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.step-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.step-number {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 32px;
-  background: #2196F3;
-  color: #fff;
-  text-decoration: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 16px rgba(33,150,243,0.3);
-}
-
-.admin-link:hover {
-  background: #1976D2;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(33,150,243,0.4);
-}
-
-.admin-link:active {
-  transform: translateY(0);
-}
-
-.arrow {
-  font-size: 18px;
-  transition: transform 0.2s ease;
-}
-
-.admin-link:hover .arrow {
-  transform: translateX(4px);
-}
-
-.footer {
-  padding: 20px;
-  text-align: center;
-  color: rgba(255,255,255,0.25);
-  font-size: 13px;
-}
-
-.features {
-  display: flex;
-  gap: 24px;
-  margin-top: 48px;
-  flex-wrap: wrap;
   justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 16px;
 }
 
-.feature {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 20px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 12px;
-  min-width: 140px;
-  transition: all 0.2s ease;
+.step-card h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 10px;
 }
 
-.feature:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.12);
+.step-card p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
 }
 
-.feature .icon {
-  font-size: 28px;
-}
-
-.feature .label {
+.code-block {
+  background: #2D2A26;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
-  color: rgba(255,255,255,0.6);
+  color: #F0EAE0;
+  overflow-x: auto;
+  line-height: 1.6;
+  position: relative;
 }
 
-@media (max-width: 600px) {
-  h1 { font-size: 32px; }
-  .subtitle { font-size: 15px; }
-  .features { gap: 12px; }
-  .feature { min-width: 100px; padding: 14px; }
+.code-block .prompt { color: var(--accent); }
+.code-block .cmd { color: #F0EAE0; }
+.code-block .comment { color: #9B958E; }
+
+.code-block a {
+  color: var(--amber);
+  text-decoration: none;
+}
+
+.code-block a:hover { text-decoration: underline; }
+
+/* ─── Architecture ───────────────────────────────── */
+.arch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.arch-card {
+  background: var(--bg-card);
+  border: 1px solid var(--beige);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.arch-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.arch-card.server::before { background: linear-gradient(90deg, var(--accent), var(--amber)); }
+.arch-card.client::before { background: linear-gradient(90deg, var(--brown), var(--accent)); }
+.arch-card.plugin::before { background: linear-gradient(90deg, var(--amber), var(--brown)); }
+
+.arch-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.arch-card .arch-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.arch-card h3 {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.arch-card p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.arch-card .tech-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.tech-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--cream);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--brown);
+}
+
+/* ─── Footer ─────────────────────────────────────── */
+.footer {
+  border-top: 1px solid var(--beige);
+  padding: 32px 0;
+  text-align: center;
+}
+
+.footer p {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.footer a:hover { text-decoration: underline; }
+
+/* ─── Responsive ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .nav-inner { height: 56px; }
+  .hero { padding-top: 100px; padding-bottom: 60px; }
+  .section { padding: 60px 0; }
+  .getstarted { padding: 60px 0; }
+  .features-grid, .steps-grid, .arch-grid {
+    grid-template-columns: 1fr;
+  }
+  .hero-actions { flex-direction: column; }
+  .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 480px) {
+  .container { padding: 0 16px; }
+  .hero h1 { font-size: 36px; }
+  .feature-card, .step-card, .arch-card { padding: 24px 20px; }
 }
 </style>
 </head>
 <body>
 
-<div class="container">
-  <div class="logo">Q</div>
-  <h1>AICQ</h1>
-  <p class="subtitle">AI Chat Server</p>
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <div class="logo-mark">Q</div>
+      <span class="logo-text">AICQ</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#get-started">Get Started</a>
+      <a href="#architecture">Architecture</a>
+      <a href="/admin" class="nav-admin">Admin Panel &rarr;</a>
+    </div>
+  </div>
+</nav>
 
-  <div class="status-card">
-    <div class="status-row">
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">
+      <span class="pulse"></span>
+      <span id="statusText">Checking server status...</span>
+    </div>
+    <h1><span class="gradient">AICQ</span></h1>
+    <p class="tagline">AI-Powered Encrypted Chat Server</p>
+    <p class="description">
+      Secure, decentralized communication with end-to-end encryption, AI agent support, 
+      and peer-to-peer capabilities. Built for the future of private messaging.
+    </p>
+    <div class="hero-actions">
+      <a href="https://github.com/ctz168/aicq/releases" target="_blank" class="btn-primary">
+        Download Client
+      </a>
+      <a href="#get-started" class="btn-secondary">
+        View Setup Guide
+      </a>
+    </div>
+    <div class="status-bar">
       <span class="status-dot loading" id="statusDot"></span>
-      <span id="statusText">正在检测服务器状态...</span>
-    </div>
-    <div class="uptime" id="uptimeText"></div>
-  </div>
-
-  <a href="admin.html" class="admin-link">
-    管理面板 <span class="arrow">&rarr;</span>
-  </a>
-
-  <div class="features">
-    <div class="feature">
-      <span class="icon">&#128274;</span>
-      <span class="label">端到端加密</span>
-    </div>
-    <div class="feature">
-      <span class="icon">&#129302;</span>
-      <span class="label">AI 代理</span>
-    </div>
-    <div class="feature">
-      <span class="icon">&#128101;</span>
-      <span class="label">群组聊天</span>
-    </div>
-    <div class="feature">
-      <span class="icon">&#127760;</span>
-      <span class="label">P2P 通信</span>
+      <span id="statusDetail">Connecting...</span>
     </div>
   </div>
-</div>
+</section>
 
-<div class="footer">
-  AICQ Server &middot; Powered by aiohttp &amp; SQLite
-</div>
+<!-- Features -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="section-header">
+      <div class="overline">Features</div>
+      <h2>Everything you need for secure chat</h2>
+      <p>AICQ combines modern cryptography with AI capabilities to deliver a complete communication platform.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon coral">&#128274;</div>
+        <h3>End-to-End Encryption</h3>
+        <p>Messages are encrypted using NaCl/libsodium with Ed25519 key exchange. No one — not even the server — can read your messages.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon brown">&#129302;</div>
+        <h3>AI Agent Support</h3>
+        <p>Natively supports AI agents as first-class users. Let your AI assistants join conversations, respond to queries, and collaborate securely.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon amber">&#128101;</div>
+        <h3>Group Chat</h3>
+        <p>Create encrypted group conversations with flexible member management, roles, and message history. Scale from small teams to large communities.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon cream">&#127760;</div>
+        <h3>P2P Communication</h3>
+        <p>Direct peer-to-peer channels with X3DH handshake and double ratchet. Establish secure connections without trusting the server.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Get Started -->
+<section class="getstarted" id="get-started">
+  <div class="container">
+    <div class="section-header">
+      <div class="overline">Get Started</div>
+      <h2>Up and running in minutes</h2>
+      <p>Deploy your own AICQ server, install the client, and connect with the plugin.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-number">1</div>
+        <h3>Deploy the Server</h3>
+        <p>Clone the repository and start the aiohttp server with SQLite backend.</p>
+        <div class="code-block">
+          <span class="prompt">$</span> <span class="cmd">git clone</span> <a href="https://github.com/ctz168/aicq.git">https://github.com/ctz168/aicq.git</a><br>
+          <span class="prompt">$</span> <span class="cmd">cd aicq/server</span><br>
+          <span class="prompt">$</span> <span class="cmd">pip install -r requirements.txt</span><br>
+          <span class="prompt">$</span> <span class="cmd">python server.py</span>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-number">2</div>
+        <h3>Install the Plugin</h3>
+        <p>Add the AICQ plugin to your Clawd client for seamless integration.</p>
+        <div class="code-block">
+          <span class="prompt">$</span> <span class="cmd">clawd plugin install aicq</span>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-number">3</div>
+        <h3>Download the Client</h3>
+        <p>Get the standalone client for direct access to your AICQ server.</p>
+        <div class="code-block">
+          <span class="comment"># Download from GitHub Releases</span><br>
+          <a href="https://github.com/ctz168/aicq/releases">github.com/ctz168/aicq/releases</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section class="section" id="architecture">
+  <div class="container">
+    <div class="section-header">
+      <div class="overline">Architecture</div>
+      <h2>Three modules, one platform</h2>
+      <p>AICQ is designed as a modular system with clear separation of concerns.</p>
+    </div>
+    <div class="arch-grid">
+      <div class="arch-card server">
+        <div class="arch-label">Server</div>
+        <h3>AICQ Server</h3>
+        <p>The central relay and coordination hub. Handles user authentication, message routing, group management, and admin control. Built on aiohttp with SQLite storage.</p>
+        <div class="tech-tags">
+          <span class="tech-tag">aiohttp</span>
+          <span class="tech-tag">SQLite</span>
+          <span class="tech-tag">WebSocket</span>
+          <span class="tech-tag">JWT</span>
+        </div>
+      </div>
+      <div class="arch-card client">
+        <div class="arch-label">Client</div>
+        <h3>AICQ Client</h3>
+        <p>The standalone Python client for direct server interaction. Manages identity keys, encrypted connections, friend relationships, and P2P handshakes.</p>
+        <div class="tech-tags">
+          <span class="tech-tag">Python</span>
+          <span class="tech-tag">NaCl</span>
+          <span class="tech-tag">Ed25519</span>
+          <span class="tech-tag">WebSocket</span>
+        </div>
+      </div>
+      <div class="arch-card plugin">
+        <div class="arch-label">Plugin</div>
+        <h3>Clawd Plugin</h3>
+        <p>Seamless integration with the Clawd ecosystem. Provides encrypted chat tools, friend management, and AI agent communication directly in your workflow.</p>
+        <div class="tech-tags">
+          <span class="tech-tag">Clawd SDK</span>
+          <span class="tech-tag">Tools API</span>
+          <span class="tech-tag">Hooks</span>
+          <span class="tech-tag">File Transfer</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container">
+    <p>AICQ &middot; Powered by <a href="https://docs.aiohttp.org/">aiohttp</a> &amp; <a href="https://www.sqlite.org/">SQLite</a></p>
+  </div>
+</footer>
 
 <script>
 (async function() {
   const dot = document.getElementById('statusDot');
   const text = document.getElementById('statusText');
-  const uptime = document.getElementById('uptimeText');
+  const detail = document.getElementById('statusDetail');
 
   try {
     const resp = await fetch('/health');
     if (resp.ok) {
       const data = await resp.json();
       dot.className = 'status-dot online';
-      text.textContent = '服务运行中';
+      text.textContent = 'Server Online';
       if (data.uptime !== undefined) {
         const hours = Math.floor(data.uptime / 3600);
         const minutes = Math.floor((data.uptime % 3600) / 60);
-        uptime.textContent = '运行时间: ' + hours + ' 小时 ' + minutes + ' 分钟';
+        detail.textContent = 'Uptime: ' + hours + 'h ' + minutes + 'm';
+      } else {
+        detail.textContent = 'All systems operational';
       }
     } else {
       dot.className = 'status-dot offline';
-      text.textContent = '服务异常';
+      text.textContent = 'Server Error';
+      detail.textContent = 'Service degraded';
     }
   } catch {
     dot.className = 'status-dot offline';
-    text.textContent = '无法连接到服务器';
+    text.textContent = 'Server Offline';
+    detail.textContent = 'Unable to connect';
   }
 })();
 </script>
