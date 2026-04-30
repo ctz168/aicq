@@ -1,0 +1,2108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AICQ 管理面板</title>
+<style>
+:root {
+  --primary: #2196F3;
+  --primary-dark: #1976D2;
+  --primary-light: #BBDEFB;
+  --success: #4CAF50;
+  --warning: #FF9800;
+  --danger: #F44336;
+  --info: #00BCD4;
+  --sidebar-bg: #1a1a2e;
+  --sidebar-hover: #16213e;
+  --sidebar-active: #0f3460;
+  --sidebar-text: #a8b2c1;
+  --sidebar-text-active: #ffffff;
+  --bg: #f0f2f5;
+  --card-bg: #ffffff;
+  --text: #333333;
+  --text-secondary: #666666;
+  --border: #e0e0e0;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --transition: all 0.2s ease;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* ─── Scrollbar ──────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c0c0c0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a0a0a0; }
+
+/* ─── Login Page ─────────────────────────────────── */
+.login-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+.login-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: var(--shadow-lg);
+}
+.login-card .logo {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.login-card .logo h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 2px;
+}
+.login-card .logo p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 4px;
+}
+.login-card .logo .version {
+  display: inline-block;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-top: 8px;
+}
+.form-group {
+  margin-bottom: 20px;
+}
+.form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  transition: var(--transition);
+  outline: none;
+  background: #fff;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* ─── Buttons ────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { background: #388E3C; }
+.btn-warning { background: var(--warning); color: #fff; }
+.btn-warning:hover { background: #F57C00; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #D32F2F; }
+.btn-outline {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-outline:hover { background: var(--bg); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-block { width: 100%; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ─── Layout ─────────────────────────────────────── */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 240px;
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
+  transition: transform 0.3s ease;
+}
+.sidebar-brand {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.sidebar-brand h2 {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.sidebar-brand span {
+  color: var(--primary-light);
+  font-size: 12px;
+}
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 0;
+  overflow-y: auto;
+}
+.sidebar-nav .nav-section {
+  padding: 8px 20px 4px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+.sidebar-nav .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  color: var(--sidebar-text);
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 14px;
+  border-left: 3px solid transparent;
+}
+.sidebar-nav .nav-item:hover {
+  background: var(--sidebar-hover);
+  color: #fff;
+}
+.sidebar-nav .nav-item.active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-text-active);
+  border-left-color: var(--primary);
+}
+.sidebar-nav .nav-item .icon {
+  width: 20px;
+  text-align: center;
+  font-size: 16px;
+}
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.sidebar-footer .logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  font-size: 13px;
+  transition: var(--transition);
+  background: none;
+  border: none;
+  padding: 0;
+}
+.sidebar-footer .logout-btn:hover { color: #fff; }
+
+/* Main content */
+.main-content {
+  flex: 1;
+  margin-left: 240px;
+  padding: 0;
+  min-height: 100vh;
+}
+.page-header {
+  background: var(--card-bg);
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.page-header h1 {
+  font-size: 20px;
+  font-weight: 600;
+}
+.page-header .subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.page-body {
+  padding: 24px 28px;
+}
+
+/* ─── Cards ──────────────────────────────────────── */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.card-body {
+  padding: 20px;
+}
+.card-body.no-padding { padding: 0; }
+
+/* ─── Stats Grid ─────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  transition: var(--transition);
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.stat-card .stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-bottom: 12px;
+}
+.stat-card .stat-icon.blue { background: #E3F2FD; color: #1976D2; }
+.stat-card .stat-icon.green { background: #E8F5E9; color: #388E3C; }
+.stat-card .stat-icon.orange { background: #FFF3E0; color: #F57C00; }
+.stat-card .stat-icon.purple { background: #F3E5F5; color: #7B1FA2; }
+.stat-card .stat-icon.red { background: #FFEBEE; color: #D32F2F; }
+.stat-card .stat-icon.teal { background: #E0F7FA; color: #00838F; }
+.stat-card .stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.stat-card .stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* ─── Table ──────────────────────────────────────── */
+.table-wrapper {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+table th, table td {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+table th {
+  background: #fafafa;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+table tr:hover td { background: #f8f9ff; }
+table tr.clickable { cursor: pointer; }
+table tr.clickable:hover td { background: #eef3ff; }
+
+/* ─── Badge ──────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.badge-success { background: #E8F5E9; color: #2E7D32; }
+.badge-warning { background: #FFF3E0; color: #E65100; }
+.badge-danger { background: #FFEBEE; color: #C62828; }
+.badge-info { background: #E3F2FD; color: #1565C0; }
+.badge-secondary { background: #F5F5F5; color: #616161; }
+
+/* ─── Pagination ─────────────────────────────────── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+.pagination .page-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.pagination .page-btns {
+  display: flex;
+  gap: 4px;
+}
+.pagination .page-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: var(--transition);
+}
+.pagination .page-btn:hover { background: var(--bg); }
+.pagination .page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pagination .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Search bar ─────────────────────────────────── */
+.search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.search-bar input {
+  flex: 1;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  outline: none;
+}
+.search-bar input:focus { border-color: var(--primary); }
+
+/* ─── Modal ──────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+}
+.modal-overlay.show { opacity: 1; visibility: visible; }
+.modal {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+.modal-overlay.show .modal { transform: scale(1); }
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-header h3 { font-size: 16px; font-weight: 600; }
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px;
+  line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 24px; }
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ─── Toast ──────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast {
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  color: #fff;
+  font-size: 14px;
+  box-shadow: var(--shadow-lg);
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s;
+  max-width: 380px;
+  word-break: break-word;
+}
+.toast-success { background: var(--success); }
+.toast-error { background: var(--danger); }
+.toast-warning { background: var(--warning); }
+.toast-info { background: var(--info); }
+@keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+
+/* ─── Spinner ────────────────────────────────────── */
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.spinner-sm { width: 18px; height: 18px; border-width: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+.inline-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* ─── Config ─────────────────────────────────────── */
+.config-section {
+  margin-bottom: 24px;
+}
+.config-section h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--primary-light);
+}
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+.config-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fafafa;
+}
+.config-item .config-key {
+  min-width: 160px;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+.config-item .config-value {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+  outline: none;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+.config-item .config-value:focus { border-color: var(--primary); }
+
+/* ─── DuckDNS / Domain ───────────────────────────── */
+.domain-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.domain-grid .full-width { grid-column: 1 / -1; }
+.ip-display {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ip-card {
+  flex: 1;
+  min-width: 200px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fafafa;
+}
+.ip-card .ip-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.ip-card .ip-value {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  color: var(--text);
+}
+.ip-card .ip-value.muted { color: #aaa; }
+
+/* ─── Service ────────────────────────────────────── */
+.service-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.status-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.running { background: var(--success); box-shadow: 0 0 8px rgba(76,175,80,0.4); }
+.status-dot.stopped { background: var(--danger); }
+.service-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.service-info-item {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fafafa;
+}
+.service-info-item .label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.service-info-item .value {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+.service-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* ─── SQL Query ──────────────────────────────────── */
+.sql-editor {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+  background: #1e1e2e;
+  color: #cdd6f4;
+}
+.sql-editor:focus { border-color: var(--primary); }
+.sql-result {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+.sql-result table { font-size: 12px; }
+.sql-result table td, .sql-result table th { padding: 8px 12px; }
+
+/* ─── Database table list ────────────────────────── */
+.db-table-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.db-table-item {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+  background: #fafafa;
+}
+.db-table-item:hover { background: #eef3ff; border-color: var(--primary-light); }
+.db-table-item.active { background: var(--primary-light); border-color: var(--primary); }
+.db-table-item .table-name {
+  font-weight: 500;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+/* ─── Responsive ─────────────────────────────────── */
+.mobile-toggle {
+  display: none;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 18px;
+  cursor: pointer;
+}
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; }
+  .mobile-toggle { display: block; }
+  .page-header { padding: 14px 16px; }
+  .page-body { padding: 16px; }
+  .stats-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .config-grid { grid-template-columns: 1fr; }
+  .domain-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── Misc ───────────────────────────────────────── */
+.text-mono { font-family: 'SF Mono', 'Consolas', monospace; }
+.text-sm { font-size: 13px; }
+.text-muted { color: var(--text-secondary); }
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+  display: inline-block;
+  vertical-align: bottom;
+}
+.mt-4 { margin-top: 16px; }
+.mb-4 { margin-bottom: 16px; }
+.gap-2 { gap: 8px; }
+.flex { display: flex; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.hidden { display: none !important; }
+.truncate-key {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: bottom;
+  cursor: pointer;
+}
+.truncate-key:hover { color: var(--primary); }
+
+/* Confirm dialog */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 250;
+}
+.confirm-box {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: var(--shadow-lg);
+}
+.confirm-box p { margin-bottom: 20px; font-size: 15px; }
+.confirm-box .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Tab sub-navigation */
+.sub-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+}
+.sub-tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  color: var(--text-secondary);
+  transition: var(--transition);
+}
+.sub-tab:hover { color: var(--primary); }
+.sub-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* DB columns display */
+.db-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.db-col-badge {
+  padding: 4px 10px;
+  background: #f0f4ff;
+  border: 1px solid #d0d9f0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+.db-col-badge .col-type {
+  color: var(--primary-dark);
+  margin-left: 4px;
+}
+</style>
+</head>
+<body>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- LOGIN PAGE                                          -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div id="loginPage" class="login-wrapper">
+  <div class="login-card">
+    <div class="logo">
+      <h1>AICQ</h1>
+      <p>管理控制面板</p>
+      <span class="version" id="loginMode">登录</span>
+    </div>
+    <form id="loginForm" onsubmit="return handleLogin(event)">
+      <div class="form-group">
+        <label for="loginPassword">管理员密码</label>
+        <input type="password" id="loginPassword" placeholder="请输入管理员密码" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
+        <span id="loginBtnText">登 录</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- MAIN APP LAYOUT                                     -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div id="appLayout" class="app-layout hidden">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <h2>AICQ</h2>
+      <span>Admin Panel</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">主要</div>
+      <div class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')">
+        <span class="icon">&#9632;</span> 仪表盘
+      </div>
+      <div class="nav-item" data-view="nodes" onclick="switchView('nodes')">
+        <span class="icon">&#9672;</span> 节点管理
+      </div>
+      <div class="nav-item" data-view="accounts" onclick="switchView('accounts')">
+        <span class="icon">&#9787;</span> 账号管理
+      </div>
+      <div class="nav-section">系统</div>
+      <div class="nav-item" data-view="config" onclick="switchView('config')">
+        <span class="icon">&#9881;</span> 配置管理
+      </div>
+      <div class="nav-item" data-view="domain" onclick="switchView('domain')">
+        <span class="icon">&#9741;</span> 域名管理
+      </div>
+      <div class="nav-item" data-view="service" onclick="switchView('service')">
+        <span class="icon">&#9654;</span> 服务管理
+      </div>
+      <div class="nav-item" data-view="blacklist" onclick="switchView('blacklist')">
+        <span class="icon">&#9899;</span> 黑名单
+      </div>
+      <div class="nav-item" data-view="database" onclick="switchView('database')">
+        <span class="icon">&#9776;</span> 数据库
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="logout-btn" onclick="handleLogout()">
+        <span>&#10140;</span> 退出登录
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <div class="main-content">
+    <header class="page-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="mobile-toggle" onclick="toggleSidebar()">&#9776;</button>
+        <div>
+          <h1 id="pageTitle">仪表盘</h1>
+          <div class="subtitle" id="pageSubtitle">系统概览与统计</div>
+        </div>
+      </div>
+      <div id="headerActions"></div>
+    </header>
+
+    <div class="page-body">
+      <!-- Dashboard View -->
+      <div id="view-dashboard" class="view-panel">
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-card">
+            <div class="stat-icon blue">&#9672;</div>
+            <div class="stat-value" id="statNodes">-</div>
+            <div class="stat-label">总节点数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">&#9787;</div>
+            <div class="stat-value" id="statAccounts">-</div>
+            <div class="stat-label">总账号数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon orange">&#9829;</div>
+            <div class="stat-value" id="statFriendships">-</div>
+            <div class="stat-label">好友关系</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple">&#9733;</div>
+            <div class="stat-value" id="statGroups">-</div>
+            <div class="stat-label">群组数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon red">&#9899;</div>
+            <div class="stat-value" id="statBlacklisted">-</div>
+            <div class="stat-label">黑名单数</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>快速信息</h3>
+            <span class="text-sm text-muted" id="statsLastUpdate">-</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted text-sm">仪表盘数据每 30 秒自动刷新。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nodes View -->
+      <div id="view-nodes" class="view-panel hidden">
+        <div class="search-bar">
+          <input type="text" id="nodeSearch" placeholder="搜索节点 ID 或公钥..." onkeydown="if(event.key==='Enter')loadNodes()">
+          <button class="btn btn-primary btn-sm" onclick="loadNodes()">搜索</button>
+        </div>
+        <div class="card">
+          <div class="card-body no-padding">
+            <div class="table-wrapper" id="nodesTableWrap">
+              <div class="loading-overlay"><div class="spinner"></div></div>
+            </div>
+          </div>
+          <div class="pagination" id="nodesPagination"></div>
+        </div>
+      </div>
+
+      <!-- Accounts View -->
+      <div id="view-accounts" class="view-panel hidden">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div class="search-bar" style="flex:1;margin-bottom:0;">
+            <input type="text" id="accountSearch" placeholder="搜索邮箱、手机或昵称..." onkeydown="if(event.key==='Enter')loadAccounts()">
+            <button class="btn btn-primary btn-sm" onclick="loadAccounts()">搜索</button>
+          </div>
+          <button class="btn btn-success btn-sm" onclick="showCreateAccountModal()">+ 新建账号</button>
+        </div>
+        <div class="card">
+          <div class="card-body no-padding">
+            <div class="table-wrapper" id="accountsTableWrap">
+              <div class="loading-overlay"><div class="spinner"></div></div>
+            </div>
+          </div>
+          <div class="pagination" id="accountsPagination"></div>
+        </div>
+      </div>
+
+      <!-- Config View -->
+      <div id="view-config" class="view-panel hidden">
+        <div class="card">
+          <div class="card-header">
+            <h3>运行时配置</h3>
+            <button class="btn btn-primary btn-sm" onclick="saveConfig()">保存配置</button>
+          </div>
+          <div class="card-body" id="configBody">
+            <div class="loading-overlay"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Domain View -->
+      <div id="view-domain" class="view-panel hidden">
+        <div class="card mb-4">
+          <div class="card-header">
+            <h3>DuckDNS 域名配置</h3>
+            <span class="text-sm text-muted" id="domainLastUpdate">-</span>
+          </div>
+          <div class="card-body">
+            <div class="domain-grid">
+              <div class="form-group">
+                <label>域名 (DuckDNS 子域名)</label>
+                <input type="text" id="duckDomain" placeholder="例如: myaicq">
+              </div>
+              <div class="form-group">
+                <label>Token</label>
+                <input type="password" id="duckToken" placeholder="DuckDNS Token">
+              </div>
+              <div class="full-width flex gap-2">
+                <button class="btn btn-primary" onclick="saveDuckDns()">保存配置</button>
+                <button class="btn btn-warning" onclick="updateDuckDnsNow()">立即更新</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>当前 IP 地址</h3></div>
+          <div class="card-body">
+            <div class="ip-display" id="ipDisplay">
+              <div class="ip-card">
+                <div class="ip-label">公网 IPv4</div>
+                <div class="ip-value muted" id="publicIpv4">获取中...</div>
+              </div>
+              <div class="ip-card">
+                <div class="ip-label">公网 IPv6</div>
+                <div class="ip-value muted" id="publicIpv6">获取中...</div>
+              </div>
+              <div class="ip-card">
+                <div class="ip-label">局域网 IPv4</div>
+                <div class="ip-value muted" id="lanIpv4">获取中...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Service View -->
+      <div id="view-service" class="view-panel hidden">
+        <div class="card mb-4">
+          <div class="card-header"><h3>服务状态</h3></div>
+          <div class="card-body" id="serviceBody">
+            <div class="loading-overlay"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blacklist View -->
+      <div id="view-blacklist" class="view-panel hidden">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h3 style="font-size:16px;">黑名单列表</h3>
+          <button class="btn btn-danger btn-sm" onclick="showAddBlacklistModal()">+ 添加黑名单</button>
+        </div>
+        <div class="card">
+          <div class="card-body no-padding">
+            <div class="table-wrapper" id="blacklistTableWrap">
+              <div class="loading-overlay"><div class="spinner"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Database View -->
+      <div id="view-database" class="view-panel hidden">
+        <div class="sub-tabs">
+          <div class="sub-tab active" data-tab="dbOverview" onclick="switchDbTab('dbOverview')">概览</div>
+          <div class="sub-tab" data-tab="dbTables" onclick="switchDbTab('dbTables')">数据表</div>
+          <div class="sub-tab" data-tab="dbQuery" onclick="switchDbTab('dbQuery')">SQL 查询</div>
+        </div>
+
+        <div id="dbTabOverview">
+          <div class="card">
+            <div class="card-header">
+              <h3>SQLite 数据库状态</h3>
+              <button class="btn btn-warning btn-sm" onclick="cleanupDatabase()">清理过期数据</button>
+            </div>
+            <div class="card-body" id="dbStatusBody">
+              <div class="loading-overlay"><div class="spinner"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="dbTabTables" class="hidden">
+          <div class="card">
+            <div class="card-header"><h3>数据表列表</h3></div>
+            <div class="card-body">
+              <div class="db-table-list" id="dbTableList"></div>
+              <div id="dbTableDetail" class="hidden">
+                <div class="card-header" style="padding:12px 0;"><h3 id="dbTableDetailName">-</h3></div>
+                <div id="dbTableColumns" class="db-columns"></div>
+                <div class="sql-result" id="dbTableSample"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="dbTabQuery" class="hidden">
+          <div class="card">
+            <div class="card-header">
+              <h3>SQL 查询 (仅 SELECT)</h3>
+              <button class="btn btn-primary btn-sm" onclick="executeQuery()">执行查询</button>
+            </div>
+            <div class="card-body">
+              <textarea class="sql-editor" id="sqlEditor" placeholder="SELECT * FROM accounts LIMIT 10" rows="5"></textarea>
+              <div class="sql-result" id="sqlResult"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- MODALS                                              -->
+<!-- ═══════════════════════════════════════════════════ -->
+
+<!-- Generic Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">标题</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<!-- Confirm Dialog -->
+<div class="confirm-overlay hidden" id="confirmOverlay">
+  <div class="confirm-box">
+    <p id="confirmMsg">确认操作？</p>
+    <div class="confirm-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeConfirm(false)">取消</button>
+      <button class="btn btn-danger btn-sm" id="confirmOkBtn" onclick="closeConfirm(true)">确认</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// State
+// ══════════════════════════════════════════════════════
+const API = '/api/v1/admin';
+let token = localStorage.getItem('aicq_admin_token') || '';
+let currentView = 'dashboard';
+let statsTimer = null;
+let domainTimer = null;
+
+// Pagination state
+const nodeState = { page: 1, perPage: 20, search: '', total: 0 };
+const accountState = { page: 1, perPage: 20, search: '', total: 0 };
+let configData = { database: {}, runtime: {} };
+let confirmResolver = null;
+
+// ══════════════════════════════════════════════════════
+// API Helpers
+// ══════════════════════════════════════════════════════
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const resp = await fetch(API + path, opts);
+  const data = await resp.json();
+  if (!resp.ok) {
+    const errMsg = data.error || data.message || JSON.stringify(data);
+    if (resp.status === 401) {
+      token = '';
+      localStorage.removeItem('aicq_admin_token');
+      showLogin();
+      throw new Error('登录已过期，请重新登录');
+    }
+    throw new Error(errMsg);
+  }
+  return data;
+}
+
+// ══════════════════════════════════════════════════════
+// Toast
+// ══════════════════════════════════════════════════════
+function toast(msg, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ══════════════════════════════════════════════════════
+// Modal
+// ══════════════════════════════════════════════════════
+function showModal(title, bodyHtml, footerHtml) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  document.getElementById('modalFooter').innerHTML = footerHtml || '';
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// ══════════════════════════════════════════════════════
+// Confirm
+// ══════════════════════════════════════════════════════
+function showConfirm(msg) {
+  return new Promise(resolve => {
+    confirmResolver = resolve;
+    document.getElementById('confirmMsg').textContent = msg;
+    document.getElementById('confirmOverlay').classList.remove('hidden');
+  });
+}
+function closeConfirm(result) {
+  document.getElementById('confirmOverlay').classList.add('hidden');
+  if (confirmResolver) { confirmResolver(result); confirmResolver = null; }
+}
+
+// ══════════════════════════════════════════════════════
+// Auth
+// ══════════════════════════════════════════════════════
+function showLogin() {
+  document.getElementById('loginPage').classList.remove('hidden');
+  document.getElementById('appLayout').classList.add('hidden');
+  clearTimers();
+}
+
+function showApp() {
+  document.getElementById('loginPage').classList.add('hidden');
+  document.getElementById('appLayout').classList.remove('hidden');
+  switchView('dashboard');
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const pwd = document.getElementById('loginPassword').value;
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  document.getElementById('loginBtnText').innerHTML = '<span class="inline-spinner"></span>';
+  try {
+    // Try login first
+    const data = await api('POST', '/login', { password: pwd });
+    token = data.token;
+    localStorage.setItem('aicq_admin_token', token);
+    document.getElementById('loginPassword').value = '';
+    showApp();
+  } catch (err) {
+    // If not initialized, try init
+    if (err.message && (err.message.includes('not initialized') || err.message.includes('Admin not'))) {
+      try {
+        const data = await api('POST', '/init', { password: pwd });
+        token = data.token;
+        localStorage.setItem('aicq_admin_token', token);
+        document.getElementById('loginPassword').value = '';
+        toast('管理员账号初始化成功', 'success');
+        showApp();
+      } catch (initErr) {
+        toast(initErr.message, 'error');
+      }
+    } else {
+      toast(err.message, 'error');
+    }
+  }
+  btn.disabled = false;
+  document.getElementById('loginBtnText').textContent = '登 录';
+}
+
+function handleLogout() {
+  token = '';
+  localStorage.removeItem('aicq_admin_token');
+  showLogin();
+}
+
+// ══════════════════════════════════════════════════════
+// View Switching
+// ══════════════════════════════════════════════════════
+const viewTitles = {
+  dashboard: ['仪表盘', '系统概览与统计'],
+  nodes: ['节点管理', '查看和管理所有节点'],
+  accounts: ['账号管理', '查看和管理所有账号'],
+  config: ['配置管理', '查看和修改运行时配置'],
+  domain: ['域名管理', 'DuckDNS 动态域名配置'],
+  service: ['服务管理', '服务状态与控制'],
+  blacklist: ['黑名单', '管理黑名单账号'],
+  database: ['数据库', 'SQLite 数据库检查与查询'],
+};
+
+function switchView(view) {
+  currentView = view;
+  // Update sidebar
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.view === view);
+  });
+  // Update title
+  const [title, sub] = viewTitles[view] || [view, ''];
+  document.getElementById('pageTitle').textContent = title;
+  document.getElementById('pageSubtitle').textContent = sub;
+  // Show/hide panels
+  document.querySelectorAll('.view-panel').forEach(el => {
+    el.classList.toggle('hidden', el.id !== 'view-' + view);
+  });
+  // Close sidebar on mobile
+  document.getElementById('sidebar').classList.remove('open');
+  // Load data
+  loadViewData(view);
+}
+
+function loadViewData(view) {
+  switch (view) {
+    case 'dashboard': loadStats(); startStatsTimer(); break;
+    case 'nodes': loadNodes(); break;
+    case 'accounts': loadAccounts(); break;
+    case 'config': loadConfig(); break;
+    case 'domain': loadDuckDns(); startDomainTimer(); break;
+    case 'service': loadServiceStatus(); break;
+    case 'blacklist': loadBlacklist(); break;
+    case 'database': loadDatabaseStatus(); loadDatabaseTables(); break;
+  }
+}
+
+function clearTimers() {
+  if (statsTimer) clearInterval(statsTimer);
+  if (domainTimer) clearInterval(domainTimer);
+  statsTimer = null;
+  domainTimer = null;
+}
+
+function startStatsTimer() {
+  if (statsTimer) clearInterval(statsTimer);
+  statsTimer = setInterval(() => {
+    if (currentView === 'dashboard') loadStats();
+  }, 30000);
+}
+
+function startDomainTimer() {
+  if (domainTimer) clearInterval(domainTimer);
+  domainTimer = setInterval(() => {
+    if (currentView === 'domain') loadDuckDns();
+  }, 300000);
+}
+
+// ══════════════════════════════════════════════════════
+// Sidebar toggle (mobile)
+// ══════════════════════════════════════════════════════
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ══════════════════════════════════════════════════════
+// Dashboard - Stats
+// ══════════════════════════════════════════════════════
+async function loadStats() {
+  try {
+    const data = await api('GET', '/stats');
+    document.getElementById('statNodes').textContent = data.total_nodes ?? '-';
+    document.getElementById('statAccounts').textContent = data.total_accounts ?? '-';
+    document.getElementById('statFriendships').textContent = data.total_friendships ?? '-';
+    document.getElementById('statGroups').textContent = data.total_groups ?? '-';
+    document.getElementById('statBlacklisted').textContent = data.total_blacklisted ?? '-';
+    document.getElementById('statsLastUpdate').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+  } catch (err) {
+    toast('获取统计数据失败: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// Nodes
+// ══════════════════════════════════════════════════════
+async function loadNodes(page) {
+  if (page !== undefined) nodeState.page = page;
+  nodeState.search = document.getElementById('nodeSearch').value.trim();
+  const params = new URLSearchParams({ page: nodeState.page, per_page: nodeState.perPage });
+  if (nodeState.search) params.set('search', nodeState.search);
+
+  document.getElementById('nodesTableWrap').innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+  try {
+    const data = await api('GET', '/nodes?' + params.toString());
+    nodeState.total = data.total;
+    const nodes = data.nodes || [];
+    if (nodes.length === 0) {
+      document.getElementById('nodesTableWrap').innerHTML = '<div style="padding:40px;text-align:center;color:#999;">暂无节点数据</div>';
+    } else {
+      let html = '<table><thead><tr><th>ID</th><th>公钥</th><th>好友数</th><th>最后在线</th><th>状态</th></tr></thead><tbody>';
+      nodes.forEach(n => {
+        const friendCount = Array.isArray(n.friends) ? n.friends.length : 0;
+        const lastSeen = n.last_seen ? new Date(n.last_seen).toLocaleString('zh-CN') : '-';
+        const online = isOnline(n.last_seen);
+        html += `<tr class="clickable" onclick="showNodeDetail('${esc(n.id)}')">
+          <td class="text-mono text-sm">${esc(n.id)}</td>
+          <td><span class="truncate-key text-mono text-sm" title="${esc(n.public_key || '')}">${esc(truncate(n.public_key, 16))}</span></td>
+          <td>${friendCount}</td>
+          <td class="text-sm">${lastSeen}</td>
+          <td>${online ? '<span class="badge badge-success">在线</span>' : '<span class="badge badge-secondary">离线</span>'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      document.getElementById('nodesTableWrap').innerHTML = html;
+    }
+    renderPagination('nodesPagination', nodeState, data.total_pages, loadNodes);
+  } catch (err) {
+    document.getElementById('nodesTableWrap').innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger);">加载失败: ' + esc(err.message) + '</div>';
+  }
+}
+
+async function showNodeDetail(nodeId) {
+  try {
+    const n = await api('GET', '/nodes/' + encodeURIComponent(nodeId));
+    const friendCount = Array.isArray(n.friends) ? n.friends.length : 0;
+    const friendList = Array.isArray(n.friends) ? n.friends.map(f => '<span class="badge badge-info" style="margin:2px;">' + esc(f) + '</span>').join('') : '无';
+    const lastSeen = n.last_seen ? new Date(n.last_seen).toLocaleString('zh-CN') : '-';
+    const online = isOnline(n.last_seen);
+    const body = `
+      <div class="form-group"><label>节点 ID</label><div class="text-mono text-sm" style="word-break:break-all;">${esc(n.id)}</div></div>
+      <div class="form-group"><label>公钥</label><div class="text-mono text-sm" style="word-break:break-all;">${esc(n.public_key || '-')}</div></div>
+      <div class="form-group"><label>最后在线</label><div>${lastSeen}</div></div>
+      <div class="form-group"><label>状态</label><div>${online ? '<span class="badge badge-success">在线</span>' : '<span class="badge badge-secondary">离线</span>'}</div></div>
+      <div class="form-group"><label>好友数 (${friendCount})</label><div style="max-height:200px;overflow-y:auto;">${friendList}</div></div>
+    `;
+    showModal('节点详情', body, '<button class="btn btn-outline btn-sm" onclick="closeModal()">关闭</button>');
+  } catch (err) {
+    toast('获取节点详情失败: ' + err.message, 'error');
+  }
+}
+
+function isOnline(lastSeen) {
+  if (!lastSeen) return false;
+  const diff = Date.now() - new Date(lastSeen).getTime();
+  return diff < 5 * 60 * 1000; // 5 min
+}
+
+// ══════════════════════════════════════════════════════
+// Accounts
+// ══════════════════════════════════════════════════════
+async function loadAccounts(page) {
+  if (page !== undefined) accountState.page = page;
+  accountState.search = document.getElementById('accountSearch').value.trim();
+  const params = new URLSearchParams({ page: accountState.page, per_page: accountState.perPage });
+  if (accountState.search) params.set('search', accountState.search);
+
+  document.getElementById('accountsTableWrap').innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+  try {
+    const data = await api('GET', '/accounts?' + params.toString());
+    accountState.total = data.total;
+    const accounts = data.accounts || [];
+    if (accounts.length === 0) {
+      document.getElementById('accountsTableWrap').innerHTML = '<div style="padding:40px;text-align:center;color:#999;">暂无账号数据</div>';
+    } else {
+      let html = '<table><thead><tr><th>ID</th><th>类型</th><th>名称</th><th>邮箱</th><th>手机</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+      accounts.forEach(a => {
+        const name = a.display_name || a.agent_name || '-';
+        const statusBadge = getStatusBadge(a.status);
+        const createdAt = a.created_at ? new Date(a.created_at).toLocaleString('zh-CN') : '-';
+        html += `<tr>
+          <td class="text-mono text-sm">${esc(truncate(a.id, 10))}</td>
+          <td>${a.type === 'ai' ? '<span class="badge badge-info">AI</span>' : '<span class="badge badge-secondary">人类</span>'}</td>
+          <td>${esc(name)}</td>
+          <td class="text-sm">${esc(a.email || '-')}</td>
+          <td class="text-sm">${esc(a.phone || '-')}</td>
+          <td>${statusBadge}</td>
+          <td class="text-sm">${createdAt}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="showEditAccountModal('${esc(a.id)}')">编辑</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteAccount('${esc(a.id)}','${esc(name)}')">删除</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      document.getElementById('accountsTableWrap').innerHTML = html;
+    }
+    renderPagination('accountsPagination', accountState, data.total_pages, loadAccounts);
+  } catch (err) {
+    document.getElementById('accountsTableWrap').innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger);">加载失败: ' + esc(err.message) + '</div>';
+  }
+}
+
+function getStatusBadge(status) {
+  switch (status) {
+    case 'active': return '<span class="badge badge-success">正常</span>';
+    case 'suspended': return '<span class="badge badge-danger">停用</span>';
+    case 'inactive': return '<span class="badge badge-warning">未激活</span>';
+    default: return '<span class="badge badge-secondary">' + esc(status || '-') + '</span>';
+  }
+}
+
+function showCreateAccountModal() {
+  const body = `
+    <div class="form-group">
+      <label>账号类型</label>
+      <select id="createAccType" onchange="toggleCreateAccFields()">
+        <option value="human">人类 (Human)</option>
+        <option value="ai">AI 代理</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>公钥 *</label>
+      <input type="text" id="createAccPubKey" placeholder="Ed25519 公钥">
+    </div>
+    <div id="humanFields">
+      <div class="form-group">
+        <label>邮箱 *</label>
+        <input type="email" id="createAccEmail" placeholder="user@example.com">
+      </div>
+      <div class="form-group">
+        <label>密码 *</label>
+        <input type="password" id="createAccPassword" placeholder="密码">
+      </div>
+      <div class="form-group">
+        <label>显示名称</label>
+        <input type="text" id="createAccName" placeholder="昵称">
+      </div>
+      <div class="form-group">
+        <label>手机号</label>
+        <input type="text" id="createAccPhone" placeholder="+86...">
+      </div>
+    </div>
+    <div id="aiFields" class="hidden">
+      <div class="form-group">
+        <label>代理名称</label>
+        <input type="text" id="createAccAgentName" placeholder="GPT-4 Bot">
+      </div>
+    </div>
+  `;
+  const footer = `
+    <button class="btn btn-outline btn-sm" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary btn-sm" onclick="createAccount()">创建</button>
+  `;
+  showModal('新建账号', body, footer);
+  toggleCreateAccFields();
+}
+
+function toggleCreateAccFields() {
+  const type = document.getElementById('createAccType').value;
+  document.getElementById('humanFields').classList.toggle('hidden', type !== 'human');
+  document.getElementById('aiFields').classList.toggle('hidden', type !== 'ai');
+}
+
+async function createAccount() {
+  const type = document.getElementById('createAccType').value;
+  const body = { type };
+  body.public_key = document.getElementById('createAccPubKey').value.trim();
+  if (!body.public_key) { toast('公钥不能为空', 'error'); return; }
+  if (type === 'human') {
+    body.email = document.getElementById('createAccEmail').value.trim();
+    body.password = document.getElementById('createAccPassword').value;
+    body.display_name = document.getElementById('createAccName').value.trim();
+    body.phone = document.getElementById('createAccPhone').value.trim() || undefined;
+    if (!body.email || !body.password) { toast('邮箱和密码不能为空', 'error'); return; }
+  } else {
+    body.agent_name = document.getElementById('createAccAgentName').value.trim();
+  }
+  try {
+    await api('POST', '/accounts', body);
+    toast('账号创建成功', 'success');
+    closeModal();
+    loadAccounts();
+  } catch (err) {
+    toast('创建失败: ' + err.message, 'error');
+  }
+}
+
+async function showEditAccountModal(accountId) {
+  try {
+    const a = await api('GET', '/accounts/' + encodeURIComponent(accountId));
+    const body = `
+      <div class="form-group">
+        <label>账号 ID</label>
+        <div class="text-mono text-sm">${esc(a.id)}</div>
+      </div>
+      <div class="form-group">
+        <label>类型</label>
+        <div>${a.type === 'ai' ? '<span class="badge badge-info">AI</span>' : '<span class="badge badge-secondary">人类</span>'}</div>
+      </div>
+      <div class="form-group">
+        <label>状态</label>
+        <select id="editAccStatus">
+          <option value="active" ${a.status==='active'?'selected':''}>正常 (active)</option>
+          <option value="suspended" ${a.status==='suspended'?'selected':''}>停用 (suspended)</option>
+          <option value="inactive" ${a.status==='inactive'?'selected':''}>未激活 (inactive)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>显示名称</label>
+        <input type="text" id="editAccDisplayName" value="${esc(a.display_name || '')}">
+      </div>
+      <div class="form-group">
+        <label>代理名称</label>
+        <input type="text" id="editAccAgentName" value="${esc(a.agent_name || '')}">
+      </div>
+      <div class="form-group">
+        <label>邮箱</label>
+        <input type="text" id="editAccEmail" value="${esc(a.email || '')}">
+      </div>
+      <div class="form-group">
+        <label>手机号</label>
+        <input type="text" id="editAccPhone" value="${esc(a.phone || '')}">
+      </div>
+    `;
+    const footer = `
+      <button class="btn btn-outline btn-sm" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="updateAccount('${esc(a.id)}')">保存</button>
+    `;
+    showModal('编辑账号', body, footer);
+  } catch (err) {
+    toast('获取账号信息失败: ' + err.message, 'error');
+  }
+}
+
+async function updateAccount(accountId) {
+  const body = {};
+  const status = document.getElementById('editAccStatus').value;
+  const displayName = document.getElementById('editAccDisplayName').value.trim();
+  const agentName = document.getElementById('editAccAgentName').value.trim();
+  const email = document.getElementById('editAccEmail').value.trim();
+  const phone = document.getElementById('editAccPhone').value.trim();
+  body.status = status;
+  if (displayName) body.display_name = displayName;
+  if (agentName) body.agent_name = agentName;
+  if (email) body.email = email;
+  if (phone) body.phone = phone;
+
+  try {
+    await api('PUT', '/accounts/' + encodeURIComponent(accountId), body);
+    toast('账号更新成功', 'success');
+    closeModal();
+    loadAccounts();
+  } catch (err) {
+    toast('更新失败: ' + err.message, 'error');
+  }
+}
+
+async function deleteAccount(accountId, name) {
+  const ok = await showConfirm('确定要删除账号 "' + name + '" (' + accountId + ') 吗？此操作不可恢复！');
+  if (!ok) return;
+  try {
+    await api('DELETE', '/accounts/' + encodeURIComponent(accountId));
+    toast('账号已删除', 'success');
+    loadAccounts();
+  } catch (err) {
+    toast('删除失败: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// Config
+// ══════════════════════════════════════════════════════
+async function loadConfig() {
+  document.getElementById('configBody').innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+  try {
+    configData = await api('GET', '/config');
+    renderConfig();
+  } catch (err) {
+    document.getElementById('configBody').innerHTML = '<div style="padding:20px;color:var(--danger);">加载失败: ' + esc(err.message) + '</div>';
+  }
+}
+
+function renderConfig() {
+  let html = '';
+
+  // Runtime config
+  if (configData.runtime && Object.keys(configData.runtime).length) {
+    html += '<div class="config-section"><h4>运行时配置 (Runtime)</h4><div class="config-grid">';
+    for (const [key, val] of Object.entries(configData.runtime)) {
+      html += `<div class="config-item">
+        <span class="config-key">${esc(key)}</span>
+        <input class="config-value" data-key="${esc(key)}" data-source="runtime" value="${esc(String(val))}">
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  // Database config
+  if (configData.database && Object.keys(configData.database).length) {
+    html += '<div class="config-section"><h4>数据库配置 (Database)</h4><div class="config-grid">';
+    for (const [key, val] of Object.entries(configData.database)) {
+      if (key === 'admin_password') continue; // Don't show password hash
+      html += `<div class="config-item">
+        <span class="config-key">${esc(key)}</span>
+        <input class="config-value" data-key="${esc(key)}" data-source="database" value="${esc(String(val))}">
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  if (!html) html = '<div style="padding:20px;color:#999;text-align:center;">暂无配置项</div>';
+  document.getElementById('configBody').innerHTML = html;
+}
+
+async function saveConfig() {
+  const updates = {};
+  document.querySelectorAll('.config-value[data-source="runtime"]').forEach(el => {
+    const key = el.dataset.key;
+    const val = el.value.trim();
+    if (val !== String(configData.runtime[key] || '')) {
+      updates[key] = val;
+    }
+  });
+  if (Object.keys(updates).length === 0) {
+    toast('没有需要保存的修改', 'info');
+    return;
+  }
+  try {
+    const result = await api('PUT', '/config', updates);
+    if (result.rejected && result.rejected.length) {
+      toast('以下配置项被拒绝: ' + result.rejected.join(', '), 'warning');
+    }
+    if (result.updated && result.updated.length) {
+      toast('配置已保存: ' + result.updated.join(', '), 'success');
+    }
+    loadConfig();
+  } catch (err) {
+    toast('保存失败: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// Domain (DuckDNS)
+// ══════════════════════════════════════════════════════
+async function loadDuckDns() {
+  try {
+    const data = await api('GET', '/duckdns');
+    document.getElementById('duckDomain').value = data.domain || '';
+    document.getElementById('duckToken').value = data.token || '';
+    document.getElementById('publicIpv4').textContent = data.public_ipv4 || '未检测到';
+    document.getElementById('publicIpv4').classList.toggle('muted', !data.public_ipv4);
+    document.getElementById('publicIpv6').textContent = data.public_ipv6 || '未检测到';
+    document.getElementById('publicIpv6').classList.toggle('muted', !data.public_ipv6);
+    const lanIps = data.lan_ipv4 && data.lan_ipv4.length ? data.lan_ipv4.join(', ') : '未检测到';
+    document.getElementById('lanIpv4').textContent = lanIps;
+    document.getElementById('lanIpv4').classList.toggle('muted', !data.lan_ipv4 || !data.lan_ipv4.length);
+    document.getElementById('domainLastUpdate').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+  } catch (err) {
+    toast('获取域名配置失败: ' + err.message, 'error');
+  }
+}
+
+async function saveDuckDns() {
+  const domain = document.getElementById('duckDomain').value.trim();
+  const duckToken = document.getElementById('duckToken').value.trim();
+  if (!domain) { toast('域名不能为空', 'error'); return; }
+  try {
+    await api('POST', '/duckdns', { domain, token: duckToken });
+    toast('DuckDNS 配置已保存', 'success');
+    loadDuckDns();
+  } catch (err) {
+    toast('保存失败: ' + err.message, 'error');
+  }
+}
+
+async function updateDuckDnsNow() {
+  try {
+    toast('正在更新 DuckDNS...', 'info');
+    const data = await api('POST', '/duckdns/update');
+    if (data.success) {
+      toast('DuckDNS 更新成功', 'success');
+    } else {
+      toast('DuckDNS 更新失败', 'error');
+    }
+    loadDuckDns();
+  } catch (err) {
+    toast('更新失败: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// Service
+// ══════════════════════════════════════════════════════
+async function loadServiceStatus() {
+  document.getElementById('serviceBody').innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+  try {
+    const data = await api('GET', '/service/status');
+    const running = data.running !== false;
+    let html = `
+      <div class="service-status">
+        <span class="status-dot ${running ? 'running' : 'stopped'}"></span>
+        ${running ? '运行中' : '已停止'}
+      </div>
+      <div class="service-info-grid">
+        <div class="service-info-item">
+          <div class="label">主机</div>
+          <div class="value">${esc(data.host || '-')}</div>
+        </div>
+        <div class="service-info-item">
+          <div class="label">端口</div>
+          <div class="value">${data.port || '-'}</div>
+        </div>
+        <div class="service-info-item">
+          <div class="label">调试模式</div>
+          <div class="value">${data.debug ? '开启' : '关闭'}</div>
+        </div>
+        <div class="service-info-item">
+          <div class="label">在线节点数</div>
+          <div class="value">${data.online_nodes ?? '-'}</div>
+        </div>
+      </div>
+      <div class="service-actions">
+        <button class="btn btn-danger" onclick="stopService()">停止服务</button>
+        <button class="btn btn-warning" onclick="restartService()">重启服务</button>
+      </div>
+    `;
+    document.getElementById('serviceBody').innerHTML = html;
+  } catch (err) {
+    document.getElementById('serviceBody').innerHTML = '<div style="padding:20px;color:var(--danger);">获取服务状态失败: ' + esc(err.message) + '</div>';
+  }
+}
+
+async function stopService() {
+  const ok = await showConfirm('确定要停止服务吗？此操作将中断所有连接！');
+  if (!ok) return;
+  try {
+    await api('POST', '/service/stop');
+    toast('服务正在停止...', 'warning');
+  } catch (err) {
+    toast('操作失败: ' + err.message, 'error');
+  }
+}
+
+async function restartService() {
+  const ok = await showConfirm('确定要重启服务吗？');
+  if (!ok) return;
+  try {
+    await api('POST', '/service/restart');
+    toast('服务正在重启...', 'warning');
+  } catch (err) {
+    toast('操作失败: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// Blacklist
+// ══════════════════════════════════════════════════════
+async function loadBlacklist() {
+  document.getElementById('blacklistTableWrap').innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+  try {
+    const data = await api('GET', '/blacklist');
+    const entries = data.entries || [];
+    if (entries.length === 0) {
+      document.getElementById('blacklistTableWrap').innerHTML = '<div style="padding:40px;text-align:center;color:#999;">暂无黑名单记录</div>';
+    } else {
+      let html = '<table><thead><tr><th>ID</th><th>账号 ID</th><th>名称</th><th>邮箱</th><th>类型</th><th>原因</th><th>添加时间</th><th>操作</th></tr></thead><tbody>';
+      entries.forEach(e => {
+        const name = e.display_name || e.agent_name || '-';
+        const createdAt = e.created_at ? new Date(e.created_at).toLocaleString('zh-CN') : '-';
+        html += `<tr>
+          <td>${e.id}</td>
+          <td class="text-mono text-sm">${esc(truncate(e.account_id, 10))}</td>
+          <td>${esc(name)}</td>
+          <td class="text-sm">${esc(e.email || '-')}</td>
+          <td>${e.type === 'ai' ? '<span class="badge badge-info">AI</span>' : '<span class="badge badge-secondary">人类</span>'}</td>
+          <td>${esc(e.reason || '-')}</td>
+          <td class="text-sm">${createdAt}</td>
+          <td><button class="btn btn-success btn-sm" onclick="removeBlacklist(${e.id})">移除</button></td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      document.getElementById('blacklistTableWrap').innerHTML = html;
+    }
+  } catch (err) {
+    document.getElementById('blacklistTableWrap').innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger);">加载失败: ' + esc(err.message) + '</div>';
+  }
+}
+
+function showAddBlacklistModal() {
+  const body = `
+    <div class="form-group">
+      <label>账号 ID *</label>
+      <input type="text" id="blacklistAccId" placeholder="输入账号 ID">
+    </div>
+    <div class="form-group">
+      <label>原因</label>
+      <input type="text" id="blacklistReason" placeholder="封禁原因 (可选)">
+    </div>
+  `;
+  const footer = `
+    <button class="btn btn-outline btn-sm" onclick="closeModal()">取消</button>
+    <button class="btn btn-danger btn-sm" onclick="addBlacklist()">添加</button>
+  `;
+  showModal('添加黑名单', body, footer);
+}
+
+async function addBlacklist() {
+  const accountId = document.getElementById('blacklistAccId').value.trim();
+  const reason = document.getElementById('blacklistReason').value.trim();
+  if (!accountId) { toast('账号 ID 不能为空', 'error'); return; }
+  try {
+    await api('POST', '/blacklist', { accountId, reason: reason || undefined });
+    toast('已添加到黑名单', 'success');
+    closeModal();
+    loadBlacklist();
+  } catch (err) {
+    toast('添加失败: ' + err.message, 'error');
+  }
+}
+
+async function removeBlacklist(entryId) {
+  const ok = await showConfirm('确定要将此账号移出黑名单吗？账号将被重新激活。');
+  if (!ok) return;
+  try {
+    await api('DELETE', '/blacklist/' + entryId);
+    toast('已从黑名单移除', 'success');
+    loadBlacklist();
+  } catch (err) {
+    toast('移除失败: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// Database
+// ══════════════════════════════════════════════════════
+function switchDbTab(tab) {
+  document.querySelectorAll('.sub-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+  document.getElementById('dbTabOverview').classList.toggle('hidden', tab !== 'dbOverview');
+  document.getElementById('dbTabTables').classList.toggle('hidden', tab !== 'dbTables');
+  document.getElementById('dbTabQuery').classList.toggle('hidden', tab !== 'dbQuery');
+}
+
+async function loadDatabaseStatus() {
+  document.getElementById('dbStatusBody').innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+  try {
+    const data = await api('GET', '/database/status');
+    const sizeStr = data.file_size_mb ? data.file_size_mb + ' MB' : (data.file_size_bytes ? data.file_size_bytes + ' bytes' : '-');
+    const html = `
+      <div class="service-info-grid">
+        <div class="service-info-item">
+          <div class="label">连接状态</div>
+          <div class="value">${data.connected ? '<span style="color:var(--success)">已连接</span>' : '<span style="color:var(--danger)">断开</span>'}</div>
+        </div>
+        <div class="service-info-item">
+          <div class="label">SQLite 版本</div>
+          <div class="value">${esc(data.sqlite_version || '-')}</div>
+        </div>
+        <div class="service-info-item">
+          <div class="label">数据库路径</div>
+          <div class="value text-sm" style="word-break:break-all;">${esc(data.database_path || '-')}</div>
+        </div>
+        <div class="service-info-item">
+          <div class="label">文件大小</div>
+          <div class="value">${sizeStr}</div>
+        </div>
+      </div>
+    `;
+    document.getElementById('dbStatusBody').innerHTML = html;
+  } catch (err) {
+    document.getElementById('dbStatusBody').innerHTML = '<div style="padding:20px;color:var(--danger);">加载失败: ' + esc(err.message) + '</div>';
+  }
+}
+
+async function loadDatabaseTables() {
+  const container = document.getElementById('dbTableList');
+  container.innerHTML = '<div class="loading-overlay"><div class="spinner" style="width:24px;height:24px;"></div></div>';
+  try {
+    const data = await api('GET', '/database/tables');
+    const tables = data.tables || [];
+    if (tables.length === 0) {
+      container.innerHTML = '<div style="color:#999;">暂无数据表</div>';
+    } else {
+      container.innerHTML = tables.map(t =>
+        `<div class="db-table-item" onclick="loadTableDetail('${esc(t)}')">
+          <div class="table-name">${esc(t)}</div>
+        </div>`
+      ).join('');
+    }
+  } catch (err) {
+    container.innerHTML = '<div style="color:var(--danger);">加载失败</div>';
+  }
+}
+
+async function loadTableDetail(tableName) {
+  // Highlight selected table
+  document.querySelectorAll('.db-table-item').forEach(el => {
+    el.classList.toggle('active', el.querySelector('.table-name').textContent === tableName);
+  });
+  const detailEl = document.getElementById('dbTableDetail');
+  detailEl.classList.remove('hidden');
+  document.getElementById('dbTableDetailName').textContent = tableName + ' - 详细信息';
+  document.getElementById('dbTableColumns').innerHTML = '<div class="spinner" style="width:24px;height:24px;"></div>';
+  document.getElementById('dbTableSample').innerHTML = '';
+
+  try {
+    const data = await api('GET', '/database/tables/' + encodeURIComponent(tableName));
+    // Columns
+    let colHtml = '';
+    (data.columns || []).forEach(col => {
+      colHtml += `<span class="db-col-badge">${esc(col.name)}<span class="col-type">${esc(col.type || '?')}</span></span>`;
+    });
+    document.getElementById('dbTableColumns').innerHTML = colHtml;
+
+    // Sample data
+    const rows = data.sample_data || [];
+    const rowCount = data.row_count ?? 0;
+    if (rows.length === 0) {
+      document.getElementById('dbTableSample').innerHTML = '<p class="text-muted text-sm">无数据 (共 ' + rowCount + ' 行)</p>';
+    } else {
+      const cols = Object.keys(rows[0]);
+      let tblHtml = `<p class="text-muted text-sm mb-4">共 ${rowCount} 行，显示前 ${rows.length} 行</p><table><thead><tr>`;
+      cols.forEach(c => tblHtml += '<th>' + esc(c) + '</th>');
+      tblHtml += '</tr></thead><tbody>';
+      rows.forEach(r => {
+        tblHtml += '<tr>';
+        cols.forEach(c => tblHtml += '<td class="text-sm">' + esc(String(r[c] ?? '-')) + '</td>');
+        tblHtml += '</tr>';
+      });
+      tblHtml += '</tbody></table>';
+      document.getElementById('dbTableSample').innerHTML = tblHtml;
+    }
+  } catch (err) {
+    document.getElementById('dbTableColumns').innerHTML = '<span style="color:var(--danger);">加载失败: ' + esc(err.message) + '</span>';
+  }
+}
+
+async function executeQuery() {
+  const query = document.getElementById('sqlEditor').value.trim();
+  if (!query) { toast('请输入 SQL 查询', 'error'); return; }
+  document.getElementById('sqlResult').innerHTML = '<div class="spinner" style="width:24px;height:24px;"></div>';
+  try {
+    const data = await api('POST', '/database/query', { query });
+    const rows = data.rows || [];
+    if (rows.length === 0) {
+      document.getElementById('sqlResult').innerHTML = '<p class="text-muted text-sm">查询返回 0 行</p>';
+    } else {
+      const cols = Object.keys(rows[0]);
+      let html = `<p class="text-muted text-sm mb-4">返回 ${data.count} 行</p><table><thead><tr>`;
+      cols.forEach(c => html += '<th>' + esc(c) + '</th>');
+      html += '</tr></thead><tbody>';
+      rows.forEach(r => {
+        html += '<tr>';
+        cols.forEach(c => html += '<td>' + esc(String(r[c] ?? '-')) + '</td>');
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      document.getElementById('sqlResult').innerHTML = html;
+    }
+  } catch (err) {
+    document.getElementById('sqlResult').innerHTML = '<p style="color:var(--danger);">查询错误: ' + esc(err.message) + '</p>';
+  }
+}
+
+async function cleanupDatabase() {
+  const ok = await showConfirm('确定要清理过期数据吗？');
+  if (!ok) return;
+  try {
+    const data = await api('POST', '/database/cleanup');
+    const msg = data.message || '清理完成';
+    toast(msg, 'success');
+    loadDatabaseStatus();
+  } catch (err) {
+    toast('清理失败: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// Pagination
+// ══════════════════════════════════════════════════════
+function renderPagination(containerId, state, totalPages, loadFn) {
+  const container = document.getElementById(containerId);
+  if (!totalPages || totalPages <= 1) {
+    container.innerHTML = '<span class="page-info">共 ' + state.total + ' 条</span><div></div>';
+    return;
+  }
+  const start = (state.page - 1) * state.perPage + 1;
+  const end = Math.min(state.page * state.perPage, state.total);
+  let btns = '';
+  btns += `<button class="page-btn" ${state.page <= 1 ? 'disabled' : ''} onclick="(${loadFn.name})(${state.page - 1})">&laquo;</button>`;
+
+  // Show max 5 page buttons
+  let pageStart = Math.max(1, state.page - 2);
+  let pageEnd = Math.min(totalPages, pageStart + 4);
+  if (pageEnd - pageStart < 4) pageStart = Math.max(1, pageEnd - 4);
+
+  for (let i = pageStart; i <= pageEnd; i++) {
+    btns += `<button class="page-btn ${i === state.page ? 'active' : ''}" onclick="(${loadFn.name})(${i})">${i}</button>`;
+  }
+  btns += `<button class="page-btn" ${state.page >= totalPages ? 'disabled' : ''} onclick="(${loadFn.name})(${state.page + 1})">&raquo;</button>`;
+
+  container.innerHTML = `
+    <span class="page-info">第 ${start}-${end} 条，共 ${state.total} 条</span>
+    <div class="page-btns">${btns}</div>
+  `;
+}
+
+// ══════════════════════════════════════════════════════
+// Utility
+// ══════════════════════════════════════════════════════
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  const div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
+function truncate(str, len) {
+  if (!str) return '-';
+  return str.length > len ? str.substring(0, len) + '...' : str;
+}
+
+// ══════════════════════════════════════════════════════
+// Init
+// ══════════════════════════════════════════════════════
+(async function init() {
+  if (token) {
+    // Verify token is still valid
+    try {
+      await api('GET', '/stats');
+      showApp();
+    } catch {
+      token = '';
+      localStorage.removeItem('aicq_admin_token');
+      showLogin();
+    }
+  } else {
+    showLogin();
+  }
+})();
+</script>
+</body>
+</html>
