@@ -86,6 +86,8 @@ async def auth_middleware(app: web.Application, handler: Any) -> Any:
 
     PUBLIC_PATHS: set[str] = {
         "/health",
+        "/",
+        "/admin",
         "/api/v1/auth/register",
         "/api/v1/auth/login",
         "/api/v1/auth/login/phone",
@@ -94,6 +96,7 @@ async def auth_middleware(app: web.Application, handler: Any) -> Any:
         "/api/v1/auth/refresh",
         "/api/v1/admin/init",
         "/api/v1/admin/login",
+        "/api/v1/admin/setup-status",
     }
 
     # Prefixes that don't need auth
@@ -195,7 +198,8 @@ async def rate_limit_middleware(app: web.Application, handler: Any) -> Any:
         path = request.path
 
         # Exempt paths
-        if path.startswith("/ws") or path.startswith("/static") or path == "/health":
+        if (path.startswith("/ws") or path.startswith("/static")
+                or path in ("/health", "/", "/admin")):
             return await handler(request)
 
         ip = request.remote or "unknown"
@@ -1367,6 +1371,24 @@ async def on_startup(app: web.Application) -> None:
     # ── Register all routes ─────────────────────────────────────────
     app.router.add_get("/health", health_check)
     app.router.add_get("/ws", app["ws_handler"].handle_websocket)
+
+    # ── Page routes (serve HTML pages without auth) ─────────────────
+    static_dir = Path(__file__).resolve().parent / "static"
+    if static_dir.is_dir():
+        async def serve_index(request: web.Request) -> web.FileResponse:
+            idx = static_dir / "index.html"
+            if idx.exists():
+                return web.FileResponse(idx)
+            return web.Response(text="<h1>AICQ Server</h1>", content_type="text/html")
+
+        async def serve_admin(request: web.Request) -> web.FileResponse:
+            adm = static_dir / "admin.html"
+            if adm.exists():
+                return web.FileResponse(adm)
+            return web.Response(text="<h1>Admin Panel</h1>", content_type="text/html")
+
+        app.router.add_get("/", serve_index)
+        app.router.add_get("/admin", serve_admin)
 
     for setup_fn in _ROUTE_SETUP_FUNCTIONS:
         setup_fn(app)
