@@ -1229,21 +1229,32 @@ async function handleLogin(e) {
   btn.disabled = true;
   document.getElementById('loginBtnText').innerHTML = '<span class="inline-spinner"></span>';
   try {
-    // Try login first
-    const data = await api('POST', '/login', { password: pwd });
-    token = data.token;
-    localStorage.setItem('aicq_admin_token', token);
-    document.getElementById('loginPassword').value = '';
-    showApp();
+    // If we know admin is not initialized, go straight to init
+    if (window._adminNotInitialized) {
+      const data = await api('POST', '/init', { password: pwd });
+      token = data.token;
+      localStorage.setItem('aicq_admin_token', token);
+      document.getElementById('loginPassword').value = '';
+      toast('管理员密码设置成功', 'success');
+      window._adminNotInitialized = false;
+      showApp();
+    } else {
+      // Try login first
+      const data = await api('POST', '/login', { password: pwd });
+      token = data.token;
+      localStorage.setItem('aicq_admin_token', token);
+      document.getElementById('loginPassword').value = '';
+      showApp();
+    }
   } catch (err) {
-    // If not initialized, try init
-    if (err.message && (err.message.includes('not initialized') || err.message.includes('Admin not'))) {
+    // If login failed because admin not initialized, try init
+    if (!window._adminNotInitialized && err.message && (err.message.includes('not initialized') || err.message.includes('Admin not'))) {
       try {
         const data = await api('POST', '/init', { password: pwd });
         token = data.token;
         localStorage.setItem('aicq_admin_token', token);
         document.getElementById('loginPassword').value = '';
-        toast('管理员账号初始化成功', 'success');
+        toast('管理员密码设置成功', 'success');
         showApp();
       } catch (initErr) {
         toast(initErr.message, 'error');
@@ -1253,7 +1264,7 @@ async function handleLogin(e) {
     }
   }
   btn.disabled = false;
-  document.getElementById('loginBtnText').textContent = '登 录';
+  document.getElementById('loginBtnText').textContent = window._adminNotInitialized ? '设置密码' : '登 录';
 }
 
 function handleLogout() {
@@ -2089,6 +2100,21 @@ function truncate(str, len) {
 // Init
 // ══════════════════════════════════════════════════════
 (async function init() {
+  try {
+    const resp = await fetch(API + '/setup-status');
+    const data = await resp.json();
+    if (data.initialized === false) {
+      // First run — switch to init mode
+      document.getElementById('loginMode').textContent = '首次设置密码';
+      document.getElementById('loginBtnText').textContent = '设置密码';
+      document.getElementById('loginPassword').placeholder = '请设置管理员密码（至少6位）';
+      document.querySelector('label[for="loginPassword"]').textContent = '设置管理员密码';
+      window._adminNotInitialized = true;
+    }
+  } catch (e) {
+    // setup-status not available, fall through
+  }
+
   if (token) {
     // Verify token is still valid
     try {

@@ -1270,6 +1270,10 @@ def setup_handshake_routes(app: web.Application) -> None:
 
 def setup_admin_routes(app: web.Application) -> None:
     """Register admin API routes."""
+    from routes.admin_routes import setup_routes as _setup_admin_mod_routes
+    # Use the modular admin routes which include setup-status
+    _setup_admin_mod_routes(app)
+    # Also register inline handlers for compatibility
     prefix = "/api/v1/admin"
     app.router.add_post(f"{prefix}/init", api_admin_init)
     app.router.add_post(f"{prefix}/login", api_admin_login)
